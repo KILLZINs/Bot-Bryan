@@ -2,7 +2,7 @@
 // HANDLER DE SELECT MENUS RPG
 // ═══════════════════════════════════════════════════════════════════════
 
-import { StringSelectMenuInteraction } from 'discord.js';
+import { StringSelectMenuInteraction, AttachmentBuilder } from 'discord.js';
 import { getOrCreateCharacter, computeStats, distributeStatPoints } from '../services/character';
 import { travelTo } from '../panels/travel';
 import { buildProfileEmbed, buildProfileButtons } from '../panels/profile';
@@ -16,6 +16,7 @@ import { joinGuild } from '../panels/guild';
 import { craftItem } from '../panels/forja';
 import { prisma } from '../../database/client';
 import { errorEmbed, successEmbed } from '../../utils/embeds';
+import { generateProfileCard } from '../utils/profileCanvas';
 
 export async function handleRpgSelect(i: StringSelectMenuInteraction, action: string): Promise<void> {
   const discordId = i.user.id;
@@ -43,6 +44,91 @@ export async function handleRpgSelect(i: StringSelectMenuInteraction, action: st
     }
 
     switch (action) {
+
+      // ── Seletor do Perfil RPG (Navegação) ───────────────────────────────
+      case 'menu_perfil': {
+        await i.deferUpdate();
+        const option = i.values[0];
+        const char = await getOrCreateCharacter(discordId, username);
+        const stats = computeStats(char);
+
+        if (option === 'inventario') {
+          const { embed: invEmbed, select: invSelect } = await buildInventarioEmbed(char);
+          await i.editReply({
+            embeds: [invEmbed],
+            files: [],
+            components: invSelect ? [invSelect, buildInventarioButtons()] : [buildInventarioButtons()],
+          });
+          return;
+        }
+
+        if (option === 'cidade') {
+          const { buildCidadeEmbed, buildCidadeButtons, buildCidadeButtons2 } = await import('../panels/profile');
+          await i.editReply({
+            embeds: [buildCidadeEmbed()],
+            files: [],
+            components: [buildCidadeButtons(), buildCidadeButtons2()],
+          });
+          return;
+        }
+
+        if (option === 'missoes') {
+          const { ensureDailyMissions, ensureWeeklyMissions } = await import('../../commands/utility/missoes');
+          const { buildMissoesEmbed, buildMissoesClaimSelect, buildMissoesButtons } = await import('../panels/missoes');
+          const guildId = i.guildId ?? '';
+          await Promise.all([ensureDailyMissions(discordId, guildId), ensureWeeklyMissions(discordId, guildId)]);
+          const [missoesEmbed, claimSelect] = await Promise.all([
+            buildMissoesEmbed(discordId, guildId),
+            buildMissoesClaimSelect(discordId, guildId),
+          ]);
+          await i.editReply({
+            embeds: [missoesEmbed],
+            files: [],
+            components: claimSelect ? [claimSelect, buildMissoesButtons()] : [buildMissoesButtons()],
+          });
+          return;
+        }
+
+        if (option === 'habilidades') {
+          const { buildHabilidadesEmbed, buildHabilidadesSelect, buildHabilidadesButtons } = await import('../panels/habilidades');
+          await i.editReply({
+            embeds: [buildHabilidadesEmbed(char)],
+            files: [],
+            components: [buildHabilidadesSelect(char), buildHabilidadesButtons()],
+          });
+          return;
+        }
+
+        if (option === 'stats') {
+          const { buildStatsEmbed, buildStatsButtons } = await import('../panels/stats');
+          await i.editReply({
+            embeds: [buildStatsEmbed(char, stats)],
+            files: [],
+            components: [buildStatsButtons()],
+          });
+          return;
+        }
+
+        // Default / 'perfil': Re-renderiza o Perfil com Canvas
+        let attachment: AttachmentBuilder | null = null;
+        try {
+          const avatarUrl = i.user.displayAvatarURL({ extension: 'png', size: 256 });
+          const imageBuffer = await generateProfileCard(char, stats, avatarUrl);
+          attachment = new AttachmentBuilder(imageBuffer, { name: 'perfil.png' });
+        } catch (e) {
+          console.error('Erro Canvas menu_perfil:', e);
+        }
+
+        const { buildProfileSelectMenu } = await import('../../commands/rpg');
+        const components = [buildProfileSelectMenu(), ...buildProfileButtons(char)];
+
+        await i.editReply({
+          embeds: attachment ? [] : [buildProfileEmbed(char, stats)],
+          files: attachment ? [attachment] : [],
+          components,
+        });
+        break;
+      }
 
       // ── Distribuir ponto de stat ─────────────────────────────────────────
       case 'distribuir_stat': {
@@ -238,7 +324,6 @@ export async function handleRpgSelect(i: StringSelectMenuInteraction, action: st
       case 'escolher_classe': {
         await i.deferUpdate();
 
-        // valor tem formato "start_class:<classId>"
         const classId = i.values[0].replace('start_class:', '');
         const { setClass } = await import('../services/character');
 
@@ -250,7 +335,6 @@ export async function handleRpgSelect(i: StringSelectMenuInteraction, action: st
           return;
         }
 
-        // recarrega o personagem com a classe definida e mostra o perfil
         const updated = await getOrCreateCharacter(discordId, username);
         const stats   = computeStats(updated);
         const { getClass } = await import('../constants/classes');
@@ -280,8 +364,6 @@ export async function handleRpgSelect(i: StringSelectMenuInteraction, action: st
         await i.editReply({ embeds: [step2Embed], components: [buildWorldBossLevelSelect(templateIndex)] });
         break;
       }
-
-      // worldboss_level handled below via startsWith check
 
       // ── Missões: coletar recompensa ───────────────────────────────────────
       case 'missao_coletar': {

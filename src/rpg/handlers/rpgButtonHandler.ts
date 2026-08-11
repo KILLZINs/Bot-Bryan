@@ -4,8 +4,8 @@
 
 import { ButtonInteraction, PermissionFlagsBits, ActionRowBuilder, ButtonBuilder, ButtonStyle, AttachmentBuilder } from 'discord.js';
 import { prisma } from '../../database/client';
-import { getOrCreateCharacter, computeStats, getCharacter, applyPassiveEnergyRegen } from '../services/character';
-import { buildProfileEmbed, buildProfileButtons, buildCidadeEmbed, buildCidadeButtons, buildCidadeButtons2, buildPontosEmbed, buildPontosSelect } from '../panels/profile';
+import { getOrCreateCharacter, computeStats, applyPassiveEnergyRegen } from '../services/character';
+import { buildProfileEmbed, buildCidadeEmbed, buildCidadeButtons, buildCidadeButtons2, buildPontosEmbed, buildPontosSelect } from '../panels/profile';
 import { buildTravelEmbed, buildTravelSelect, buildTravelBackButton } from '../panels/travel';
 import {
   buildDungeonEmbed, buildDungeonSelect, buildDungeonButtons, doBattleRandom,
@@ -23,22 +23,22 @@ export async function handleRpgButton(i: ButtonInteraction, action: string): Pro
   const discordId = i.user.id;
   const username  = i.user.username;
 
-  // Gerenciador de abas de habilidades (Ativas / Passivas)
-  if (action.startsWith('skills_tab:')) {
-    await i.deferUpdate();
-    const tab = action.split(':')[1] as 'ativas' | 'passivas';
-    const char = await getOrCreateCharacter(discordId, username);
-    const { embed, components } = buildHabilidadesEmbed(char, tab);
-    await i.editReply({ embeds: [embed], files: [], components });
-    return;
-  }
-
-  const fullAction = i.customId.split(':').slice(1).join(':');
-  const parts      = fullAction.split(':');
-  const baseAction = parts[0];
-  const param1     = parts[1];
-
   try {
+    // ── Tratamento imediato para as abas de Habilidades (Ativas / Passivas) ──
+    if (action.startsWith('rpg_skills_tab:')) {
+      await i.deferUpdate();
+      const tab = action.split(':')[1] as 'ativas' | 'passivas';
+      const char = await getOrCreateCharacter(discordId, username);
+      const { embed, components } = buildHabilidadesEmbed(char, tab);
+      await i.editReply({ embeds: [embed], files: [], components });
+      return;
+    }
+
+    const fullAction = i.customId.split(':').slice(1).join(':');
+    const parts      = fullAction.split(':');
+    const baseAction = parts[0];
+    const param1     = parts[1];
+
     switch (baseAction) {
 
       // ── Perfil (Retorna SEMPRE o Canvas + Apenas o Seletor) ─────────────────
@@ -197,8 +197,8 @@ export async function handleRpgButton(i: ButtonInteraction, action: string): Pro
 
       case 'combate_acao': {
         await i.deferUpdate();
-        const action = param1 as 'attack' | 'skill' | 'defend' | 'potion' | 'flee';
-        if (!['attack', 'skill', 'defend', 'potion', 'flee'].includes(action)) {
+        const combatAction = param1 as 'attack' | 'skill' | 'defend' | 'potion' | 'flee';
+        if (!['attack', 'skill', 'defend', 'potion', 'flee'].includes(combatAction)) {
           await i.editReply({
             embeds: [errorEmbed('Ação inválida', 'Essa ação de combate não existe.')],
             files: [],
@@ -208,7 +208,7 @@ export async function handleRpgButton(i: ButtonInteraction, action: string): Pro
         }
         const char = await getOrCreateCharacter(discordId, username);
         try {
-          const { embed, rows } = await doCombatAction(discordId, action, char);
+          const { embed, rows } = await doCombatAction(discordId, combatAction, char);
           await i.editReply({ embeds: [embed], files: [], components: rows });
         } catch (error) {
           const message = error instanceof Error ? error.message : 'Não foi possível executar essa ação.';

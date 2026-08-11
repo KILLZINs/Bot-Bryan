@@ -2,13 +2,12 @@
 // HANDLER DE SELECT MENUS RPG
 // ═══════════════════════════════════════════════════════════════════════
 
-import { StringSelectMenuInteraction, AttachmentBuilder } from 'discord.js';
-import { getOrCreateCharacter, computeStats, distributeStatPoints } from '../services/character';
+import { StringSelectMenuInteraction, AttachmentBuilder, ActionRowBuilder } from 'discord.js';
+import { getOrCreateCharacter, computeStats, distributeStatPoints, applyPassiveEnergyRegen } from '../services/character';
 import { travelTo } from '../panels/travel';
-import { buildProfileEmbed, buildProfileButtons } from '../panels/profile';
+import { buildProfileEmbed } from '../panels/profile';
 import { buildTravelEmbed, buildTravelSelect, buildTravelBackButton } from '../panels/travel';
-import { doBattleEnemy } from '../panels/dungeon';
-import { buildDungeonEmbed, buildDungeonSelect, buildDungeonButtons } from '../panels/dungeon';
+import { doBattleEnemy, buildDungeonEmbed, buildDungeonSelect, buildDungeonButtons } from '../panels/dungeon';
 import { buildShopEmbed, buildShopItemSelect, buildShopButtons } from '../panels/shop';
 import { equipItem, useConsumable, sellItem, buyItem } from '../services/inventory';
 import { buildInventarioEmbed, buildInventarioButtons, buildItemActionSelect } from '../panels/inventario';
@@ -23,7 +22,6 @@ export async function handleRpgSelect(i: StringSelectMenuInteraction, action: st
   const username  = i.user.username;
 
   try {
-    // ── Casos com parâmetros dinâmicos (antes do switch) ─────────────────
     if (action.startsWith('worldboss_level')) {
       await i.deferUpdate();
       const templateIndex = parseInt(action.split(':')[1] ?? '0', 10);
@@ -45,12 +43,29 @@ export async function handleRpgSelect(i: StringSelectMenuInteraction, action: st
 
     switch (action) {
 
-      // ── Seletor do Perfil RPG (Navegação) ───────────────────────────────
+      // ── Seletor do Perfil RPG (Navegação do Hub) ─────────────────────────
       case 'menu_perfil': {
         await i.deferUpdate();
         const option = i.values[0];
-        const char = await getOrCreateCharacter(discordId, username);
+        let char = await getOrCreateCharacter(discordId, username);
         const stats = computeStats(char);
+
+        if (option === 'dungeon') {
+          char = await applyPassiveEnergyRegen(char);
+          const { buildDungeonTypeSelect } = await import('../panels/dungeon-tipo');
+          const select = buildDungeonSelect(char);
+          const typeSelect = buildDungeonTypeSelect(char);
+          const dungeonRows: ActionRowBuilder<any>[] = [];
+          if (select) dungeonRows.push(select);
+          if (typeSelect) dungeonRows.push(typeSelect);
+          dungeonRows.push(buildDungeonButtons(char));
+          await i.editReply({
+            embeds: [buildDungeonEmbed(char)],
+            files: [],
+            components: dungeonRows,
+          });
+          return;
+        }
 
         if (option === 'inventario') {
           const { embed: invEmbed, select: invSelect } = await buildInventarioEmbed(char);
@@ -110,7 +125,7 @@ export async function handleRpgSelect(i: StringSelectMenuInteraction, action: st
           return;
         }
 
-        // Default / 'perfil': Re-renderiza o Perfil com Canvas
+        // Default: Re-renderiza o Perfil em Canvas
         let attachment: AttachmentBuilder | null = null;
         try {
           const avatarUrl = i.user.displayAvatarURL({ extension: 'png', size: 256 });
@@ -121,7 +136,7 @@ export async function handleRpgSelect(i: StringSelectMenuInteraction, action: st
         }
 
         const { buildProfileSelectMenu } = await import('../../commands/rpg');
-        const components = [buildProfileSelectMenu(), ...buildProfileButtons(char)];
+        const components = [buildProfileSelectMenu()];
 
         await i.editReply({
           embeds: attachment ? [] : [buildProfileEmbed(char, stats)],

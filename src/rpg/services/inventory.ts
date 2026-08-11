@@ -28,7 +28,12 @@ export async function equipItem(discordId: string, itemId: string): Promise<{ su
     return { success: false, message: `Apenas ${item.classRestriction.join(', ')} podem usar este item.` };
   }
 
-  const slot = item.slot as keyof typeof char.equipment;
+  const slot = item.slot;
+  const allowedSlots = ['weapon', 'helmet', 'chest', 'pants', 'boots', 'gloves', 'shield', 'ring', 'amulet', 'backpack', 'pet'];
+  if (!allowedSlots.includes(slot)) {
+    return { success: false, message: `O slot **${slot}** não é um slot equipável válido.` };
+  }
+
   const eq = char.equipment;
   if (!eq) return { success: false, message: 'Equipamento não inicializado.' };
 
@@ -40,7 +45,7 @@ export async function equipItem(discordId: string, itemId: string): Promise<{ su
     if (hasItem.count === 0) return false;
 
     const equipment = await tx.rpgEquipment.findUnique({ where: { characterId: discordId } });
-    const currentEquipped = equipment?.[slot as keyof typeof equipment] as string | null | undefined;
+    const currentEquipped = (equipment as any)?.[slot] as string | null | undefined;
     if (currentEquipped) {
       await tx.rpgInventoryItem.upsert({
         where: { characterId_itemId: { characterId: discordId, itemId: currentEquipped } },
@@ -51,7 +56,7 @@ export async function equipItem(discordId: string, itemId: string): Promise<{ su
 
     await tx.rpgEquipment.update({
       where: { characterId: discordId },
-      data: { [slot]: itemId },
+      data: { [slot]: itemId } as any,
     });
 
     await tx.rpgInventoryItem.deleteMany({
@@ -61,11 +66,11 @@ export async function equipItem(discordId: string, itemId: string): Promise<{ su
   });
   if (!equipped) return { success: false, message: 'Você não tem esse item no inventário.' };
 
-  return { success: true, message: `✅ **${item.name}** ${item.emoji} equipado no slot **${SLOT_NAME[item.slot]}**!` };
+  return { success: true, message: `✅ **${item.name}** ${item.emoji} equipado no slot **${SLOT_NAME[item.slot] ?? item.slot}**!` };
 }
 
 export async function unequipItem(discordId: string, slot: string): Promise<{ success: boolean; message: string }> {
-  const allowedSlots = ['weapon', 'helmet', 'pants', 'boots', 'gloves', 'shield', 'ring', 'amulet', 'backpack', 'pet'];
+  const allowedSlots = ['weapon', 'helmet', 'chest', 'pants', 'boots', 'gloves', 'shield', 'ring', 'amulet', 'backpack', 'pet'];
   if (!allowedSlots.includes(slot)) return { success: false, message: 'Slot de equipamento inválido.' };
   const char = await getCharacter(discordId);
   if (!char?.equipment) return { success: false, message: 'Personagem não encontrado.' };
@@ -78,9 +83,9 @@ export async function unequipItem(discordId: string, slot: string): Promise<{ su
 
   const removed = await prisma.$transaction(async tx => {
     const equipment = await tx.rpgEquipment.findUnique({ where: { characterId: discordId } });
-    const currentItemId = equipment?.[slot as keyof typeof equipment] as string | null | undefined;
+    const currentItemId = (equipment as any)?.[slot] as string | null | undefined;
     if (!currentItemId) return false;
-    await tx.rpgEquipment.update({ where: { characterId: discordId }, data: { [slot]: null } });
+    await tx.rpgEquipment.update({ where: { characterId: discordId }, data: { [slot]: null } as any });
     await tx.rpgInventoryItem.upsert({
       where: { characterId_itemId: { characterId: discordId, itemId: currentItemId } },
       update: { quantity: { increment: 1 } },

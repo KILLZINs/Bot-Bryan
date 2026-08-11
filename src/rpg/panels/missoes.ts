@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════
-// PAINEL DE MISSÕES — diárias e semanais
+// PAINEL DE MISSÕES — diárias, semanais e de classe
 // ═══════════════════════════════════════════════════════════════════════
 
 import {
@@ -99,8 +99,8 @@ export async function buildMissoesClaimSelect(discordId: string, guildId: string
 export function buildMissoesButtons(): ActionRowBuilder<ButtonBuilder> {
   return new ActionRowBuilder<ButtonBuilder>().addComponents(
     new ButtonBuilder().setCustomId('rpg:missoes').setLabel('🔄 Atualizar').setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId('rpg:missoes_classe').setLabel('📜 Missões de Classe').setStyle(ButtonStyle.Primary),
     new ButtonBuilder().setCustomId('rpg:dungeon').setLabel('⚔️ Dungeon').setStyle(ButtonStyle.Danger),
-    new ButtonBuilder().setCustomId('rpg:cidade').setLabel('🏰 Cidade').setStyle(ButtonStyle.Primary),
     new ButtonBuilder().setCustomId('rpg:perfil').setLabel('◀ Perfil').setStyle(ButtonStyle.Secondary),
   );
 }

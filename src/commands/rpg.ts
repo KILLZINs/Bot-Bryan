@@ -22,16 +22,30 @@ export function buildProfileSelectMenu(): ActionRowBuilder<StringSelectMenuBuild
       .setPlaceholder('📍 Navegar pelo Hub do Aventureiro...')
       .addOptions(
         new StringSelectMenuOptionBuilder().setLabel('⚔️ Entrar na Dungeon').setValue('dungeon').setDescription('Explorar dungeons e batalhar contra monstros'),
-        new StringSelectMenuOptionBuilder().setLabel('🔍 Caçada & Explorar').setValue('explorar').setDescription('Explorar a região atual em busca de inimigos e recursos'),
+        new StringSelectMenuOptionBuilder().setLabel('🎯 Atividades & Cooldowns').setValue('atividades').setDescription('Caçada, treino, pesca, meditação e taverna'),
         new StringSelectMenuOptionBuilder().setLabel('🎒 Inventário').setValue('inventario').setDescription('Ver seus itens e equipamentos'),
-        new StringSelectMenuOptionBuilder().setLabel('🏰 Ir para a Cidade').setValue('cidade').setDescription('Acessar lojas, forja, taverna e guilda'),
-        new StringSelectMenuOptionBuilder().setLabel('🥊 Treinar Atributos').setValue('treinar').setDescription('Treinar para ganhar atributos permanentemente'),
-        new StringSelectMenuOptionBuilder().setLabel('🎣 Pescaria').setValue('pescar').setDescription('Lançar a vara de pesca no lago do reino'),
-        new StringSelectMenuOptionBuilder().setLabel('🧘 Meditar').setValue('meditar').setDescription('Descansar para restaurar HP e Energia'),
+        new StringSelectMenuOptionBuilder().setLabel('🏰 Ir para a Cidade').setValue('cidade').setDescription('Acessar lojas, forja e guilda'),
+        new StringSelectMenuOptionBuilder().setLabel('🧭 Viajar').setValue('viajar').setDescription('Mudar de mapa ou região no reino'),
+        new StringSelectMenuOptionBuilder().setLabel('⚔️ Desafiar PvP').setValue('pvp').setDescription('Arena de duelo contra outros jogadores'),
         new StringSelectMenuOptionBuilder().setLabel('📋 Painel de Missões').setValue('missoes').setDescription('Ver suas missões diárias e semanais'),
         new StringSelectMenuOptionBuilder().setLabel('📜 Missões de Classe').setValue('missoes_classe').setDescription('Ver suas missões exclusivas de classe'),
         new StringSelectMenuOptionBuilder().setLabel('✨ Habilidades Divinas').setValue('habilidades').setDescription('Gerenciar suas habilidades e bênçãos'),
         new StringSelectMenuOptionBuilder().setLabel('📊 Distribuir Pontos').setValue('stats').setDescription('Atribuir pontos de atributo acumulados'),
+      )
+  );
+}
+
+export function buildAtividadesSelectMenu(): ActionRowBuilder<StringSelectMenuBuilder> {
+  return new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(
+    new StringSelectMenuBuilder()
+      .setCustomId('rpg_select:menu_atividades')
+      .setPlaceholder('🎯 Escolha uma atividade para realizar...')
+      .addOptions(
+        new StringSelectMenuOptionBuilder().setLabel('🔍 Caçada & Explorar').setValue('explorar').setDescription('Explorar a região em busca de inimigos e recursos'),
+        new StringSelectMenuOptionBuilder().setLabel('🥊 Treinar Atributos').setValue('treinar').setDescription('Treinar atributos permanentemente'),
+        new StringSelectMenuOptionBuilder().setLabel('🎣 Pescaria').setValue('pescar').setDescription('Lançar a vara de pesca no lago do reino'),
+        new StringSelectMenuOptionBuilder().setLabel('🧘 Meditar').setValue('meditar').setDescription('Descansar para restaurar HP e Energia'),
+        new StringSelectMenuOptionBuilder().setLabel('🍺 Taverna').setValue('taverna').setDescription('Comprar bebidas e comidas de suporte'),
       )
   );
 }

@@ -7,14 +7,16 @@ import { ITEM_LIST, RpgItem, RARITY_EMOJI } from '../constants/items';
 
 const SHOP_CATEGORIES = [
   { id: 'weapon',     label: '⚔️ Armas',        emoji: '⚔️' },
-  { id: 'helmet',     label: '⛑️ Elmos',         emoji: '⛑️' },
-  { id: 'pants',      label: '👖 Calças',         emoji: '👖' },
-  { id: 'boots',      label: '👟 Botas',          emoji: '👟' },
-  { id: 'gloves',     label: '🧤 Luvas',          emoji: '🧤' },
-  { id: 'shield',     label: '🛡️ Escudos',        emoji: '🛡️' },
-  { id: 'ring',       label: '💍 Anéis',          emoji: '💍' },
-  { id: 'consumable', label: '🧪 Consumíveis',    emoji: '🧪' },
-  { id: 'pet',        label: '🐾 Pets',           emoji: '🐾' },
+  { id: 'helmet',     label: '⛑️ Elmos',        emoji: '⛑️' },
+  { id: 'chest',      label: '👕 Peitorais',    emoji: '👕' },
+  { id: 'pants',      label: '👖 Calças',       emoji: '👖' },
+  { id: 'boots',      label: '👟 Botas',        emoji: '👟' },
+  { id: 'gloves',     label: '🧤 Luvas',        emoji: '🧤' },
+  { id: 'shield',     label: '🛡️ Escudos',      emoji: '🛡️' },
+  { id: 'ring',       label: '💍 Anéis',        emoji: '💍' },
+  { id: 'backpack',   label: '🎒 Mochilas',     emoji: '🎒' },
+  { id: 'consumable', label: '🧪 Consumíveis',  emoji: '🧪' },
+  { id: 'pet',        label: '🐾 Pets',         emoji: '🐾' },
 ];
 
 export function buildShopEmbed(char: FullCharacter, category?: string): EmbedBuilder {

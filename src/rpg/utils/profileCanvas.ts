@@ -1,9 +1,8 @@
 import { createCanvas, loadImage, GlobalFonts } from '@napi-rs/canvas';
 import path from 'path';
-import { FullCharacter, ComputedStats, hpBar } from '../services/character';
 import { getClass, karmaLabel, rpgXpForLevel } from '../constants/classes';
 import { getItem } from '../constants/items';
-import { getLocation, ENV_EMOJI } from '../constants/locations';
+import { getLocation } from '../constants/locations';
 import { DIVINE_SKILLS } from '../constants/skills';
 
 try {
@@ -23,7 +22,7 @@ function formatCooldown(date: Date | null | undefined, minutes: number): string 
   return `🔴 ${mins > 0 ? `${mins}m ` : ''}${secs}s`;
 }
 
-export async function generateProfileCard(char: FullCharacter, stats: ComputedStats, avatarUrl?: string): Promise<Buffer> {
+export async function generateProfileCard(char: any, stats: any, avatarUrlInput?: string): Promise<Buffer> {
   const width = 940;
   const height = 620;
   const canvas = createCanvas(width, height);
@@ -33,7 +32,7 @@ export async function generateProfileCard(char: FullCharacter, stats: ComputedSt
   const loc = getLocation(char.currentLocation);
   const eq = char.equipment;
 
-  // --- EXTRAÇÃO E MAPEAMENTO FIEL DOS DADOS ---
+  // --- EXTRAÇÃO E MAPEAMENTO DOS DADOS ---
   const name = char.username || 'Aventureiro';
   const className = cls?.name ?? char.class;
   const level = char.level ?? 1;
@@ -48,7 +47,7 @@ export async function generateProfileCard(char: FullCharacter, stats: ComputedSt
   const currentEnergy = char.currentEnergy ?? 100;
   const maxEnergy = stats?.maxEnergy ?? 100;
 
-  // Atributos Calculados
+  // Atributos de Combate
   const str = stats?.str ?? 10;
   const agi = stats?.agi ?? 10;
   const intVal = stats?.int ?? 10;
@@ -80,7 +79,7 @@ export async function generateProfileCard(char: FullCharacter, stats: ComputedSt
     divineDesc = ds.description;
   }
 
-  // Mapeamento dos Equipamentos utilizando o auxílio do getItem do seu sistema
+  // Resolução dos Equipamentos (Traduz o ID do item em nome/emoji)
   const resolveItem = (itemId?: string | null) => {
     if (!itemId) return '—';
     const item = getItem(itemId);
@@ -89,21 +88,24 @@ export async function generateProfileCard(char: FullCharacter, stats: ComputedSt
 
   const slotItems = {
     helmet: resolveItem(eq?.helmet),
+    chest: resolveItem(eq?.chest || eq?.armor), // Peitoral
     weapon: resolveItem(eq?.weapon),
     shield: resolveItem(eq?.shield),
     pants: resolveItem(eq?.pants),
     boots: resolveItem(eq?.boots),
     gloves: resolveItem(eq?.gloves),
     ring: resolveItem(eq?.ring),
-    backpack: resolveItem(eq?.backpack),
+    backpack: resolveItem(eq?.backpack), // Mochila
     pet: resolveItem(eq?.pet),
   };
+
+  const avatarUrl = avatarUrlInput || char.avatarUrl || '';
 
   // --- RENDERIZAÇÃO NO CANVAS ---
   ctx.fillStyle = '#120f0d';
   ctx.fillRect(0, 0, width, height);
 
-  // Moldura externa
+  // Moldura do Card
   ctx.fillStyle = '#1a1411';
   ctx.strokeStyle = '#523f2b';
   ctx.lineWidth = 3;
@@ -112,7 +114,7 @@ export async function generateProfileCard(char: FullCharacter, stats: ComputedSt
   ctx.fill();
   ctx.stroke();
 
-  // 1. PAINEL ESQUERDO: INFOS DO HERÓI & BARRAS
+  // 1. PAINEL ESQUERDO: INFOS E BARRAS DE STATUS
   ctx.fillStyle = '#f0e3ce';
   ctx.font = 'bold 20px "InterFont", sans-serif';
   ctx.fillText(`${name.toUpperCase()}`, 30, 42);
@@ -162,7 +164,7 @@ export async function generateProfileCard(char: FullCharacter, stats: ComputedSt
   ctx.fillText(`⚔️ Ataque: ${atk}   🛡️ Defesa: ${def}`, 30, 270);
   ctx.fillText(`💥 Crítico: ${crit.toFixed(1)}%   💨 Esquiva: ${dodge.toFixed(1)}%`, 30, 288);
 
-  // 2. PAINEL CENTRAL: PAPERDOLL E SLOTS
+  // 2. PAINEL CENTRAL: PAPERDOLL COMPLETO (10 SLOTS)
   const centerX = 470;
   const centerY = 280;
 
@@ -187,17 +189,21 @@ export async function generateProfileCard(char: FullCharacter, stats: ComputedSt
     }
   }
 
+  // 10 Slots mapeados (5 de cada lado)
   const slotsCoords = [
+    // Lado Esquerdo
     { key: 'helmet', label: 'Elmo', x: centerX - 150, y: centerY - 140 },
-    { key: 'gloves', label: 'Luva', x: centerX - 150, y: centerY - 75 },
-    { key: 'pants', label: 'Calça', x: centerX - 150, y: centerY - 10 },
-    { key: 'boots', label: 'Bota', x: centerX - 150, y: centerY + 55 },
+    { key: 'chest', label: 'Peito', x: centerX - 150, y: centerY - 75 },
+    { key: 'gloves', label: 'Luva', x: centerX - 150, y: centerY - 10 },
+    { key: 'pants', label: 'Calça', x: centerX - 150, y: centerY + 55 },
+    { key: 'boots', label: 'Bota', x: centerX - 150, y: centerY + 120 },
 
+    // Lado Direito
     { key: 'weapon', label: 'Arma', x: centerX + 90, y: centerY - 140 },
     { key: 'shield', label: 'Escudo', x: centerX + 90, y: centerY - 75 },
     { key: 'ring', label: 'Anel', x: centerX + 90, y: centerY - 10 },
     { key: 'backpack', label: 'Mochila', x: centerX + 90, y: centerY + 55 },
-    { key: 'pet', label: 'Pet', x: centerX + 0, y: centerY + 120 }
+    { key: 'pet', label: 'Pet', x: centerX + 90, y: centerY + 120 }
   ];
 
   ctx.strokeStyle = '#382b1d';
@@ -205,7 +211,7 @@ export async function generateProfileCard(char: FullCharacter, stats: ComputedSt
   for (const s of slotsCoords) {
     ctx.beginPath();
     ctx.moveTo(centerX, centerY - 20);
-    ctx.lineTo(s.x + 30, s.y + 22);
+    ctx.lineTo(s.x + 32, s.y + 22);
     ctx.stroke();
   }
 
@@ -230,7 +236,7 @@ export async function generateProfileCard(char: FullCharacter, stats: ComputedSt
     ctx.fillText(truncatedName, slot.x + 5, slot.y + 30);
   }
 
-  // 3. PAINEL DIREITO: STATUS, HABILIDADES E BATALHAS
+  // 3. PAINEL DIREITO: PODER, HABILIDADE, BATALHAS E COOLDOWNS
   const rightX = 690;
 
   ctx.fillStyle = '#f0e3ce';

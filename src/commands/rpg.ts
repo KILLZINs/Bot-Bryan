@@ -29,6 +29,7 @@ export default {
     .addSubcommand(sub => sub.setName('info').setDescription('Info sobre uma classe').addStringOption(o => o.setName('classe').setDescription('ID da classe').setRequired(true))),
 
   async execute(interaction: ChatInputCommandInteraction) {
+    // Feature gate
     const { isFeatureEnabled, featureDisabledMsg } = await import('../utils/features');
     if (interaction.guildId && !(await isFeatureEnabled(interaction.guildId, 'featRpg'))) {
       return interaction.reply({ content: featureDisabledMsg('featRpg'), ephemeral: true });
@@ -79,6 +80,7 @@ export default {
         return;
       }
 
+      // Seleção de classe
       const embed = new EmbedBuilder()
         .setColor(0x5865F2)
         .setTitle('⚔️ Bem-vindo ao RPG da Aliança Skyline!')
@@ -174,6 +176,7 @@ export default {
       });
 
       const { getClass } = await import('../rpg/constants/classes');
+      const { computeStats: cStats } = await import('../rpg/services/character');
 
       const lines = top.map((c, i) => {
         const cls = getClass(c.class);

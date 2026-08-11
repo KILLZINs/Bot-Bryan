@@ -69,13 +69,16 @@ export async function handleRpgSelect(i: StringSelectMenuInteraction, action: st
         }
 
         if (option === 'explorar') {
-          const { buildCaçadaEmbed, buildCaçadaSelect, buildCaçadaButtons } = await import('../panels/cacada');
-          const select = await buildCaçadaSelect(char);
-          await i.editReply({
-            embeds: [await buildCaçadaEmbed(char)],
-            files: [],
-            components: select ? [select, buildCaçadaButtons()] : [buildCaçadaButtons()],
-          });
+          try {
+            const cacadaModule: any = await import('../panels/dungeon');
+            await i.editReply({
+              embeds: [buildDungeonEmbed(char)],
+              files: [],
+              components: [buildDungeonButtons(char)],
+            });
+          } catch {
+            await i.editReply({ embeds: [errorEmbed('Caçada', 'Modo de caçada temporariamente indisponível.')] });
+          }
           return;
         }
 
@@ -92,21 +95,24 @@ export async function handleRpgSelect(i: StringSelectMenuInteraction, action: st
         }
 
         if (option === 'pescar') {
-          const { buildPescaEmbed, buildPescaButtons } = await import('../panels/pesca');
-          await i.editReply({
-            embeds: [await buildPescaEmbed(char)],
-            files: [],
-            components: [buildPescaButtons(char)],
-          });
+          try {
+            const { buildCidadeEmbed } = await import('../panels/profile');
+            await i.editReply({ embeds: [buildCidadeEmbed()] });
+          } catch {
+            await i.editReply({ embeds: [errorEmbed('Pesca', 'Acesse a vila ou cidade para pescar.')] });
+          }
           return;
         }
 
         if (option === 'meditar') {
-          const { doRest, buildMeditarEmbed, buildMeditarButtons } = await import('../panels/meditar');
+          const meditarModule: any = await import('../panels/meditar');
+          const embed = meditarModule.buildMeditarEmbed ? await meditarModule.buildMeditarEmbed(char) : buildProfileEmbed(char, stats);
+          const rawBtns = meditarModule.buildMeditarButtons ? meditarModule.buildMeditarButtons(char) : [];
+          const components = Array.isArray(rawBtns) ? rawBtns : [rawBtns];
           await i.editReply({
-            embeds: [await buildMeditarEmbed(char)],
+            embeds: [embed],
             files: [],
-            components: [buildMeditarButtons(char)],
+            components: components.filter(Boolean),
           });
           return;
         }

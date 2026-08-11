@@ -89,16 +89,16 @@ model AchievementTemplate {
 }
 
 model Ticket {
-  id        String    @id @default(cuid())
-  channelId String    @unique
-  guildId   String?
-  authorId  String
-  claimedBy String?
-  category  String    @default("geral")
-  status    String    @default("open")
-  createdAt DateTime  @default(now())
-  closedAt        DateTime?
-  voiceChannelId  String?   // Canal de voz da call do ticket
+  id             String    @id @default(cuid())
+  channelId      String    @unique
+  guildId        String?
+  authorId       String
+  claimedBy      String?
+  category       String    @default("geral")
+  status         String    @default("open")
+  createdAt      DateTime  @default(now())
+  closedAt       DateTime?
+  voiceChannelId String?   // Canal de voz da call do ticket
 
   @@map("tickets")
 }
@@ -249,8 +249,6 @@ model DailyMission {
   @@map("daily_missions")
 }
 
-// ─── NOVO: Missões Semanais ───────────────────────────────────────────
-
 model WeeklyMission {
   id         String  @id @default(cuid())
   memberId   String
@@ -291,18 +289,17 @@ model GuildConfig {
   antiSpam              Boolean  @default(false)
   antiLinks             Boolean  @default(false)
 
-  // ─── Feature Toggles — owner/admin pode habilitar ou desabilitar por servidor ───
-  featLeveling      Boolean  @default(true)
-  featRpg           Boolean  @default(true)
-  featTickets       Boolean  @default(true)
-  featPolls         Boolean  @default(true)
-  featGiveaways     Boolean  @default(true)
-  featSelfRole      Boolean  @default(true)
-  featMissions      Boolean  @default(true)
-  featSocial        Boolean  @default(true)
-  featEconomy       Boolean  @default(true)
-  featMod           Boolean  @default(true)
-  featAnnouncements Boolean  @default(true)
+  featLeveling        Boolean  @default(true)
+  featRpg             Boolean  @default(true)
+  featTickets         Boolean  @default(true)
+  featPolls           Boolean  @default(true)
+  featGiveaways       Boolean  @default(true)
+  featSelfRole        Boolean  @default(true)
+  featMissions        Boolean  @default(true)
+  featSocial          Boolean  @default(true)
+  featEconomy         Boolean  @default(true)
+  featMod             Boolean  @default(true)
+  featAnnouncements   Boolean  @default(true)
 
   logFlags              Int      @default(31)
   updatedAt             DateTime @updatedAt @default(now())
@@ -326,57 +323,60 @@ model LevelReward {
 // ═══════════════════════════════════════════════════════════════════════
 
 model RpgCharacter {
-  discordId     String   @id
-  username      String
-  class         String   @default("guerreiro")
-  level         Int      @default(1)
-  xp            Int      @default(0)
-  generation    Int      @default(1)
-  gold          Int      @default(100)
+  discordId       String   @id
+  username        String
+  class           String   @default("guerreiro")
+  level           Int      @default(1)
+  xp              Int      @default(0)
+  generation      Int      @default(1)
+  gold            Int      @default(100)
 
-  currentHp     Int      @default(100)
-  maxHp         Int      @default(100)
-  currentEnergy Int      @default(50)
-  maxEnergy     Int      @default(50)
+  currentHp       Int      @default(100)
+  maxHp           Int      @default(100)
+  currentEnergy   Int      @default(50)
+  maxEnergy       Int      @default(50)
 
-  strength      Int      @default(10)
-  agility       Int      @default(10)
-  intelligence  Int      @default(10)
-  vitality      Int      @default(10)
-  luck          Int      @default(10)
+  strength        Int      @default(10)
+  agility         Int      @default(10)
+  intelligence    Int      @default(10)
+  vitality        Int      @default(10)
+  luck            Int      @default(10)
 
-  statPoints    Int      @default(0)
-  skillPoints   Int      @default(0)
+  statPoints      Int      @default(0)
+  skillPoints     Int      @default(0)
 
   divineSkillId   String?
-  divineSkillRank String  @default("F")
-  divineSkillExp  Int     @default(0)
+  divineSkillRank String   @default("F")
+  divineSkillExp  Int      @default(0)
 
-  currentLocation String  @default("cidade_inicial")
-  environment     String  @default("DIA")
+  // 🧬 Campo adicionado para os níveis dos talentos passivos
+  talentLevels    Json?    @default("{}")
 
-  karma         Int     @default(0)
-  pvpEnabled    Boolean @default(true)
-  pvpWins       Int     @default(0)
-  pvpLosses     Int     @default(0)
+  currentLocation String   @default("cidade_inicial")
+  environment     String   @default("DIA")
 
-  totalKills    Int     @default(0)
-  totalDeaths   Int     @default(0)
-  totalWins     Int     @default(0)
-  bossKills     Int     @default(0)
+  karma           Int      @default(0)
+  pvpEnabled      Boolean  @default(true)
+  pvpWins         Int      @default(0)
+  pvpLosses       Int      @default(0)
 
-  lastDungeon    DateTime?
-  lastTravel     DateTime?
-  lastPvp        DateTime?
-  lastRest       DateTime?
-  lastEnergyTick DateTime?
-  lastFishing    DateTime?
-  lastTrain      DateTime?
-  lastExplore    DateTime?
-  lastTavern     DateTime?
+  totalKills      Int      @default(0)
+  totalDeaths     Int      @default(0)
+  totalWins       Int      @default(0)
+  bossKills       Int      @default(0)
+
+  lastDungeon     DateTime?
+  lastTravel      DateTime?
+  lastPvp         DateTime?
+  lastRest        DateTime?
+  lastEnergyTick  DateTime?
+  lastFishing     DateTime?
+  lastTrain       DateTime?
+  lastExplore     DateTime?
+  lastTavern      DateTime?
   meditatingUntil DateTime?
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 
   equipment       RpgEquipment?
   inventory       RpgInventoryItem[]
@@ -395,7 +395,7 @@ model RpgEquipment {
   characterId String   @id
   weapon      String?
   helmet      String?
-  chest       String?  // <-- Adicionado para peitorais
+  chest       String?  
   pants       String?
   boots       String?
   gloves      String?
@@ -507,8 +507,6 @@ model RpgShopRotation {
   @@map("rpg_shop_rotation")
 }
 
-// ─── Novos sistemas RPG ───────────────────────────────────────────────
-
 model RpgTempBuff {
   id        String   @id @default(cuid())
   discordId String
@@ -567,8 +565,6 @@ model RpgFishingSession {
   @@map("rpg_fishing_sessions")
 }
 
-// ─── NOVO: Boss Mundial ───────────────────────────────────────────────
-
 model WorldBoss {
   id          String   @id @default(cuid())
   guildId     String
@@ -605,8 +601,6 @@ model WorldBossParticipant {
   @@map("world_boss_participants")
 }
 
-// ─── NOVO: Casamento ──────────────────────────────────────────────────
-
 model Marriage {
   id        String   @id @default(cuid())
   userId1   String
@@ -630,8 +624,6 @@ model MarriageProposal {
   @@map("marriage_proposals")
 }
 
-// ─── Aliança Skyline ──────────────────────────────────────────────────
-
 model AllianceServer {
   id          String   @id @default(cuid())
   guildId     String   @unique
@@ -640,7 +632,7 @@ model AllianceServer {
   class       String   @default("Sem Classe")
   channelId   String?
   inviteLink  String?
-  panelRoleId String?   // Cargo extra que pode acessar /servidor além do dono
+  panelRoleId String?  
   addedBy     String
   addedAt     DateTime @default(now())
   updatedAt   DateTime @updatedAt
@@ -685,20 +677,15 @@ model AllianceEmbed {
   @@map("alliance_embeds")
 }
 
-// ═══════════════════════════════════════════════════════════════════════
-// BOT GLOBAL CONFIG
-// ═══════════════════════════════════════════════════════════════════════
-
 model BotConfig {
-  id           String   @id @default("global")
-  footerText   String   @default("⚔️ Aliança Skyline")
-  primaryColor Int      @default(10180278)
-  botIconUrl   String?
-  rpFooterText String   @default("⚔️ Aliança Skyline • /genero para mudar seus pronomes")
-  // ─── Feature toggles globais (só OWNER pode alterar) ──────────────────────
+  id            String   @id @default("global")
+  footerText    String   @default("⚔️ Aliança Skyline")
+  primaryColor  Int      @default(10180278)
+  botIconUrl    String?
+  rpFooterText  String   @default("⚔️ Aliança Skyline • /genero para mudar seus pronomes")
   featAfk       Boolean  @default(true)
   featWelcomeDm Boolean  @default(true)
-  updatedAt    DateTime @updatedAt @default(now())
+  updatedAt     DateTime @updatedAt @default(now())
 
   @@map("bot_config")
 }
@@ -797,8 +784,6 @@ model VipRole {
   @@unique([guildId, userId])
   @@map("vip_roles")
 }
-
-// ─── Memória da IA ─────────────────────────────────────────────
 
 model AiMemory {
   id        String   @id @default(cuid())

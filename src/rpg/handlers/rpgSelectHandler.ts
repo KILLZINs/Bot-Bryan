@@ -105,6 +105,18 @@ export async function handleRpgSelect(i: StringSelectMenuInteraction, action: st
           return;
         }
 
+        if (option === 'missoes_classe') {
+          const { buildClassMissionsEmbed, buildClassMissionsClaimSelect, buildClassMissionsButtons } = await import('../panels/class-missions');
+          const classEmbed = await buildClassMissionsEmbed(char);
+          const claimSelect = await buildClassMissionsClaimSelect(discordId);
+          await i.editReply({
+            embeds: [classEmbed],
+            files: [],
+            components: claimSelect ? [claimSelect, buildClassMissionsButtons()] : [buildClassMissionsButtons()],
+          });
+          return;
+        }
+
         if (option === 'habilidades') {
           const { buildHabilidadesEmbed, buildHabilidadesButtons } = await import('../panels/skills');
           const { embed: habEmbed, select: habSelect } = buildHabilidadesEmbed(char);

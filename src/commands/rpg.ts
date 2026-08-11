@@ -16,6 +16,23 @@ import { errorEmbed, successEmbed } from '../utils/embeds';
 import { prisma } from '../database/client';
 import { generateProfileCard } from '../rpg/utils/profileCanvas';
 
+// Construtor do Seletor do Perfil RPG
+function buildProfileSelectMenu(): ActionRowBuilder<StringSelectMenuBuilder> {
+  return new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(
+    new StringSelectMenuBuilder()
+      .setCustomId('rpg_select:menu_perfil')
+      .setPlaceholder('📍 Navegar pelo Hub do Aventureiro...')
+      .addOptions(
+        new StringSelectMenuOptionBuilder().setLabel('⚔️ Perfil & Status').setValue('perfil').setDescription('Ver seu perfil principal'),
+        new StringSelectMenuOptionBuilder().setLabel('🎒 Inventário').setValue('inventario').setDescription('Ver seus itens e equipamentos'),
+        new StringSelectMenuOptionBuilder().setLabel('🏰 Ir para a Cidade').setValue('cidade').setDescription('Acessar lojas, forja e guilda'),
+        new StringSelectMenuOptionBuilder().setLabel('📋 Painel de Missões').setValue('missoes').setDescription('Ver suas missões ativas'),
+        new StringSelectMenuOptionBuilder().setLabel('✨ Habilidades').setValue('habilidades').setDescription('Gerenciar suas habilidades divinas'),
+        new StringSelectMenuOptionBuilder().setLabel('📊 Estatísticas Detalhadas').setValue('stats').setDescription('Ver histórico completo'),
+      )
+  );
+}
+
 export default {
   category: 'rpg',
   data: new SlashCommandBuilder()
@@ -55,20 +72,25 @@ export default {
         console.error('Erro ao gerar perfil em Canvas:', err);
       }
 
+      // Prepara os seletores e os botões de ação do perfil
+      const components = [
+        buildProfileSelectMenu(),
+        ...buildProfileButtons(char)
+      ];
+
       if (!attachment) {
-        // Fallback para Embed textual se o Canvas falhar
         await interaction.editReply({
           embeds: [buildProfileEmbed(char, stats)],
-          components: buildProfileButtons(char),
+          components,
         });
         return;
       }
 
-      // Responde APENAS com a imagem do Canvas e os botões interativos
+      // Envia SOMENTE o Canvas (imagem limpa) + Seletor de Navegação + Botões de Ação
       await interaction.editReply({
         embeds: [],
         files: [attachment],
-        components: buildProfileButtons(char),
+        components,
       });
       return;
     }

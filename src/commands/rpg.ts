@@ -24,7 +24,8 @@ export function buildProfileSelectMenu(): ActionRowBuilder<StringSelectMenuBuild
         new StringSelectMenuOptionBuilder().setLabel('⚔️ Entrar na Dungeon').setValue('dungeon').setDescription('Explorar dungeons e batalhar contra monstros'),
         new StringSelectMenuOptionBuilder().setLabel('🎒 Inventário').setValue('inventario').setDescription('Ver seus itens e equipamentos'),
         new StringSelectMenuOptionBuilder().setLabel('🏰 Ir para a Cidade').setValue('cidade').setDescription('Acessar lojas, forja e guilda'),
-        new StringSelectMenuOptionBuilder().setLabel('📋 Painel de Missões').setValue('missoes').setDescription('Ver suas missões ativas'),
+        new StringSelectMenuOptionBuilder().setLabel('📋 Painel de Missões').setValue('missoes').setDescription('Ver suas missões diárias e semanais'),
+        new StringSelectMenuOptionBuilder().setLabel('📜 Missões de Classe').setValue('missoes_classe').setDescription('Ver suas missões exclusivas de classe'),
         new StringSelectMenuOptionBuilder().setLabel('✨ Habilidades').setValue('habilidades').setDescription('Gerenciar suas habilidades divinas'),
         new StringSelectMenuOptionBuilder().setLabel('📊 Distribuir Pontos').setValue('stats').setDescription('Atribuir pontos de atributo acumulados'),
       )

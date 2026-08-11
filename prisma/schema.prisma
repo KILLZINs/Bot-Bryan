@@ -392,9 +392,10 @@ model RpgCharacter {
 }
 
 model RpgEquipment {
-  characterId String  @id
+  characterId String   @id
   weapon      String?
   helmet      String?
+  chest       String?  // <-- Adicionado para peitorais
   pants       String?
   boots       String?
   gloves      String?
@@ -406,6 +407,7 @@ model RpgEquipment {
   character   RpgCharacter @relation(fields: [characterId], references: [discordId], onDelete: Cascade)
 
   @@map("rpg_equipment")
+}
 }
 
 model RpgInventoryItem {

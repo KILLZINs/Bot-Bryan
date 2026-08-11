@@ -46,20 +46,28 @@ export default {
       const stats = computeStats(char);
 
       let attachment: AttachmentBuilder | null = null;
-      const embed = buildProfileEmbed(char, stats);
 
       try {
         const avatarUrl = interaction.user.displayAvatarURL({ extension: 'png', size: 256 });
         const imageBuffer = await generateProfileCard(char, stats, avatarUrl);
         attachment = new AttachmentBuilder(imageBuffer, { name: 'perfil.png' });
-        embed.setImage('attachment://perfil.png');
       } catch (err) {
         console.error('Erro ao gerar perfil em Canvas:', err);
       }
 
+      if (!attachment) {
+        // Fallback para Embed textual se o Canvas falhar
+        await interaction.editReply({
+          embeds: [buildProfileEmbed(char, stats)],
+          components: buildProfileButtons(char),
+        });
+        return;
+      }
+
+      // Responde APENAS com a imagem do Canvas e os botões interativos
       await interaction.editReply({
-        embeds: [embed],
-        files: attachment ? [attachment] : [],
+        embeds: [],
+        files: [attachment],
         components: buildProfileButtons(char),
       });
       return;

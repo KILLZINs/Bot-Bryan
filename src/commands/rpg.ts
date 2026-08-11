@@ -16,8 +16,7 @@ import { errorEmbed, successEmbed } from '../utils/embeds';
 import { prisma } from '../database/client';
 import { generateProfileCard } from '../rpg/utils/profileCanvas';
 
-// Construtor do Seletor do Perfil RPG
-function buildProfileSelectMenu(): ActionRowBuilder<StringSelectMenuBuilder> {
+export function buildProfileSelectMenu(): ActionRowBuilder<StringSelectMenuBuilder> {
   return new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(
     new StringSelectMenuBuilder()
       .setCustomId('rpg_select:menu_perfil')
@@ -72,7 +71,6 @@ export default {
         console.error('Erro ao gerar perfil em Canvas:', err);
       }
 
-      // Prepara os seletores e os botões de ação do perfil
       const components = [
         buildProfileSelectMenu(),
         ...buildProfileButtons(char)
@@ -86,7 +84,6 @@ export default {
         return;
       }
 
-      // Envia SOMENTE o Canvas (imagem limpa) + Seletor de Navegação + Botões de Ação
       await interaction.editReply({
         embeds: [],
         files: [attachment],

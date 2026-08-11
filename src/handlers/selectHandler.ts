@@ -19,21 +19,14 @@ export async function handleSelect(interaction: AnySelectMenuInteraction) {
     if (prefix === 'ticket' && action === 'category') return await ticketCategory(interaction as StringSelectMenuInteraction);
     if (prefix === 'ticket_staff' && action === 'action') return await ticketStaffAction(interaction as StringSelectMenuInteraction, parts[2]);
 
-    // ── Tratamento dos Seletores do RPG (Compatibilidade Total) ─────────────
-    if (prefix === 'rpg_select' || prefix === 'rpg' || prefix === 'loja_categoria') {
+    // ── Tratamento do RPG e da Loja ─────────────────────────────────────────
+    if (prefix === 'rpg_select') return await (await import('./../rpg/handlers/rpgSelectHandler')).handleRpgSelect(interaction as StringSelectMenuInteraction, action);
+    
+    // Suporte ao menu da loja (loja_categoria)
+    if (prefix === 'loja_categoria') {
       const selectedValue = (interaction as StringSelectMenuInteraction).values[0];
-      
-      // Mantém exatamente a estrutura original sem alterar nomes de variáveis
-      let targetAction = action === 'menu_perfil' ? selectedValue : action;
-
-      // Se for o dropdown da loja, repassa o valor selecionado diretamente
-      if (prefix === 'loja_categoria') {
-        targetAction = selectedValue;
-      }
-
-      // Chama o handler de botões do RPG diretamente
       const { handleButton } = await import('./buttonHandler');
-      return await handleButton(Object.assign(interaction, { customId: `rpg:${targetAction}` }) as any);
+      return await handleButton(Object.assign(interaction, { customId: `rpg:loja_${selectedValue}` }) as any);
     }
 
     if (prefix === 'selfrole' && action === 'choose') return await selfRoleChoose(interaction as StringSelectMenuInteraction);

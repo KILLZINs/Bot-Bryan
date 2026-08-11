@@ -68,6 +68,49 @@ export async function handleRpgSelect(i: StringSelectMenuInteraction, action: st
           return;
         }
 
+        if (option === 'explorar') {
+          const { buildCaçadaEmbed, buildCaçadaSelect, buildCaçadaButtons } = await import('../panels/cacada');
+          const select = await buildCaçadaSelect(char);
+          await i.editReply({
+            embeds: [await buildCaçadaEmbed(char)],
+            files: [],
+            components: select ? [select, buildCaçadaButtons()] : [buildCaçadaButtons()],
+          });
+          return;
+        }
+
+        if (option === 'treinar') {
+          const { buildTreinarEmbed, buildTreinarSelect, buildTreinarButtons } = await import('../panels/treinar');
+          const lastTrain = char.lastTrain;
+          const onCd = !!(lastTrain && (Date.now() - lastTrain.getTime()) < 20 * 60 * 1000);
+          await i.editReply({
+            embeds: [await buildTreinarEmbed(char)],
+            files: [],
+            components: [buildTreinarSelect(onCd), buildTreinarButtons()],
+          });
+          return;
+        }
+
+        if (option === 'pescar') {
+          const { buildPescaEmbed, buildPescaButtons } = await import('../panels/pesca');
+          await i.editReply({
+            embeds: [await buildPescaEmbed(char)],
+            files: [],
+            components: [buildPescaButtons(char)],
+          });
+          return;
+        }
+
+        if (option === 'meditar') {
+          const { doRest, buildMeditarEmbed, buildMeditarButtons } = await import('../panels/meditar');
+          await i.editReply({
+            embeds: [await buildMeditarEmbed(char)],
+            files: [],
+            components: [buildMeditarButtons(char)],
+          });
+          return;
+        }
+
         if (option === 'inventario') {
           const { embed: invEmbed, select: invSelect } = await buildInventarioEmbed(char);
           await i.editReply({

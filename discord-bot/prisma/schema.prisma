@@ -1,0 +1,210 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Member {
+  id           String   @id @default(cuid())
+  discordId    String   @unique
+  username     String
+  rank         String   @default("Recruta")
+  xp           Int      @default(0)
+  level        Int      @default(1)
+  coins        Int      @default(0)
+  warnings     Int      @default(0)
+  joinedAt     DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  isMuted      Boolean  @default(false)
+  muteExpiry   DateTime?
+
+  achievements  MemberAchievement[]
+  eventEntries  EventAttendance[]
+  tickets       Ticket[]
+  feedbacks     Feedback[]
+  suggestions   Suggestion[]
+  giveaways     GiveawayEntry[]
+  warnRecords   Warning[]
+
+  @@map("members")
+}
+
+model Achievement {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  description String
+  icon        String   @default("🏆")
+  reward      Int      @default(0)
+  createdAt   DateTime @default(now())
+
+  members MemberAchievement[]
+
+  @@map("achievements")
+}
+
+model MemberAchievement {
+  id            String   @id @default(cuid())
+  memberId      String
+  achievementId String
+  grantedAt     DateTime @default(now())
+  grantedBy     String
+
+  member      Member      @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  achievement Achievement @relation(fields: [achievementId], references: [id], onDelete: Cascade)
+
+  @@unique([memberId, achievementId])
+  @@map("member_achievements")
+}
+
+model Warning {
+  id        String   @id @default(cuid())
+  memberId  String
+  reason    String
+  issuedBy  String
+  createdAt DateTime @default(now())
+
+  member Member @relation(fields: [memberId], references: [id], onDelete: Cascade)
+
+  @@map("warnings")
+}
+
+model Event {
+  id          String   @id @default(cuid())
+  name        String
+  description String
+  scheduledAt DateTime
+  createdBy   String
+  maxSlots    Int?
+  status      String   @default("UPCOMING") // UPCOMING, ONGOING, FINISHED, CANCELLED
+  createdAt   DateTime @default(now())
+
+  attendance EventAttendance[]
+
+  @@map("events")
+}
+
+model EventAttendance {
+  id        String   @id @default(cuid())
+  eventId   String
+  memberId  String
+  joinedAt  DateTime @default(now())
+
+  event  Event  @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  member Member @relation(fields: [memberId], references: [id], onDelete: Cascade)
+
+  @@unique([eventId, memberId])
+  @@map("event_attendance")
+}
+
+model Ticket {
+  id          String   @id @default(cuid())
+  memberId    String
+  channelId   String   @unique
+  reason      String
+  status      String   @default("OPEN") // OPEN, CLOSED
+  createdAt   DateTime @default(now())
+  closedAt    DateTime?
+
+  member Member @relation(fields: [memberId], references: [id], onDelete: Cascade)
+
+  @@map("tickets")
+}
+
+model Feedback {
+  id        String   @id @default(cuid())
+  memberId  String
+  content   String
+  status    String   @default("PENDING") // PENDING, REVIEWED, IMPLEMENTED
+  createdAt DateTime @default(now())
+
+  member Member @relation(fields: [memberId], references: [id], onDelete: Cascade)
+
+  @@map("feedbacks")
+}
+
+model Suggestion {
+  id        String   @id @default(cuid())
+  memberId  String
+  content   String
+  upvotes   Int      @default(0)
+  downvotes Int      @default(0)
+  status    String   @default("PENDING") // PENDING, APPROVED, REJECTED
+  createdAt DateTime @default(now())
+
+  member Member @relation(fields: [memberId], references: [id], onDelete: Cascade)
+
+  @@map("suggestions")
+}
+
+model Poll {
+  id        String     @id @default(cuid())
+  question  String
+  createdBy String
+  endsAt    DateTime?
+  closed    Boolean    @default(false)
+  messageId String?
+  channelId String?
+  createdAt DateTime   @default(now())
+
+  options PollOption[]
+
+  @@map("polls")
+}
+
+model PollOption {
+  id      String @id @default(cuid())
+  pollId  String
+  label   String
+  votes   Int    @default(0)
+
+  poll Poll @relation(fields: [pollId], references: [id], onDelete: Cascade)
+
+  @@map("poll_options")
+}
+
+model Giveaway {
+  id          String   @id @default(cuid())
+  prize       String
+  winners     Int      @default(1)
+  channelId   String
+  messageId   String?
+  hostId      String
+  endsAt      DateTime
+  ended       Boolean  @default(false)
+  createdAt   DateTime @default(now())
+
+  entries GiveawayEntry[]
+
+  @@map("giveaways")
+}
+
+model GiveawayEntry {
+  id         String   @id @default(cuid())
+  giveawayId String
+  memberId   String
+  joinedAt   DateTime @default(now())
+
+  giveaway Giveaway @relation(fields: [giveawayId], references: [id], onDelete: Cascade)
+  member   Member   @relation(fields: [memberId], references: [id], onDelete: Cascade)
+
+  @@unique([giveawayId, memberId])
+  @@map("giveaway_entries")
+}
+
+model GuildConfig {
+  id                   String  @id @default(cuid())
+  guildId              String  @unique
+  logChannelId         String?
+  welcomeChannelId     String?
+  announcementChannelId String?
+  ticketCategoryId     String?
+  adminRoleId          String?
+  modRoleId            String?
+  memberRoleId         String?
+  mutedRoleId          String?
+
+  @@map("guild_config")
+}

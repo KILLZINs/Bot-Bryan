@@ -1,0 +1,91 @@
+Starting Container
+Validation Error Count: 1
+[Context: getConfig]
+Prisma CLI Version : 5.22.0
+Datasource "db": PostgreSQL database
+Error: Prisma schema validation - (get-config wasm)
+Error code: P1012
+error: Environment variable not found: DATABASE_URL.
+  -->  prisma/schema.prisma:7
+   | 
+ 6 |   provider = "postgresql"
+ 7 |   url      = env("DATABASE_URL")
+> alianca-skyline-bot@1.0.0 db:migrate
+   | 
+> prisma migrate deploy
+Prisma schema loaded from prisma/schema.prisma
+> alianca-skyline-bot@1.0.0 db:migrate
+> prisma migrate deploy
+Validation Error Count: 1
+error: Environment variable not found: DATABASE_URL.
+[Context: getConfig]
+  -->  prisma/schema.prisma:7
+   | 
+ 6 |   provider = "postgresql"
+ 7 |   url      = env("DATABASE_URL")
+   | 
+Prisma CLI Version : 5.22.0
+Prisma schema loaded from prisma/schema.prisma
+Datasource "db": PostgreSQL database
+Error: Prisma schema validation - (get-config wasm)
+Error code: P1012
+> alianca-skyline-bot@1.0.0 db:migrate
+> prisma migrate deploy
+Prisma schema loaded from prisma/schema.prisma
+Datasource "db": PostgreSQL database
+Error: Prisma schema validation - (get-config wasm)
+Error code: P1012
+error: Environment variable not found: DATABASE_URL.
+  -->  prisma/schema.prisma:7
+   | 
+ 6 |   provider = "postgresql"
+ 7 |   url      = env("DATABASE_URL")
+   | 
+Validation Error Count: 1
+[Context: getConfig]
+Prisma CLI Version : 5.22.0
+> alianca-skyline-bot@1.0.0 db:migrate
+> prisma migrate deploy
+Prisma schema loaded from prisma/schema.prisma
+Datasource "db": PostgreSQL database
+Error: Prisma schema validation - (get-config wasm)
+Error code: P1012
+error: Environment variable not found: DATABASE_URL.
+  -->  prisma/schema.prisma:7
+   | 
+ 6 |   provider = "postgresql"
+ 7 |   url      = env("DATABASE_URL")
+   | 
+Validation Error Count: 1
+[Context: getConfig]
+Prisma CLI Version : 5.22.0
+> alianca-skyline-bot@1.0.0 db:migrate
+> prisma migrate deploy
+Validation Error Count: 1
+[Context: getConfig]
+Prisma CLI Version : 5.22.0
+Prisma schema loaded from prisma/schema.prisma
+Datasource "db": PostgreSQL database
+Error: Prisma schema validation - (get-config wasm)
+Error code: P1012
+error: Environment variable not found: DATABASE_URL.
+  -->  prisma/schema.prisma:7
+   | 
+ 6 |   provider = "postgresql"
+ 7 |   url      = env("DATABASE_URL")
+   | 
+> alianca-skyline-bot@1.0.0 db:migrate
+> prisma migrate deploy
+[Context: getConfig]
+Error: Prisma schema validation - (get-config wasm)
+Error code: P1012
+Prisma CLI Version : 5.22.0
+error: Environment variable not found: DATABASE_URL.
+  -->  prisma/schema.prisma:7
+   | 
+ 6 |   provider = "postgresql"
+ 7 |   url      = env("DATABASE_URL")
+   | 
+Validation Error Count: 1
+Prisma schema loaded from prisma/schema.prisma
+Datasource "db": PostgreSQL database

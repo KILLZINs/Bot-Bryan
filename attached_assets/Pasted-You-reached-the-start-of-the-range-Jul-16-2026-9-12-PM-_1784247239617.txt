@@ -1,0 +1,70 @@
+You reached the start of the range
+Jul 16, 2026, 9:12 PM
+> alianca-skyline-bot@1.0.0 db:migrate
+> prisma migrate deploy
+Starting Container
+Prisma schema loaded from prisma/schema.prisma
+Datasource "db": PostgreSQL database "railway", schema "public" at "postgres.railway.internal:5432"
+No migration found in prisma/migrations
+Error: P3005
+The database schema is not empty. Read more about how to baseline an existing production database: https://pris.ly/d/migrate-baseline
+> alianca-skyline-bot@1.0.0 db:migrate
+> prisma migrate deploy
+Prisma schema loaded from prisma/schema.prisma
+Datasource "db": PostgreSQL database "railway", schema "public" at "postgres.railway.internal:5432"
+No migration found in prisma/migrations
+Error: P3005
+The database schema is not empty. Read more about how to baseline an existing production database: https://pris.ly/d/migrate-baseline
+> alianca-skyline-bot@1.0.0 db:migrate
+> prisma migrate deploy
+Prisma schema loaded from prisma/schema.prisma
+Datasource "db": PostgreSQL database "railway", schema "public" at "postgres.railway.internal:5432"
+No migration found in prisma/migrations
+Error: P3005
+The database schema is not empty. Read more about how to baseline an existing production database: https://pris.ly/d/migrate-baseline
+> alianca-skyline-bot@1.0.0 db:migrate
+> prisma migrate deploy
+Datasource "db": PostgreSQL database "railway", schema "public" at "postgres.railway.internal:5432"
+No migration found in prisma/migrations
+Prisma schema loaded from prisma/schema.prisma
+Error: P3005
+The database schema is not empty. Read more about how to baseline an existing production database: https://pris.ly/d/migrate-baseline
+> alianca-skyline-bot@1.0.0 db:migrate
+> prisma migrate deploy
+Prisma schema loaded from prisma/schema.prisma
+Datasource "db": PostgreSQL database "railway", schema "public" at "postgres.railway.internal:5432"
+No migration found in prisma/migrations
+Error: P3005
+The database schema is not empty. Read more about how to baseline an existing production database: https://pris.ly/d/migrate-baseline
+> alianca-skyline-bot@1.0.0 db:migrate
+> prisma migrate deploy
+Prisma schema loaded from prisma/schema.prisma
+Datasource "db": PostgreSQL database "railway", schema "public" at "postgres.railway.internal:5432"
+No migration found in prisma/migrations
+Error: P3005
+The database schema is not empty. Read more about how to baseline an existing production database: https://pris.ly/d/migrate-baseline
+> alianca-skyline-bot@1.0.0 db:migrate
+> prisma migrate deploy
+Prisma schema loaded from prisma/schema.prisma
+Datasource "db": PostgreSQL database "railway", schema "public" at "postgres.railway.internal:5432"
+No migration found in prisma/migrations
+Error: P3005
+The database schema is not empty. Read more about how to baseline an existing production database: https://pris.ly/d/migrate-baseline
+> alianca-skyline-bot@1.0.0 db:migrate
+> prisma migrate deploy
+Prisma schema loaded from prisma/schema.prisma
+Datasource "db": PostgreSQL database "railway", schema "public" at "postgres.railway.internal:5432"
+No migration found in prisma/migrations
+Error: P3005
+The database schema is not empty. Read more about how to baseline an existing production database: https://pris.ly/d/migrate-baseline
+> alianca-skyline-bot@1.0.0 db:migrate
+> prisma migrate deploy
+Prisma schema loaded from prisma/schema.prisma
+Datasource "db": PostgreSQL database "railway", schema "public" at "postgres.railway.internal:5432"
+No migration found in prisma/migrations
+Error: P3005
+The database schema is not empty. Read more about how to baseline an existing production database: https://pris.ly/d/migrate-baseline
+> alianca-skyline-bot@1.0.0 db:migrate
+> prisma migrate deploy
+Prisma schema loaded from prisma/schema.prisma
+Datasource "db": PostgreSQL database "railway", schema "public" at "postgres.railway.internal:5432"

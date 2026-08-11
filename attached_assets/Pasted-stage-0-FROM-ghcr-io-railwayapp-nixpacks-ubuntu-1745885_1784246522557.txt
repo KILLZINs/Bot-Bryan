@@ -1,0 +1,168 @@
+stage-0
+FROM ghcr.io/railwayapp/nixpacks:ubuntu-1745885067@sha256:d45c89d80e13d7ad0fd555b5130f22a866d9dd10e861f589932303ef2314c7de
+15ms
+unpacking archive
+150 KB
+3ms
+using build driver nixpacks-v1.41.0
+uploading snapshot
+23.4 KB
+ 
+╔════════════════════════ Nixpacks v1.41.0 ════════════════════════╗
+║ setup      │ nodejs_18, npm-9_x, openssl                         ║
+║──────────────────────────────────────────────────────────────────║
+║ install    │ npm i                                               ║
+║──────────────────────────────────────────────────────────────────║
+║ build      │ npm install && npm run db:generate && npm run build ║
+║──────────────────────────────────────────────────────────────────║
+║ start      │ npm run db:migrate && npm start                     ║
+╚══════════════════════════════════════════════════════════════════╝
+ 
+ 
+Saved output to:
+  snapshot-target-unpack
+
+internal
+load build definition from Dockerfile
+0ms
+
+internal
+load metadata for ghcr.io/railwayapp/nixpacks:ubuntu-1745885067
+424ms
+
+internal
+load .dockerignore
+1ms
+UndefinedVar: Usage of undefined variable '$NIXPACKS_PATH' (line 18)(https://docs.docker.com/go/dockerfile/rule/undefined-var/)
+ details: Variables should be defined before their use
+
+internal
+load build context
+0ms
+
+stage-0
+RUN nix-env -if .nixpacks/nixpkgs-ffeebf0acf3ae8b29f8c7049cd911b9636efd7e7.nix && nix-collect-garbage -d cached
+0ms
+
+stage-0
+COPY .nixpacks/nixpkgs-ffeebf0acf3ae8b29f8c7049cd911b9636efd7e7.nix .nixpacks/nixpkgs-ffeebf0acf3ae8b29f8c7049cd911b9636efd7e7.nix cached
+0ms
+
+stage-0
+WORKDIR /app/ cached
+0ms
+
+stage-0
+COPY . /app/.
+669ms
+
+stage-0
+RUN npm i
+19s
+Run `npm audit` for details.
+scheduling build on Metal builder "builder-dtajqw"
+
+stage-0
+COPY . /app/.
+1s
+
+stage-0
+RUN npm install && npm run db:generate && npm run build
+7s
+npm warn config production Use `--omit=dev` instead.
+> alianca-skyline-bot@1.0.0 postinstall
+> prisma generate
+Prisma schema loaded from prisma/schema.prisma
+✔ Generated Prisma Client (v5.22.0) to ./node_modules/@prisma/client in 197ms
+Start by importing your Prisma Client (See: https://pris.ly/d/importing-client)
+Help us improve the Prisma ORM for everyone. Share your feedback in a short 2-min survey: https://pris.ly/orm/survey/release-5-22
+┌─────────────────────────────────────────────────────────┐
+│  Update available 5.22.0 -> 7.8.0                       │
+│                                                         │
+│  This is a major update - please follow the guide at    │
+│  https://pris.ly/d/major-version-upgrade                │
+│                                                         │
+│  Run the following to update                            │
+│    npm i --save-dev prisma@latest                       │
+│    npm i @prisma/client@latest                          │
+└─────────────────────────────────────────────────────────┘
+up to date, audited 57 packages in 2s
+8 packages are looking for funding
+  run `npm fund` for details
+2 moderate severity vulnerabilities
+To address all issues (including breaking changes), run:
+  npm audit fix --force
+Run `npm audit` for details.
+npm warn config production Use `--omit=dev` instead.
+> alianca-skyline-bot@1.0.0 db:generate
+> prisma generate
+Prisma schema loaded from prisma/schema.prisma
+✔ Generated Prisma Client (v5.22.0) to ./node_modules/@prisma/client in 189ms
+Start by importing your Prisma Client (See: https://pris.ly/d/importing-client)
+Tip: Curious about the SQL queries Prisma ORM generates? Optimize helps you enhance your visibility: https://pris.ly/tip-2-optimize
+npm warn config production Use `--omit=dev` instead.
+> alianca-skyline-bot@1.0.0 build
+> tsc
+src/commands/events/evento.ts(9,3): error TS2322: Type 'SlashCommandSubcommandsOnlyBuilder' is not assignable to type 'SlashCommandBuilder | ContextMenuCommandBuilder | Omit<SlashCommandBuilder, "addSubcommand" | "addSubcommandGroup">'.
+
+  Type 'SlashCommandSubcommandsOnlyBuilder' is missing the following properties from type 'SlashCommandBuilder': addBooleanOption, addUserOption, addChannelOption, addRoleOption, and 6 more.
+src/commands/feedback/feedback.ts(9,3): error TS2322: Type 'SlashCommandSubcommandsOnlyBuilder' is not assignable to type 'SlashCommandBuilder | ContextMenuCommandBuilder | Omit<SlashCommandBuilder, "addSubcommand" | "addSubcommandGroup">'.
+
+  Type 'SlashCommandSubcommandsOnlyBuilder' is missing the following properties from type 'SlashCommandBuilder': addBooleanOption, addUserOption, addChannelOption, addRoleOption, and 6 more.
+src/commands/feedback/sugestao.ts(9,3): error TS2322: Type 'SlashCommandSubcommandsOnlyBuilder' is not assignable to type 'SlashCommandBuilder | ContextMenuCommandBuilder | Omit<SlashCommandBuilder, "addSubcommand" | "addSubcommandGroup">'.
+
+  Type 'SlashCommandSubcommandsOnlyBuilder' is missing the following properties from type 'SlashCommandBuilder': addBooleanOption, addUserOption, addChannelOption, addRoleOption, and 6 more.
+src/commands/members/leaderboard.ts(10,3): error TS2322: Type 'SlashCommandOptionsOnlyBuilder' is not assignable to type 'SlashCommandBuilder | ContextMenuCommandBuilder | Omit<SlashCommandBuilder, "addSubcommand" | "addSubcommandGroup">'.
+
+  Type 'SlashCommandOptionsOnlyBuilder' is not assignable to type 'Omit<SlashCommandBuilder, "addSubcommand" | "addSubcommandGroup">'.
+    The types returned by 'setName(...)' are incompatible between these types.
+      Type 'SlashCommandOptionsOnlyBuilder' is missing the following properties from type 'SlashCommandBuilder': addSubcommandGroup, addSubcommand
+src/commands/members/membro.ts(14,3): error TS2322: Type 'SlashCommandSubcommandsOnlyBuilder' is not assignable to type 'SlashCommandBuilder | ContextMenuCommandBuilder | Omit<SlashCommandBuilder, "addSubcommand" | "addSubcommandGroup">'.
+
+  Type 'SlashCommandSubcommandsOnlyBuilder' is missing the following properties from type 'SlashCommandBuilder': addBooleanOption, addUserOption, addChannelOption, addRoleOption, and 6 more.
+src/commands/members/nivel.ts(5,47): error TS2305: Module '"../../utils/embeds"' has no exported member 'colorFromLevel'.
+
+src/commands/members/nivel.ts(9,3): error TS2322: Type 'SlashCommandOptionsOnlyBuilder' is not assignable to type 'SlashCommandBuilder | ContextMenuCommandBuilder | Omit<SlashCommandBuilder, "addSubcommand" | "addSubcommandGroup">'.
+
+  Type 'SlashCommandOptionsOnlyBuilder' is not assignable to type 'Omit<SlashCommandBuilder, "addSubcommand" | "addSubcommandGroup">'.
+    The types returned by 'setName(...)' are incompatible between these types.
+      Type 'SlashCommandOptionsOnlyBuilder' is missing the following properties from type 'SlashCommandBuilder': addSubcommandGroup, addSubcommand
+src/commands/members/rank.ts(9,3): error TS2322: Type 'SlashCommandSubcommandsOnlyBuilder' is not assignable to type 'SlashCommandBuilder | ContextMenuCommandBuilder | Omit<SlashCommandBuilder, "addSubcommand" | "addSubcommandGroup">'.
+
+  Type 'SlashCommandSubcommandsOnlyBuilder' is missing the following properties from type 'SlashCommandBuilder': addBooleanOption, addUserOption, addChannelOption, addRoleOption, and 6 more.
+src/commands/moderation/moderacao.ts(22,3): error TS2322: Type 'SlashCommandSubcommandsOnlyBuilder' is not assignable to type 'SlashCommandBuilder | ContextMenuCommandBuilder | Omit<SlashCommandBuilder, "addSubcommand" | "addSubcommandGroup">'.
+
+  Type 'SlashCommandSubcommandsOnlyBuilder' is missing the following properties from type 'SlashCommandBuilder': addBooleanOption, addUserOption, addChannelOption, addRoleOption, and 6 more.
+src/commands/rewards/conquista.ts(9,3): error TS2322: Type 'SlashCommandSubcommandsOnlyBuilder' is not assignable to type 'SlashCommandBuilder | ContextMenuCommandBuilder | Omit<SlashCommandBuilder, "addSubcommand" | "addSubcommandGroup">'.
+
+  Type 'SlashCommandSubcommandsOnlyBuilder' is missing the following properties from type 'SlashCommandBuilder': addBooleanOption, addUserOption, addChannelOption, addRoleOption, and 6 more.
+src/commands/rewards/recompensa.ts(9,3): error TS2322: Type 'SlashCommandSubcommandsOnlyBuilder' is not assignable to type 'SlashCommandBuilder | ContextMenuCommandBuilder | Omit<SlashCommandBuilder, "addSubcommand" | "addSubcommandGroup">'.
+
+  Type 'SlashCommandSubcommandsOnlyBuilder' is missing the following properties from type 'SlashCommandBuilder': addBooleanOption, addUserOption, addChannelOption, addRoleOption, and 6 more.
+src/commands/tickets/ticket.ts(19,3): error TS2322: Type 'SlashCommandSubcommandsOnlyBuilder' is not assignable to type 'SlashCommandBuilder | ContextMenuCommandBuilder | Omit<SlashCommandBuilder, "addSubcommand" | "addSubcommandGroup">'.
+
+  Type 'SlashCommandSubcommandsOnlyBuilder' is missing the following properties from type 'SlashCommandBuilder': addBooleanOption, addUserOption, addChannelOption, addRoleOption, and 6 more.
+src/commands/utility/ajuda.ts(81,3): error TS2322: Type 'SlashCommandOptionsOnlyBuilder' is not assignable to type 'SlashCommandBuilder | ContextMenuCommandBuilder | Omit<SlashCommandBuilder, "addSubcommand" | "addSubcommandGroup">'.
+
+  Type 'SlashCommandOptionsOnlyBuilder' is not assignable to type 'Omit<SlashCommandBuilder, "addSubcommand" | "addSubcommandGroup">'.
+    The types returned by 'setName(...)' are incompatible between these types.
+      Type 'SlashCommandOptionsOnlyBuilder' is missing the following properties from type 'SlashCommandBuilder': addSubcommandGroup, addSubcommand
+src/commands/utility/anuncio.ts(8,3): error TS2322: Type 'SlashCommandOptionsOnlyBuilder' is not assignable to type 'SlashCommandBuilder | ContextMenuCommandBuilder | Omit<SlashCommandBuilder, "addSubcommand" | "addSubcommandGroup">'.
+
+  Type 'SlashCommandOptionsOnlyBuilder' is not assignable to type 'Omit<SlashCommandBuilder, "addSubcommand" | "addSubcommandGroup">'.
+    The types returned by 'setName(...)' are incompatible between these types.
+      Type 'SlashCommandOptionsOnlyBuilder' is missing the following properties from type 'SlashCommandBuilder': addSubcommandGroup, addSubcommand
+src/commands/utility/giveaway.ts(17,3): error TS2322: Type 'SlashCommandSubcommandsOnlyBuilder' is not assignable to type 'SlashCommandBuilder | ContextMenuCommandBuilder | Omit<SlashCommandBuilder, "addSubcommand" | "addSubcommandGroup">'.
+
+  Type 'SlashCommandSubcommandsOnlyBuilder' is missing the following properties from type 'SlashCommandBuilder': addBooleanOption, addUserOption, addChannelOption, addRoleOption, and 6 more.
+src/commands/utility/poll.ts(10,3): error TS2322: Type 'SlashCommandOptionsOnlyBuilder' is not assignable to type 'SlashCommandBuilder | ContextMenuCommandBuilder | Omit<SlashCommandBuilder, "addSubcommand" | "addSubcommandGroup">'.
+
+  Type 'SlashCommandOptionsOnlyBuilder' is not assignable to type 'Omit<SlashCommandBuilder, "addSubcommand" | "addSubcommandGroup">'.
+    The types returned by 'setName(...)' are incompatible between these types.
+      Type 'SlashCommandOptionsOnlyBuilder' is missing the following properties from type 'SlashCommandBuilder': addSubcommandGroup, addSubcommand
+src/events/messageCreate.ts(38,29): error TS2339: Property 'send' does not exist on type 'DMChannel | PartialDMChannel | PartialGroupDMChannel | NewsChannel | StageChannel | TextChannel | PublicThreadChannel<...> | PrivateThreadChannel | VoiceChannel'.
+
+  Property 'send' does not exist on type 'PartialGroupDMChannel'.
+src/index.ts(34,26): error TS2774: This condition will always return true since this function is always defined. Did you mean to call it instead?
+
+Build Failed: build daemon returned an error < failed to solve: process "/bin/bash -ol pipefail -c npm install && npm run db:generate && npm run build" did not complete successfully: exit code: 2 >

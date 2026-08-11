@@ -9,7 +9,7 @@ import {
   calcCombatPower, calcAttack, calcDefense, calcCritChance, calcDodge,
 } from '../constants/classes';
 import { ITEMS, getItem } from '../constants/items';
-import { DIVINE_SKILLS } from '../constants/skills';
+import { DIVINE_SKILLS, PASSIVE_TALENTS } from '../constants/skills';
 
 export type FullCharacter = RpgCharacter & { equipment: RpgEquipment | null };
 
@@ -42,9 +42,7 @@ export async function getCharacter(discordId: string): Promise<FullCharacter | n
 // ─── Stats calculados ──────────────────────────────────────────────────────
 
 export interface ComputedStats {
-  // stats base + equipamento
   str: number; agi: number; int: number; vit: number; lck: number;
-  // derivados
   attack: number;
   defense: number;
   critChance: number;
@@ -52,7 +50,6 @@ export interface ComputedStats {
   combatPower: number;
   maxHp: number;
   maxEnergy: number;
-  // bonuses de equipamento
   equipAttackBonus: number;
   equipDefenseBonus: number;
   goldBonus: number;
@@ -63,7 +60,6 @@ export function computeStats(char: FullCharacter): ComputedStats {
   const cls = getClass(char.class) ?? CLASSES['guerreiro'];
   const levelStats = calcLevelStats(cls, char.level);
 
-  // somar stats de equipamento
   let eqAttack = 0, eqDefense = 0, eqStr = 0, eqAgi = 0, eqInt = 0, eqVit = 0, eqLck = 0;
   let eqHp = 0, eqEnergy = 0, eqCrit = 0, eqDodge = 0, eqGold = 0, eqXp = 0;
 
@@ -90,8 +86,6 @@ export function computeStats(char: FullCharacter): ComputedStats {
     }
   }
 
-  // stats finais = base da classe por nível + bônus pessoais (statPoints gastos) + equipamento
-  // BUG FIX: usar ?? 0 para evitar NaN quando a classe não existe no mapa
   const clsBase = CLASSES[char.class]?.baseStats;
   const str = levelStats.str + char.strength      - (clsBase?.str ?? 0) + eqStr;
   const agi = levelStats.agi + char.agility       - (clsBase?.agi ?? 0) + eqAgi;
@@ -99,22 +93,49 @@ export function computeStats(char: FullCharacter): ComputedStats {
   const vit = levelStats.vit + char.vitality      - (clsBase?.vit ?? 0) + eqVit;
   const lck = levelStats.lck + char.luck          - (clsBase?.lck ?? 0) + eqLck;
 
-  const maxHp     = cls.baseHp + (vit * cls.hpPerVit) + eqHp;
-  const maxEnergy = cls.baseEnergy + (char.level * cls.energyPerLevel) + eqEnergy;
+  // ─── Aplicando os Talentos Passivos comprados com Pontos de Skill ────────
+  let passiveAtkPct = 0;
+  let passiveDefPct = 0;
+  let passiveHpFlat = 0;
+  let passiveEnFlat = 0;
+  let passiveCrit = 0;
+  let passiveGold = eqGold;
+  let passiveXp = eqXp;
 
-  const attack    = calcAttack({ str, agi, int, vit, lck }, cls.primaryStat) + eqAttack;
-  const defense   = calcDefense(vit, eqDefense);
-  const critChance  = Math.round((calcCritChance(agi, lck) + eqCrit) * 10) / 10;
+  const talentLevels = (char.talentLevels as Record<string, number> | null) ?? {};
+  for (const [talentId, level] of Object.entries(talentLevels)) {
+    const talent = PASSIVE_TALENTS[talentId];
+    if (!talent || level <= 0) continue;
+    const stats = talent.statsPerLevel;
+    if (stats.attackPercent) passiveAtkPct += stats.attackPercent * level;
+    if (stats.defensePercent) passiveDefPct += stats.defensePercent * level;
+    if (stats.maxHp) passiveHpFlat += stats.maxHp * level;
+    if (stats.maxEnergy) passiveEnFlat += stats.maxEnergy * level;
+    if (stats.critChance) passiveCrit += stats.critChance * level;
+    if (stats.goldBonus) passiveGold += stats.goldBonus * level;
+    if (stats.xpBonus) passiveXp += stats.xpBonus * level;
+  }
+
+  const baseHp    = cls.baseHp + (vit * cls.hpPerVit) + eqHp;
+  const maxHp     = baseHp + passiveHpFlat;
+  const baseEnergy = cls.baseEnergy + (char.level * cls.energyPerLevel) + eqEnergy;
+  const maxEnergy = baseEnergy + passiveEnFlat;
+
+  let attack    = calcAttack({ str, agi, int, vit, lck }, cls.primaryStat) + eqAttack;
+  if (passiveAtkPct > 0) attack = Math.floor(attack * (1 + passiveAtkPct / 100));
+
+  let defense   = calcDefense(vit, eqDefense);
+  if (passiveDefPct > 0) defense = Math.floor(defense * (1 + passiveDefPct / 100));
+
+  const critChance  = Math.round((calcCritChance(agi, lck) + eqCrit + passiveCrit) * 10) / 10;
   const dodgeChance = Math.round((calcDodge(agi, lck) + eqDodge) * 10) / 10;
-  const combatPower = calcCombatPower({ str, agi, int, vit, lck }, char.level, eqAttack + eqDefense);
+  const combatPower = calcCombatPower({ str, agi, int, vit, lck }, char.level, attack + defense);
 
-  // bônus de habilidade divina passiva
-  let passGold = eqGold, passXp = eqXp;
   if (char.divineSkillId) {
     const skill = DIVINE_SKILLS[char.divineSkillId];
     if (skill?.passive) {
-      passGold += skill.passive.goldBonus ?? 0;
-      passXp   += skill.passive.xpBonus   ?? 0;
+      passiveGold += skill.passive.goldBonus ?? 0;
+      passiveXp   += skill.passive.xpBonus   ?? 0;
     }
   }
 
@@ -124,8 +145,8 @@ export function computeStats(char: FullCharacter): ComputedStats {
     maxHp, maxEnergy,
     equipAttackBonus: eqAttack,
     equipDefenseBonus: eqDefense,
-    goldBonus: passGold,
-    xpBonus: passXp,
+    goldBonus: passiveGold,
+    xpBonus: passiveXp,
   };
 }
 
@@ -146,11 +167,9 @@ export async function addRpgXp(
     leveledUp = true;
   }
 
-  // ao subir de nível, ganha pontos de stat e skill
   const statPoints  = leveledUp ? char.statPoints  + (level - char.level) * 3 : char.statPoints;
-  const skillPoints = leveledUp ? char.skillPoints + (level - char.level)     : char.skillPoints;
+  const skillPoints = leveledUp ? char.skillPoints + (level - char.level)      : char.skillPoints;
 
-  // recalcular HP/energia máximos
   const cls = getClass(char.class) ?? CLASSES['guerreiro'];
   const newLevelStats = calcLevelStats(cls, level);
   const newMaxHp     = cls.baseHp + (newLevelStats.vit * cls.hpPerVit);
@@ -173,21 +192,17 @@ export async function addRpgXp(
 
 // ─── Regen passiva de energia (tempo + chat) ──────────────────────────────
 
-/** Chamado ao exibir painéis RPG — recupera energia acumulada passivamente.
- *  Taxa: 1 ponto a cada 3 minutos, máximo = maxEnergy calculado. */
 export async function applyPassiveEnergyRegen(char: FullCharacter): Promise<FullCharacter> {
   const stats = computeStats(char);
-  if (char.currentEnergy >= stats.maxEnergy) return char; // já cheio
+  if (char.currentEnergy >= stats.maxEnergy) return char;
 
   const now      = Date.now();
   const lastTick = char.lastEnergyTick?.getTime() ?? char.createdAt.getTime();
   const minutes  = (now - lastTick) / 60_000;
-  const gained   = Math.floor(minutes / 3); // 1 energia a cada 3 min
+  const gained   = Math.floor(minutes / 3);
   if (gained <= 0) return char;
 
   const newEnergy = Math.min(char.currentEnergy + gained, stats.maxEnergy);
-  // Keep the unused remainder so opening a panel does not discard accumulated
-  // regeneration time when the character reaches the cap.
   const nextTick = new Date(lastTick + gained * 3 * 60_000);
   return prisma.rpgCharacter.update({
     where: { discordId: char.discordId },
@@ -196,13 +211,11 @@ export async function applyPassiveEnergyRegen(char: FullCharacter): Promise<Full
   });
 }
 
-/** Chamado no messageCreate — regen leve via conversa no chat.
- *  +1 energia por mensagem (cooldown 5 min por usuário). */
 const _chatEnergyCooldowns = new Map<string, number>();
 export async function applyChatEnergyRegen(discordId: string): Promise<void> {
   const now = Date.now();
   const last = _chatEnergyCooldowns.get(discordId) ?? 0;
-  if (now - last < 5 * 60_000) return; // cooldown 5 min
+  if (now - last < 5 * 60_000) return;
 
   const char = await prisma.rpgCharacter.findUnique({
     where: { discordId },
@@ -211,9 +224,9 @@ export async function applyChatEnergyRegen(discordId: string): Promise<void> {
   if (!char) return;
 
   const stats = computeStats(char);
-  if (char.currentEnergy >= stats.maxEnergy) return; // já cheio
+  if (char.currentEnergy >= stats.maxEnergy) return;
 
-  const gained = Math.floor(Math.random() * 2) + 1; // +1 ou +2
+  const gained = Math.floor(Math.random() * 2) + 1;
   const newEnergy = Math.min(char.currentEnergy + gained, stats.maxEnergy);
   const lastTick = char.lastEnergyTick?.getTime() ?? char.createdAt.getTime();
   const passiveGained = Math.max(0, Math.floor((now - lastTick) / (3 * 60_000)));
@@ -282,7 +295,6 @@ export async function setClass(discordId: string, classId: string): Promise<{ su
     if (char.level < 40) return { success: false, message: 'Precisa ser nível 40 para evoluir para uma classe Tier 3.' };
   }
 
-  // ao trocar de classe tier 1 (criação), reset de stats base
   const baseStats = cls.baseStats;
   await prisma.rpgCharacter.update({
     where: { discordId },
@@ -321,7 +333,6 @@ export async function reincarnate(discordId: string): Promise<{ success: boolean
       statPoints: 0, skillPoints: 0,
       currentHp: cls.baseHp, maxHp: cls.baseHp,
       currentEnergy: cls.baseEnergy, maxEnergy: cls.baseEnergy,
-      // mantém ouro e habilidade divina
     },
   });
 

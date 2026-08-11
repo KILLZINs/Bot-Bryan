@@ -2,7 +2,7 @@
 // ITENS RPG
 // ═══════════════════════════════════════════════════════════════════════
 
-export type ItemSlot = 'weapon' | 'helmet' | 'pants' | 'boots' | 'gloves' | 'shield' | 'ring' | 'amulet' | 'backpack' | 'pet' | 'consumable' | 'material';
+export type ItemSlot = 'weapon' | 'helmet' | 'chest' | 'pants' | 'boots' | 'gloves' | 'shield' | 'ring' | 'amulet' | 'backpack' | 'pet' | 'consumable' | 'material';
 export type ItemRarity = 'Comum' | 'Incomum' | 'Raro' | 'Épico' | 'Lendário';
 
 export interface ItemStats {
@@ -133,6 +133,20 @@ export const ITEMS: Record<string, RpgItem> = {
     description: 'Coroa forjada nas trevas do abismo. Irradia poder sombrio.',
     slot: 'helmet', rarity: 'Épico', minLevel: 35,
     stats: { int: 25, str: 15, defense: 30, energy: 80 }, price: 0, sellPrice: 8000, maxStack: 1,
+  },
+
+  // ═══════════════ PEITORAIS ═══════════════
+  tunica_de_couro: {
+    id: 'tunica_de_couro', name: 'Túnica de Couro', emoji: '🦺',
+    description: 'Túnica simples de couro animal. Oferece proteção leve ao tronco.',
+    slot: 'chest', rarity: 'Comum', minLevel: 1,
+    stats: { defense: 8, vit: 2 }, price: 60, sellPrice: 12, maxStack: 1,
+  },
+  peitoral_de_ferro: {
+    id: 'peitoral_de_ferro', name: 'Peitoral de Ferro', emoji: '👕',
+    description: 'Couraça robusta para proteger órgãos vitais em combate corpo a corpo.',
+    slot: 'chest', rarity: 'Incomum', minLevel: 5,
+    stats: { defense: 20, vit: 5 }, price: 350, sellPrice: 70, maxStack: 1,
   },
 
   // ═══════════════ ARMADURAS (CALÇAS) ═══════════════
@@ -413,6 +427,7 @@ export const RARITY_EMOJI: Record<ItemRarity, string> = {
 export const SLOT_EMOJI: Record<string, string> = {
   weapon:    '⚔️',
   helmet:    '⛑️',
+  chest:     '👕',
   pants:     '👖',
   boots:     '👟',
   gloves:    '🧤',
@@ -428,6 +443,7 @@ export const SLOT_EMOJI: Record<string, string> = {
 export const SLOT_NAME: Record<string, string> = {
   weapon:    'Arma',
   helmet:    'Elmo',
+  chest:     'Peitoral',
   pants:     'Calças',
   boots:     'Botas',
   gloves:    'Luvas',

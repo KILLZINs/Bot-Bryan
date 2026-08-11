@@ -103,7 +103,7 @@ export async function generateRpgProfile(data: ProfileData, _extraParam?: any): 
     { key: 'boots', label: 'Bota', x: centerX - 25, y: centerY + 175 }
   ];
 
-  // Linhas de conexão
+  // Linhas de conexão do avatar com os slots
   ctx.strokeStyle = '#4a3825';
   ctx.lineWidth = 2;
   for (const s of slotsCoords) {
@@ -135,7 +135,7 @@ export async function generateRpgProfile(data: ProfileData, _extraParam?: any): 
     }
   }
 
-  // Slots
+  // Renderizar Slots de Equipamento
   for (const slot of slotsCoords) {
     ctx.fillStyle = '#0a0807';
     ctx.strokeStyle = '#6e5334';
@@ -178,4 +178,5 @@ export async function generateRpgProfile(data: ProfileData, _extraParam?: any): 
   return canvas.toBuffer('image/png');
 }
 
+// Alias para manter compatibilidade com importações antigas
 export const generateProfileCard = generateRpgProfile;

@@ -90,7 +90,7 @@ export async function handleRpgSelect(i: StringSelectMenuInteraction, action: st
         }
 
         if (option === 'habilidades') {
-          const { buildHabilidadesEmbed, buildHabilidadesSelect, buildHabilidadesButtons } = await import('../panels/habilidades');
+          const { buildHabilidadesEmbed, buildHabilidadesSelect, buildHabilidadesButtons } = await import('../panels/skills');
           await i.editReply({
             embeds: [buildHabilidadesEmbed(char)],
             files: [],
@@ -100,11 +100,11 @@ export async function handleRpgSelect(i: StringSelectMenuInteraction, action: st
         }
 
         if (option === 'stats') {
-          const { buildStatsEmbed, buildStatsButtons } = await import('../panels/stats');
+          const { buildPontosEmbed, buildPontosSelect } = await import('../panels/profile');
           await i.editReply({
-            embeds: [buildStatsEmbed(char, stats)],
+            embeds: [buildPontosEmbed(char, stats)],
             files: [],
-            components: [buildStatsButtons()],
+            components: [buildPontosSelect(char.statPoints)],
           });
           return;
         }

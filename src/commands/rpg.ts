@@ -49,9 +49,18 @@ export default {
       const embed = buildProfileEmbed(char, stats);
 
       try {
-        // Gera o cartão visual usando Canvas
-        const imageBuffer = await generateProfileCard({ ...char, avatarUrl: interaction.user.displayAvatarURL({ extension: 'png' }) }, stats);
+        // Junta os dados base do personagem com os stats calculados de combate
+        const fullProfileData = {
+          ...char,
+          ...stats,
+          avatarUrl: interaction.user.displayAvatarURL({ extension: 'png', size: 256 })
+        };
+
+        // Gera a imagem do Canvas
+        const imageBuffer = await generateProfileCard(fullProfileData);
         attachment = new AttachmentBuilder(imageBuffer, { name: 'perfil.png' });
+        
+        // Atribui o anexo no Embed do perfil
         embed.setImage('attachment://perfil.png');
       } catch (err) {
         console.error('Erro ao gerar perfil em Canvas:', err);
@@ -176,7 +185,6 @@ export default {
       });
 
       const { getClass } = await import('../rpg/constants/classes');
-      const { computeStats: cStats } = await import('../rpg/services/character');
 
       const lines = top.map((c, i) => {
         const cls = getClass(c.class);

@@ -9,16 +9,14 @@ try {
 }
 
 export async function generateRpgProfile(userProfile: any, extraData?: any): Promise<Buffer> {
-  // Unifica dados recebidos (aceita tanto objeto do Prisma puro quanto objeto montado do comando)
   const p = userProfile || {};
-  const e = extraData || {};
 
   const width = 920;
   const height = 620;
   const canvas = createCanvas(width, height);
   const ctx = canvas.getContext('2d');
 
-  // --- EXTRAÇÃO E MAPEAMENTO FIEL DOS DADOS ---
+  // --- EXTRAÇÃO E MAPEAMENTO DE DADOS DO PRISMA ---
   const name = p.username || p.name || 'Aventureiro';
   const rClass = p.class || p.className || 'Assassino';
   const level = p.level ?? 1;
@@ -28,39 +26,39 @@ export async function generateRpgProfile(userProfile: any, extraData?: any): Pro
 
   // Recursos
   const currentXp = p.xp ?? 0;
-  const maxXp = p.maxXp ?? p.xpNextLevel ?? 2688;
+  const maxXp = p.maxXp ?? p.xpNextLevel ?? (level * 1000);
   const currentHp = p.currentHp ?? p.hp ?? 237;
   const maxHp = p.maxHp ?? 422;
   const currentEnergy = p.currentEnergy ?? p.energy ?? 115;
   const maxEnergy = p.maxEnergy ?? 160;
 
   // Atributos de Combate Reais
-  const str = p.str ?? p.attributes?.str ?? 52;
-  const agi = p.agi ?? p.attributes?.agi ?? 80;
-  const intVal = p.int ?? p.attributes?.int ?? 18;
-  const vit = p.vit ?? p.attributes?.vit ?? 38;
-  const sor = p.sor ?? p.attributes?.sor ?? 43;
+  const str = p.str ?? p.attributes?.str ?? 10;
+  const agi = p.agi ?? p.attributes?.agi ?? 10;
+  const intVal = p.int ?? p.attributes?.int ?? 10;
+  const vit = p.vit ?? p.attributes?.vit ?? 10;
+  const sor = p.sor ?? p.attributes?.sor ?? 10;
 
   // Status Calculados
-  const atk = p.attack ?? p.atk ?? 171;
-  const def = p.defense ?? p.def ?? 132;
-  const crit = p.critChance ?? p.crit ?? 49.2;
-  const dodge = p.dodgeChance ?? p.dodge ?? 28.6;
-  const power = p.combatPower ?? p.power ?? 1041;
-  const gold = p.gold ?? 3830;
+  const atk = p.attack ?? p.atk ?? (str * 2 + agi);
+  const def = p.defense ?? p.def ?? (vit * 2);
+  const crit = p.critChance ?? p.crit ?? 15.0;
+  const dodge = p.dodgeChance ?? p.dodge ?? 5.0;
+  const power = p.combatPower ?? p.power ?? (atk + def * 1.5);
+  const gold = p.gold ?? 0;
 
   // Histórico
-  const wins = p.wins ?? p.battlesWon ?? 99;
+  const wins = p.wins ?? p.battlesWon ?? 0;
   const deaths = p.deaths ?? p.battlesLost ?? 0;
   const pvp = p.pvpRecord || `${p.pvpWins || 0}W/${p.pvpLoses || 0}L`;
-  const bosses = p.bossesKilled ?? p.bossKills ?? 2;
+  const bosses = p.bossesKilled ?? p.bossKills ?? 0;
 
   // Habilidade Divina
   const skillName = p.divineSkillName || p.divineSkill?.name || 'Golpe Fatal';
   const skillRank = p.divineSkillRank || p.divineSkill?.rank || 'F';
-  const skillDesc = p.divineSkillDesc || p.divineSkill?.desc || 'Ataque que causa dano baseado em AGI com chance de matar instantaneamente.';
+  const skillDesc = p.divineSkillDesc || p.divineSkill?.desc || 'Ataque poderoso baseado em atributos do personagem.';
 
-  // Equipamentos (Aceita nome do item ou URL de imagem)
+  // Equipamentos (Mapeamento flexível de Nomes/URLs)
   const eqData = p.equipment || p.equipments || {};
   const getEquipmentName = (slot: string) => {
     const item = eqData[slot] || p[`equipped${slot.charAt(0).toUpperCase() + slot.slice(1)}`] || p[slot];
@@ -70,20 +68,20 @@ export async function generateRpgProfile(userProfile: any, extraData?: any): Pro
   };
 
   const equipments = {
-    head: getEquipmentName('head') !== '—' ? getEquipmentName('head') : (getEquipmentName('elmo') || 'Capacete de Ferro'),
-    weapon: getEquipmentName('weapon') !== '—' ? getEquipmentName('weapon') : (getEquipmentName('arma') || 'Adaga Sombria'),
-    shield: getEquipmentName('shield') !== '—' ? getEquipmentName('shield') : (getEquipmentName('escudo') || 'Escudo de Ferro'),
-    legs: getEquipmentName('legs') !== '—' ? getEquipmentName('legs') : (getEquipmentName('calça') || 'Calças de Ferro'),
-    boots: getEquipmentName('boots') !== '—' ? getEquipmentName('boots') : (getEquipmentName('bota') || 'Botas de Couro'),
-    gloves: getEquipmentName('gloves') !== '—' ? getEquipmentName('gloves') : (getEquipmentName('luva') || 'Luvas de Couro'),
+    head: getEquipmentName('head') !== '—' ? getEquipmentName('head') : getEquipmentName('elmo'),
+    weapon: getEquipmentName('weapon') !== '—' ? getEquipmentName('weapon') : getEquipmentName('arma'),
+    shield: getEquipmentName('shield') !== '—' ? getEquipmentName('shield') : getEquipmentName('escudo'),
+    legs: getEquipmentName('legs') !== '—' ? getEquipmentName('legs') : getEquipmentName('calca'),
+    boots: getEquipmentName('boots') !== '—' ? getEquipmentName('boots') : getEquipmentName('bota'),
+    gloves: getEquipmentName('gloves') !== '—' ? getEquipmentName('gloves') : getEquipmentName('luva'),
     ring: getEquipmentName('ring') || '—',
     backpack: getEquipmentName('backpack') || '—',
-    pet: getEquipmentName('pet') || 'Lobo Filhote'
+    pet: getEquipmentName('pet') || '—'
   };
 
   const avatarUrl = p.avatarUrl || p.user?.displayAvatarURL?.() || '';
 
-  // --- DESENHO NO CANVAS ---
+  // --- RENDERIZAÇÃO DO CANVAS ---
   ctx.fillStyle = '#120f0d';
   ctx.fillRect(0, 0, width, height);
 
@@ -203,12 +201,10 @@ export async function generateRpgProfile(userProfile: any, extraData?: any): Pro
     ctx.fill();
     ctx.stroke();
 
-    // Rótulo do Slot
     ctx.fillStyle = '#8c6d46';
     ctx.font = 'bold 9px "InterFont", sans-serif';
     ctx.fillText(slot.label.toUpperCase(), slot.x + 5, slot.y + 12);
 
-    // Nome do Item equipado
     ctx.fillStyle = itemName !== '—' ? '#e6caa3' : '#4a3b2c';
     ctx.font = '10px "InterFont", sans-serif';
     const truncatedName = itemName.length > 9 ? itemName.substring(0, 8) + '..' : itemName;
@@ -256,7 +252,7 @@ export async function generateRpgProfile(userProfile: any, extraData?: any): Pro
   ctx.fillText(`🏆 Vitórias: ${wins}  💀 Mortes: ${deaths}`, rightX, 205);
   ctx.fillText(`⚔️ PvP: ${pvp}  👹 Bosses: ${bosses}`, rightX, 223);
 
-  // Seção de Cooldowns do RPG
+  // Cooldowns RPG
   ctx.fillStyle = '#f0e3ce';
   ctx.font = 'bold 13px "InterFont", sans-serif';
   ctx.fillText('🎲 COOLDOWNS RPG', rightX, 260);

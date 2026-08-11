@@ -16,6 +16,7 @@ import { craftItem } from '../panels/forja';
 import { prisma } from '../../database/client';
 import { errorEmbed, successEmbed } from '../../utils/embeds';
 import { generateProfileCard } from '../utils/profileCanvas';
+import { buildProfileSelectMenu } from '../../commands/rpg';
 
 export async function handleRpgSelect(i: StringSelectMenuInteraction, action: string): Promise<void> {
   const discordId = i.user.id;
@@ -135,7 +136,6 @@ export async function handleRpgSelect(i: StringSelectMenuInteraction, action: st
           console.error('Erro Canvas menu_perfil:', e);
         }
 
-        const { buildProfileSelectMenu } = await import('../../commands/rpg');
         const components = [buildProfileSelectMenu()];
 
         await i.editReply({
@@ -249,7 +249,7 @@ export async function handleRpgSelect(i: StringSelectMenuInteraction, action: st
         }
         const { getItem } = await import('../constants/items');
         const item = getItem(itemId);
-        const { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder } = await import('discord.js');
+        const { EmbedBuilder } = await import('discord.js');
         await i.editReply({
           embeds: [new EmbedBuilder().setColor(0x3498DB).setTitle(`${item?.emoji ?? '❓'} ${item?.name ?? itemId}`).setDescription(item?.description ?? '').addFields(
             { name: '📊 Raridade', value: item?.rarity ?? '-', inline: true },
@@ -359,7 +359,7 @@ export async function handleRpgSelect(i: StringSelectMenuInteraction, action: st
         await i.editReply({
           content: `${cls?.emoji ?? '⚔️'} **Personagem criado!** Bem-vindo à aventura, **${username}**!`,
           embeds: [buildProfileEmbed(updated, stats)],
-          components: buildProfileButtons(updated),
+          components: [buildProfileSelectMenu()],
         });
         break;
       }

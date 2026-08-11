@@ -17,6 +17,8 @@ import { prisma } from '../../database/client';
 import { errorEmbed, successEmbed } from '../../utils/embeds';
 import { generateProfileCard } from '../utils/profileCanvas';
 import { buildProfileSelectMenu, buildAtividadesSelectMenu } from '../../commands/rpg';
+import { PASSIVE_TALENTS } from '../constants/skills';
+import { buildHabilidadesEmbed } from '../panels/skills';
 
 export async function handleRpgSelect(i: StringSelectMenuInteraction, action: string): Promise<void> {
   const discordId = i.user.id;
@@ -39,6 +41,54 @@ export async function handleRpgSelect(i: StringSelectMenuInteraction, action: st
         ? (await import('../../utils/embeds')).successEmbed('🐉 Boss Invocado!', result.message)
         : (await import('../../utils/embeds')).errorEmbed('Erro', result.message);
       await i.editReply({ embeds: [feedbackEmbed, bossEmbed], components: bossButtons });
+      return;
+    }
+
+    // ── Equipar Múltiplas Habilidades Ativas ─────────────────────────────
+    if (action === 'equipar_multiplas_skills') {
+      await i.deferUpdate();
+      await prisma.rpgCharacter.update({
+        where: { discordId },
+        data: { equippedSkills: i.values }
+      });
+      const char = await getOrCreateCharacter(discordId, username);
+      const { embed, components } = buildHabilidadesEmbed(char, 'ativas');
+      await i.editReply({ embeds: [embed], components });
+      return;
+    }
+
+    // ── Evoluir Talentos Passivos ──────────────────────────────────────────
+    if (action === 'evoluir_talento') {
+      await i.deferUpdate();
+      const talentId = i.values[0].replace('talent:', '');
+      const talent = PASSIVE_TALENTS[talentId];
+      if (!talent) return;
+
+      let char = await getOrCreateCharacter(discordId, username);
+      const currentTalents = (char.talentLevels as Record<string, number> | null) ?? {};
+      const currentLvl = currentTalents[talentId] ?? 0;
+
+      if (currentLvl >= talent.maxLevel) {
+        await i.editReply({ embeds: [errorEmbed('Erro', 'Talento já está no nível máximo!')] });
+        return;
+      }
+      if (char.skillPoints < talent.costPerLevel) {
+        await i.editReply({ embeds: [errorEmbed('Erro', 'Pontos de Skill insuficientes!')] });
+        return;
+      }
+
+      currentTalents[talentId] = currentLvl + 1;
+      await prisma.rpgCharacter.update({
+        where: { discordId },
+        data: {
+          skillPoints: { decrement: talent.costPerLevel },
+          talentLevels: currentTalents
+        }
+      });
+
+      const updatedChar = await getOrCreateCharacter(discordId, username);
+      const { embed, components } = buildHabilidadesEmbed(updatedChar, 'passivas');
+      await i.editReply({ embeds: [successEmbed('Talento Evoluído', `${talent.name} agora está no nível ${currentLvl + 1}`), embed], components });
       return;
     }
 
@@ -174,12 +224,12 @@ export async function handleRpgSelect(i: StringSelectMenuInteraction, action: st
         }
 
         if (option === 'habilidades') {
-          const { buildHabilidadesEmbed, buildHabilidadesButtons } = await import('../panels/skills');
-          const { embed: habEmbed, select: habSelect } = buildHabilidadesEmbed(char);
+          const { buildHabilidadesEmbed } = await import('../panels/skills');
+          const { embed: habEmbed, components: habComponents } = buildHabilidadesEmbed(char, 'ativas');
           await i.editReply({
             embeds: [habEmbed],
             files: [],
-            components: habSelect ? [habSelect, buildHabilidadesButtons(char)] : [buildHabilidadesButtons(char)],
+            components: habComponents,
           });
           return;
         }
@@ -220,7 +270,6 @@ export async function handleRpgSelect(i: StringSelectMenuInteraction, action: st
         const option = i.values[0];
         let char = await getOrCreateCharacter(discordId, username);
 
-        // 🎯 Caçada (Busca monstros da localização usando getEnemiesForLocation)
         if (option === 'cacar') {
           if (char.currentHp <= 0 || char.currentEnergy < 10) {
             await i.editReply({ embeds: [errorEmbed('Caçada indisponível', 'Você precisa estar vivo e ter pelo menos **10⚡** para caçar.')] });
@@ -241,7 +290,6 @@ export async function handleRpgSelect(i: StringSelectMenuInteraction, action: st
           return;
         }
 
-        // 🧭 Explorar Região
         if (option === 'explorar') {
           const expModule: any = await import('../panels/exploracao');
           const embed = expModule.buildExploracaoEmbed ? await expModule.buildExploracaoEmbed(char) : buildDungeonEmbed(char);
@@ -255,7 +303,6 @@ export async function handleRpgSelect(i: StringSelectMenuInteraction, action: st
           return;
         }
 
-        // 🥊 Treinar Atributos
         if (option === 'treinar') {
           const { buildTreinarEmbed, buildTreinarSelect, buildTreinarButtons } = await import('../panels/treinar');
           const lastTrain = char.lastTrain;
@@ -268,7 +315,6 @@ export async function handleRpgSelect(i: StringSelectMenuInteraction, action: st
           return;
         }
 
-        // 🎣 Pescaria
         if (option === 'pescar') {
           const pescaModule: any = await import('../panels/pescaria');
           const embed = pescaModule.buildPescaEmbed ? await pescaModule.buildPescaEmbed(char) : buildProfileEmbed(char, computeStats(char));
@@ -282,7 +328,6 @@ export async function handleRpgSelect(i: StringSelectMenuInteraction, action: st
           return;
         }
 
-        // 🧘 Meditar
         if (option === 'meditar') {
           const meditarModule: any = await import('../panels/meditar');
           const embed = meditarModule.buildMeditarEmbed ? await meditarModule.buildMeditarEmbed(char) : buildProfileEmbed(char, computeStats(char));
@@ -296,7 +341,6 @@ export async function handleRpgSelect(i: StringSelectMenuInteraction, action: st
           return;
         }
 
-        // 🍺 Taverna
         if (option === 'taverna') {
           const { buildTavernaEmbed, buildTavernaMenuSelect, buildTavernaButtons } = await import('../panels/taverna');
           await i.editReply({
@@ -451,29 +495,6 @@ export async function handleRpgSelect(i: StringSelectMenuInteraction, action: st
         } else {
           await i.editReply({ embeds: [errorEmbed('Erro', result.message)] });
         }
-        break;
-      }
-
-      // ── Equipar habilidade divina ─────────────────────────────────────────
-      case 'equipar_skill': {
-        await i.deferUpdate();
-        const skillId = i.values[0];
-        const { DIVINE_SKILLS } = await import('../constants/skills');
-        const skill = DIVINE_SKILLS[skillId];
-        if (!skill) {
-          await i.editReply({ embeds: [errorEmbed('Erro', 'Habilidade inválida.')] });
-          return;
-        }
-        const char = await getOrCreateCharacter(discordId, username);
-        if (char.level < skill.unlockLevel) {
-          await i.editReply({ embeds: [errorEmbed('Nível insuficiente', `Precisa ser nível ${skill.unlockLevel} para esta habilidade.`)] });
-          return;
-        }
-        await prisma.rpgCharacter.update({
-          where: { discordId },
-          data: { divineSkillId: skillId, divineSkillRank: 'F', divineSkillExp: 0 },
-        });
-        await i.editReply({ embeds: [successEmbed('Habilidade Equipada!', `${skill.emoji} **${skill.name}** equipada com sucesso!`)] });
         break;
       }
 

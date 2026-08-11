@@ -22,7 +22,7 @@ export function buildProfileSelectMenu(): ActionRowBuilder<StringSelectMenuBuild
       .setPlaceholder('📍 Navegar pelo Hub do Aventureiro...')
       .addOptions(
         new StringSelectMenuOptionBuilder().setLabel('⚔️ Entrar na Dungeon').setValue('dungeon').setDescription('Explorar dungeons e batalhar contra monstros'),
-        new StringSelectMenuOptionBuilder().setLabel('🎯 Atividades').setValue('atividades').setDescription('Caçada, treino, pesca, meditação e taverna'),
+        new StringSelectMenuOptionBuilder().setLabel('🎯 Atividades').setValue('atividades').setDescription('Caçar, explorar, treino, pesca, meditar e taverna'),
         new StringSelectMenuOptionBuilder().setLabel('🎒 Inventário').setValue('inventario').setDescription('Ver seus itens e equipamentos'),
         new StringSelectMenuOptionBuilder().setLabel('🏰 Ir para a Cidade').setValue('cidade').setDescription('Acessar lojas, forja e guilda'),
         new StringSelectMenuOptionBuilder().setLabel('🧭 Viajar').setValue('viajar').setDescription('Mudar de mapa ou região no reino'),
@@ -41,7 +41,8 @@ export function buildAtividadesSelectMenu(): ActionRowBuilder<StringSelectMenuBu
       .setCustomId('rpg_select:menu_atividades')
       .setPlaceholder('🎯 Escolha uma atividade para realizar...')
       .addOptions(
-        new StringSelectMenuOptionBuilder().setLabel('🔍 Caçada & Explorar').setValue('explorar').setDescription('Explorar a região em busca de inimigos e recursos'),
+        new StringSelectMenuOptionBuilder().setLabel('🎯 Caçada').setValue('cacar').setDescription('Batalhar contra monstros selvagens da região'),
+        new StringSelectMenuOptionBuilder().setLabel('🧭 Explorar Região').setValue('explorar').setDescription('Explorar o mapa atual em busca de eventos e recursos'),
         new StringSelectMenuOptionBuilder().setLabel('🥊 Treinar Atributos').setValue('treinar').setDescription('Treinar atributos permanentemente'),
         new StringSelectMenuOptionBuilder().setLabel('🎣 Pescaria').setValue('pescar').setDescription('Lançar a vara de pesca no lago do reino'),
         new StringSelectMenuOptionBuilder().setLabel('🧘 Meditar').setValue('meditar').setDescription('Descansar para restaurar HP e Energia'),

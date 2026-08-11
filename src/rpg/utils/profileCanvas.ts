@@ -24,7 +24,6 @@ function formatCooldown(date: Date | null | undefined, minutes: number): string 
 }
 
 export async function generateProfileCard(char: any, stats: any, avatarUrlInput?: string): Promise<Buffer> {
-  // Aumentamos a tela para 1000x650 para dar mais espaço e legibilidade aos textos
   const width = 1000;
   const height = 650;
   const canvas = createCanvas(width, height);
@@ -168,7 +167,7 @@ export async function generateProfileCard(char: any, stats: any, avatarUrlInput?
   ctx.lineTo(275, 235);
   ctx.stroke();
 
-  // Atributos de Combate Reais (Com texto maior)
+  // Atributos de Combate Reais
   ctx.fillStyle = '#f39c12';
   ctx.font = 'bold 15px "InterFont", sans-serif';
   ctx.fillText('📊 ATRIBUTOS DE COMBATE', 35, 260);
@@ -183,7 +182,7 @@ export async function generateProfileCard(char: any, stats: any, avatarUrlInput?
   ctx.fillText(`⚔️ Ataque: ${atk}    🛡️ Defesa: ${def}`, 35, 345);
   ctx.fillText(`💥 Crítico: ${crit.toFixed(1)}%    💨 Esquiva: ${dodge.toFixed(1)}%`, 35, 372);
 
-  // 2. PAINEL CENTRAL: PAPERDOLL COMPLETO (SLOTS EXPANDIDOS)
+  // 2. PAINEL CENTRAL: PAPERDOLL COMPLETO
   const centerX = 500;
   const centerY = 290;
 
@@ -208,7 +207,6 @@ export async function generateProfileCard(char: any, stats: any, avatarUrlInput?
     }
   }
 
-  // Slots de Equipamento com caixas de 75x50 (maiores e mais legíveis)
   const slotsCoords = [
     { key: 'helmet', label: 'Elmo', x: centerX - 165, y: centerY - 145 },
     { key: 'chest', label: 'Peito', x: centerX - 165, y: centerY - 80 },
@@ -298,7 +296,7 @@ export async function generateProfileCard(char: any, stats: any, avatarUrlInput?
   ctx.fillText(`🏆 Vitórias: ${wins}   💀 Mortes: ${deaths}`, rightX, 228);
   ctx.fillText(`⚔️ PvP: ${pvpWins}W/${pvpLosses}L   👹 Bosses: ${bosses}`, rightX, 248);
 
-  // Cooldowns Reais com Fonte Ampliada
+  // Cooldowns
   ctx.fillStyle = '#f39c12';
   ctx.font = 'bold 14px "InterFont", sans-serif';
   ctx.fillText('🎲 COOLDOWNS RPG', rightX, 285);

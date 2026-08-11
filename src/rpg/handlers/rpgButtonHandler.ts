@@ -23,6 +23,16 @@ export async function handleRpgButton(i: ButtonInteraction, action: string): Pro
   const discordId = i.user.id;
   const username  = i.user.username;
 
+  // Gerenciador de abas de habilidades (Ativas / Passivas)
+  if (action.startsWith('skills_tab:')) {
+    await i.deferUpdate();
+    const tab = action.split(':')[1] as 'ativas' | 'passivas';
+    const char = await getOrCreateCharacter(discordId, username);
+    const { embed, components } = buildHabilidadesEmbed(char, tab);
+    await i.editReply({ embeds: [embed], files: [], components });
+    return;
+  }
+
   const fullAction = i.customId.split(':').slice(1).join(':');
   const parts      = fullAction.split(':');
   const baseAction = parts[0];
@@ -240,9 +250,8 @@ export async function handleRpgButton(i: ButtonInteraction, action: string): Pro
       case 'habilidades': {
         await i.deferUpdate();
         const char = await getOrCreateCharacter(discordId, username);
-        const { embed, select } = buildHabilidadesEmbed(char);
-        const rows = select ? [select, buildHabilidadesButtons(char)] : [buildHabilidadesButtons(char)];
-        await i.editReply({ embeds: [embed], files: [], components: rows });
+        const { embed, components } = buildHabilidadesEmbed(char, 'ativas');
+        await i.editReply({ embeds: [embed], files: [], components });
         break;
       }
 

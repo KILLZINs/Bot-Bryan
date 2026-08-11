@@ -1,9 +1,13 @@
+// ═══════════════════════════════════════════════════════════════════════
+// PAINEL DE HABILIDADES E ÁRVORE DE PASSIVAS
+// ═══════════════════════════════════════════════════════════════════════
+
 import {
   EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle,
   StringSelectMenuBuilder, StringSelectMenuOptionBuilder,
 } from 'discord.js';
 import { FullCharacter } from '../services/character';
-import { DIVINE_SKILLS, SKILL_RANKS, skillEffectValue, nextSkillRank } from '../constants/skills';
+import { DIVINE_SKILLS, PASSIVE_TALENTS, skillEffectValue, nextSkillRank } from '../constants/skills';
 import { getClass } from '../constants/classes';
 
 export function buildHabilidadesEmbed(char: FullCharacter): { embed: EmbedBuilder; select: ActionRowBuilder<StringSelectMenuBuilder> | null } {
@@ -30,15 +34,13 @@ export function buildHabilidadesEmbed(char: FullCharacter): { embed: EmbedBuilde
     }
   }
 
-  const skillListText = availableSkills.length > 0
-    ? availableSkills.map(s => {
-        const isActive = char.divineSkillId === s.id;
-        const learned  = char.divineSkillId === s.id;
-        return `${isActive ? '✅' : '○'} ${s.emoji} **${s.name}** — Lv.${s.unlockLevel}+\n> ${s.description}`;
-      }).join('\n\n')
-    : '*Nenhuma habilidade disponível para sua classe.*';
+  // Listar Árvore de Talentos Passivos Comprados
+  const talentLevels = (char.talentLevels as Record<string, number> | null) ?? {};
+  const talentsText = Object.values(PASSIVE_TALENTS).map(t => {
+    const lvl = talentLevels[t.id] ?? 0;
+    return `${t.emoji} **${t.name}** [Nv.${lvl}/${t.maxLevel}] (Custo: ${t.costPerLevel} pts)\n> ${t.description}`;
+  }).join('\n\n');
 
-  // Dica de dano estimado da habilidade equipada
   let dmgHint = '';
   if (char.divineSkillId) {
     const ds = DIVINE_SKILLS[char.divineSkillId];
@@ -50,37 +52,49 @@ export function buildHabilidadesEmbed(char: FullCharacter): { embed: EmbedBuilde
 
   const embed = new EmbedBuilder()
     .setColor(0xF1C40F)
-    .setTitle('✨ Habilidades Divinas')
+    .setTitle('✨ Habilidades & Árvore de Passivas')
     .setDescription(
-      `Habilidades divinas são poderes únicos da sua classe que evoluem com o uso em combate.\n` +
+      `Gerencie sua habilidade divina e gaste seus **Pontos de Skill** para upar talentos passivos permanentes!\n` +
       `Sua classe: **${cls?.name ?? char.class}** ${cls?.emoji ?? ''}`
     )
     .addFields(
       { name: '⚡ Habilidade Equipada', value: currentSkillText + dmgHint, inline: false },
-      { name: `📚 Habilidades Disponíveis — ${cls?.name ?? 'sua classe'}`, value: skillListText, inline: false },
-      { name: '🔑 Pontos de Skill', value: `**${char.skillPoints}**`, inline: true },
+      { name: '🧬 Árvore de Talentos Passivos', value: talentsText, inline: false },
+      { name: '🔑 Pontos de Skill Disponíveis', value: `**${char.skillPoints}** pts`, inline: true },
       { name: '📊 Nível Atual', value: `**${char.level}**`, inline: true },
-      { name: '📖 Como funciona', value: 'Ranks: F → E → D → C → B → A → S → SS → **SSS**\nO rank sobe com o uso em combate.', inline: false },
     )
-    .setFooter({ text: 'Selecione uma habilidade abaixo para equipá-la.' });
+    .setFooter({ text: 'Selecione abaixo para equipar habilidade ou evoluir um talento passivo.' });
 
-  // select para equipar habilidade
-  const unlocked = availableSkills.filter(s => char.level >= s.unlockLevel);
-  const select = unlocked.length > 0
+  // Criar seletor unificado: Equipe de Habilidade ou Upgrade de Passiva
+  const unlockedSkills = availableSkills.filter(s => char.level >= s.unlockLevel);
+  
+  const skillOptions = unlockedSkills.map(s =>
+    new StringSelectMenuOptionBuilder()
+      .setLabel(`[Habilidade] ${s.name}`)
+      .setValue(`skill:${s.id}`)
+      .setEmoji(s.emoji.trim())
+      .setDescription(`Equipar • Custo: ${s.energyCost} energia`)
+      .setDefault(char.divineSkillId === s.id)
+  );
+
+  const talentOptions = Object.values(PASSIVE_TALENTS).map(t => {
+    const lvl = talentLevels[t.id] ?? 0;
+    const canBuy = lvl < t.maxLevel && char.skillPoints >= t.costPerLevel;
+    return new StringSelectMenuOptionBuilder()
+      .setLabel(`[Talento] ${t.name} (Nv.${lvl}/${t.maxLevel})`)
+      .setValue(`talent:${t.id}`)
+      .setEmoji(t.emoji.trim())
+      .setDescription(canBuy ? `Evoluir • Custo: ${t.costPerLevel} pts` : `[Máximo ou Sem Pontos]`);
+  });
+
+  const allOptions = [...skillOptions, ...talentOptions].slice(0, 25);
+
+  const select = allOptions.length > 0
     ? new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(
         new StringSelectMenuBuilder()
           .setCustomId('rpg_select:equipar_skill')
-          .setPlaceholder('Selecione uma habilidade para equipar...')
-          .addOptions(
-            unlocked.map(s =>
-              new StringSelectMenuOptionBuilder()
-                .setLabel(`${s.name} [${s.type}]`)
-                .setValue(s.id)
-                .setEmoji(s.emoji.trim())
-                .setDescription(`Lv.${s.unlockLevel}+ | Custo: ${s.energyCost} energia`)
-                .setDefault(char.divineSkillId === s.id)
-            )
-          )
+          .setPlaceholder('🎯 Escolha uma habilidade ou evoluir talento passivo...')
+          .addOptions(allOptions)
       )
     : null;
 

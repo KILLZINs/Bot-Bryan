@@ -63,7 +63,7 @@ export async function buildClassMissionsClaimSelect(discordId: string): Promise<
           return new StringSelectMenuOptionBuilder()
             .setLabel(tpl?.title ?? m.missionKey)
             .setValue(m.id)
-            .setDescription(`+${m.xpReward}XP | +${m.goldReward}🪙 | +${m.energyReward}⚡`)
+            .setDescription(`+${m.xpReward}XP | +${m.goldReward}🪙`)
             .setEmoji(tpl?.emoji ?? '🎁');
         }),
       ),
@@ -73,7 +73,7 @@ export async function buildClassMissionsClaimSelect(discordId: string): Promise<
 export function buildClassMissionsButtons(): ActionRowBuilder<ButtonBuilder> {
   return new ActionRowBuilder<ButtonBuilder>().addComponents(
     new ButtonBuilder().setCustomId('rpg:missoes_classe').setLabel('🔄 Atualizar').setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder().setCustomId('rpg:missoes').setLabel('📋 Todas Missões').setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder().setCustomId('rpg:perfil').setLabel('◀ Voltar').setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId('rpg:missoes').setLabel('📋 Missões Gerais').setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId('rpg:perfil').setLabel('◀ Perfil').setStyle(ButtonStyle.Secondary),
   );
 }

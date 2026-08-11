@@ -1,88 +1,109 @@
 import { createCanvas, loadImage, GlobalFonts } from '@napi-rs/canvas';
 import path from 'path';
+import { FullCharacter, ComputedStats, hpBar } from '../services/character';
+import { getClass, karmaLabel, rpgXpForLevel } from '../constants/classes';
+import { getItem } from '../constants/items';
+import { getLocation, ENV_EMOJI } from '../constants/locations';
+import { DIVINE_SKILLS } from '../constants/skills';
 
 try {
   const fontPath = path.join(process.cwd(), 'src', 'rpg', 'fonts', 'Inter-Bold.ttf');
   GlobalFonts.registerFromPath(fontPath, 'InterFont');
 } catch (e) {
-  console.error('Erro ao carregar fonte:', e);
+  console.error('Erro ao carregar fonte Inter-Bold:', e);
 }
 
-export async function generateRpgProfile(data: any): Promise<Buffer> {
-  const width = 920;
+function formatCooldown(date: Date | null | undefined, minutes: number): string {
+  if (!date) return '🟢 Pronto';
+  const remaining = minutes * 60_000 - (Date.now() - date.getTime());
+  if (remaining <= 0) return '🟢 Pronto';
+  const totalSeconds = Math.ceil(remaining / 1000);
+  const mins = Math.floor(totalSeconds / 60);
+  const secs = totalSeconds % 60;
+  return `🔴 ${mins > 0 ? `${mins}m ` : ''}${secs}s`;
+}
+
+export async function generateProfileCard(char: FullCharacter, stats: ComputedStats, avatarUrl?: string): Promise<Buffer> {
+  const width = 940;
   const height = 620;
   const canvas = createCanvas(width, height);
   const ctx = canvas.getContext('2d');
 
-  // --- TRATAMENTO DOS DADOS ---
-  const name = data.username || data.name || 'Aventureiro';
-  const rClass = data.class || data.className || 'Assassino';
-  const level = data.level ?? 1;
-  const karma = data.karma || 'Neutro';
-  const gen = data.generation ?? 1;
-  const location = data.locationName || data.location || 'Cavernas Sombrias (NOITE)';
+  const cls = getClass(char.class);
+  const loc = getLocation(char.currentLocation);
+  const eq = char.equipment;
 
-  // Recursos
-  const currentXp = data.xp ?? 0;
-  const maxXp = data.maxXp ?? data.xpNextLevel ?? (level * 1000);
-  const currentHp = data.currentHp ?? data.hp ?? 237;
-  const maxHp = data.maxHp ?? 422;
-  const currentEnergy = data.currentEnergy ?? data.energy ?? 115;
-  const maxEnergy = data.maxEnergy ?? 160;
+  // --- TRATAMENTO E EXTRAÇÃO FIEL DOS DADOS ---
+  const name = char.username || 'Aventureiro';
+  const className = cls?.name ?? char.class;
+  const level = char.level ?? 1;
+  const karma = karmaLabel(char.karma);
+  const gen = char.generation ?? 1;
+  const locationName = `${loc.emoji} ${loc.name}`;
 
-  // Atributos Reais (Lendo de data.str ou de data.stats.str)
-  const str = data.str ?? data.stats?.str ?? 10;
-  const agi = data.agi ?? data.stats?.agi ?? 10;
-  const intVal = data.int ?? data.stats?.int ?? 10;
-  const vit = data.vit ?? data.stats?.vit ?? 10;
-  const sor = data.sor ?? data.lck ?? data.stats?.lck ?? 10;
+  const currentXp = char.xp ?? 0;
+  const maxXp = rpgXpForLevel(level);
+  const currentHp = char.currentHp ?? 100;
+  const maxHp = stats?.maxHp ?? 100;
+  const currentEnergy = char.currentEnergy ?? 100;
+  const maxEnergy = stats?.maxEnergy ?? 100;
 
-  // Status Calculados de Combate
-  const atk = data.attack ?? data.atk ?? (str * 2 + agi);
-  const def = data.defense ?? data.def ?? (vit * 2);
-  const crit = data.critChance ?? data.crit ?? 15.0;
-  const dodge = data.dodgeChance ?? data.dodge ?? 5.0;
-  const power = data.combatPower ?? data.power ?? (atk + def * 1.5);
-  const gold = data.gold ?? 0;
+  // Atributos Calculados
+  const str = stats?.str ?? 10;
+  const agi = stats?.agi ?? 10;
+  const intVal = stats?.int ?? 10;
+  const vit = stats?.vit ?? 10;
+  const lck = stats?.lck ?? 10;
+
+  const atk = stats?.attack ?? 10;
+  const def = stats?.defense ?? 10;
+  const crit = stats?.critChance ?? 0;
+  const dodge = stats?.dodgeChance ?? 0;
+  const power = stats?.combatPower ?? 0;
+  const gold = char.gold ?? 0;
 
   // Histórico
-  const wins = data.wins ?? data.battlesWon ?? 0;
-  const deaths = data.deaths ?? data.battlesLost ?? 0;
-  const pvp = data.pvpRecord || `${data.pvpWins || 0}W/${data.pvpLoses || 0}L`;
-  const bosses = data.bossesKilled ?? data.bossKills ?? 0;
+  const wins = char.totalWins ?? 0;
+  const deaths = char.totalDeaths ?? 0;
+  const pvpWins = char.pvpWins ?? 0;
+  const pvpLosses = char.pvpLosses ?? 0;
+  const bosses = char.bossKills ?? 0;
 
   // Habilidade Divina
-  const skillName = data.divineSkillName || data.divineSkill?.name || 'Golpe Fatal';
-  const skillRank = data.divineSkillRank || data.divineSkill?.rank || 'F';
-  const skillDesc = data.divineSkillDesc || data.divineSkill?.desc || 'Ataque poderoso baseado em atributos.';
+  let divineName = 'Nenhuma';
+  let divineRank = 'F';
+  let divineDesc = 'Sem habilidade equipada.';
+  if (char.divineSkillId && DIVINE_SKILLS[char.divineSkillId]) {
+    const ds = DIVINE_SKILLS[char.divineSkillId];
+    divineName = ds.name;
+    divineRank = String(char.divineSkillRank ?? 'F');
+    divineDesc = ds.description;
+  }
 
-  // Mapeamento dos Equipamentos
-  const eqData = data.equipment || data.equipments || {};
-  const getItemName = (slot: string) => {
-    const item = eqData[slot] || data[`equipped${slot.charAt(0).toUpperCase() + slot.slice(1)}`];
-    if (!item) return '—';
-    if (typeof item === 'string') return item;
-    return item.name || item.title || '—';
+  // Mapeamento dos Equipamentos utilizando o auxílio do getItem do seu sistema
+  const resolveItem = (itemId?: string | null) => {
+    if (!itemId) return '—';
+    const item = getItem(itemId);
+    return item ? `${item.emoji} ${item.name}` : itemId;
   };
 
-  const equipments = {
-    head: getItemName('head') !== '—' ? getItemName('head') : getItemName('elmo'),
-    weapon: getItemName('weapon') !== '—' ? getItemName('weapon') : getItemName('arma'),
-    shield: getItemName('shield') !== '—' ? getItemName('shield') : getItemName('escudo'),
-    legs: getItemName('legs') !== '—' ? getItemName('legs') : getItemName('calca'),
-    boots: getItemName('boots') !== '—' ? getItemName('boots') : getItemName('bota'),
-    gloves: getItemName('gloves') !== '—' ? getItemName('gloves') : getItemName('luva'),
-    ring: getItemName('ring') || '—',
-    backpack: getItemName('backpack') || '—',
-    pet: getItemName('pet') || '—'
+  const slotItems = {
+    helmet: resolveItem(eq?.helmet),
+    weapon: resolveItem(eq?.weapon),
+    shield: resolveItem(eq?.shield),
+    pants: resolveItem(eq?.pants),
+    boots: resolveItem(eq?.boots),
+    gloves: resolveItem(eq?.gloves),
+    ring: resolveItem(eq?.ring),
+    backpack: resolveItem(eq?.backpack),
+    pet: resolveItem(eq?.pet),
   };
-
-  const avatarUrl = data.avatarUrl || '';
 
   // --- RENDERIZAÇÃO NO CANVAS ---
   ctx.fillStyle = '#120f0d';
   ctx.fillRect(0, 0, width, height);
 
+  // Moldura externa
   ctx.fillStyle = '#1a1411';
   ctx.strokeStyle = '#523f2b';
   ctx.lineWidth = 3;
@@ -91,15 +112,15 @@ export async function generateRpgProfile(data: any): Promise<Buffer> {
   ctx.fill();
   ctx.stroke();
 
-  // 1. Painel Esquerdo
+  // 1. PAINEL ESQUERDO: INFOS DO HERÓI & BARRAS
   ctx.fillStyle = '#f0e3ce';
   ctx.font = 'bold 20px "InterFont", sans-serif';
-  ctx.fillText(`🗡️ ${name.toUpperCase()}`, 30, 42);
+  ctx.fillText(`${name.toUpperCase()}`, 30, 42);
 
   ctx.fillStyle = '#a88967';
   ctx.font = '13px "InterFont", sans-serif';
-  ctx.fillText(`Nível ${level} ${rClass} • Karma: ${karma} • GEN. ${gen}`, 30, 62);
-  ctx.fillText(`📍 ${location}`, 30, 80);
+  ctx.fillText(`Nível ${level} ${className} • Karma: ${karma} • GEN. ${gen}`, 30, 62);
+  ctx.fillText(`📍 ${locationName}`, 30, 80);
 
   function drawBar(y: number, label: string, current: number, max: number, color: string) {
     const pct = Math.min(Math.round((current / (max || 1)) * 100), 100);
@@ -119,6 +140,7 @@ export async function generateRpgProfile(data: any): Promise<Buffer> {
   drawBar(133, 'HP', currentHp, maxHp, '#b82e2e');
   drawBar(161, 'ENERGIA', currentEnergy, maxEnergy, '#d19326');
 
+  // Divisória
   ctx.strokeStyle = '#382b1d';
   ctx.lineWidth = 1;
   ctx.beginPath();
@@ -126,7 +148,7 @@ export async function generateRpgProfile(data: any): Promise<Buffer> {
   ctx.lineTo(240, 185);
   ctx.stroke();
 
-  // Atributos de Combate
+  // Atributos de Combate Reais
   ctx.fillStyle = '#f0e3ce';
   ctx.font = 'bold 13px "InterFont", sans-serif';
   ctx.fillText('📊 ATRIBUTOS DE COMBATE', 30, 205);
@@ -134,14 +156,14 @@ export async function generateRpgProfile(data: any): Promise<Buffer> {
   ctx.fillStyle = '#c7b299';
   ctx.font = '12px "InterFont", sans-serif';
   ctx.fillText(`FOR: ${str}  AGI: ${agi}  INT: ${intVal}`, 30, 225);
-  ctx.fillText(`VIT: ${vit}  SOR: ${sor}`, 30, 242);
+  ctx.fillText(`VIT: ${vit}  SOR: ${lck}`, 30, 242);
 
   ctx.fillStyle = '#e6caa3';
   ctx.fillText(`⚔️ Ataque: ${atk}   🛡️ Defesa: ${def}`, 30, 270);
-  ctx.fillText(`💥 Crítico: ${crit}%   💨 Esquiva: ${dodge}%`, 30, 288);
+  ctx.fillText(`💥 Crítico: ${crit.toFixed(1)}%   💨 Esquiva: ${dodge.toFixed(1)}%`, 30, 288);
 
-  // 2. Centro (Paperdoll)
-  const centerX = 460;
+  // 2. PAINEL CENTRAL: PAPERDOLL E SLOTS
+  const centerX = 470;
   const centerY = 280;
 
   if (avatarUrl) {
@@ -161,22 +183,21 @@ export async function generateRpgProfile(data: any): Promise<Buffer> {
       ctx.arc(centerX, centerY - 20, 48, 0, Math.PI * 2);
       ctx.stroke();
     } catch (err) {
-      console.error('Erro ao carregar avatar:', err);
+      console.error('Erro ao carregar avatar no Canvas:', err);
     }
   }
 
   const slotsCoords = [
-    { key: 'head', label: 'Elmo', x: centerX - 150, y: centerY - 140 },
-    { key: 'chest', label: 'Peito', x: centerX - 150, y: centerY - 75 },
-    { key: 'gloves', label: 'Luva', x: centerX - 150, y: centerY - 10 },
-    { key: 'legs', label: 'Calça', x: centerX - 150, y: centerY + 55 },
-    { key: 'boots', label: 'Bota', x: centerX - 150, y: centerY + 120 },
+    { key: 'helmet', label: 'Elmo', x: centerX - 150, y: centerY - 140 },
+    { key: 'gloves', label: 'Luva', x: centerX - 150, y: centerY - 75 },
+    { key: 'pants', label: 'Calça', x: centerX - 150, y: centerY - 10 },
+    { key: 'boots', label: 'Bota', x: centerX - 150, y: centerY + 55 },
 
     { key: 'weapon', label: 'Arma', x: centerX + 90, y: centerY - 140 },
     { key: 'shield', label: 'Escudo', x: centerX + 90, y: centerY - 75 },
     { key: 'ring', label: 'Anel', x: centerX + 90, y: centerY - 10 },
     { key: 'backpack', label: 'Mochila', x: centerX + 90, y: centerY + 55 },
-    { key: 'pet', label: 'Pet', x: centerX + 90, y: centerY + 120 }
+    { key: 'pet', label: 'Pet', x: centerX + 0, y: centerY + 120 }
   ];
 
   ctx.strokeStyle = '#382b1d';
@@ -189,13 +210,13 @@ export async function generateRpgProfile(data: any): Promise<Buffer> {
   }
 
   for (const slot of slotsCoords) {
-    const itemName = equipments[slot.key as keyof typeof equipments];
+    const itemName = slotItems[slot.key as keyof typeof slotItems] || '—';
 
     ctx.fillStyle = '#080605';
     ctx.strokeStyle = '#523f2b';
     ctx.lineWidth = 2;
     ctx.beginPath();
-    ctx.roundRect(slot.x, slot.y, 60, 45, 5);
+    ctx.roundRect(slot.x, slot.y, 65, 45, 5);
     ctx.fill();
     ctx.stroke();
 
@@ -205,16 +226,16 @@ export async function generateRpgProfile(data: any): Promise<Buffer> {
 
     ctx.fillStyle = itemName !== '—' ? '#e6caa3' : '#4a3b2c';
     ctx.font = '10px "InterFont", sans-serif';
-    const truncatedName = itemName.length > 9 ? itemName.substring(0, 8) + '..' : itemName;
+    const truncatedName = itemName.length > 10 ? itemName.substring(0, 9) + '..' : itemName;
     ctx.fillText(truncatedName, slot.x + 5, slot.y + 30);
   }
 
-  // 3. Painel Direito
-  const rightX = 680;
+  // 3. PAINEL DIREITO: STATUS, HABILIDADES E BATALHAS
+  const rightX = 690;
 
   ctx.fillStyle = '#f0e3ce';
   ctx.font = 'bold 14px "InterFont", sans-serif';
-  ctx.fillText(`⚔️ Poder: #${power}`, rightX, 42);
+  ctx.fillText(`⚔️ Poder: #${power.toLocaleString('pt-BR')}`, rightX, 42);
   ctx.fillText(`🪙 Ouro: ${gold.toLocaleString('pt-BR')} G`, rightX, 65);
 
   ctx.strokeStyle = '#382b1d';
@@ -231,13 +252,13 @@ export async function generateRpgProfile(data: any): Promise<Buffer> {
 
   ctx.fillStyle = '#e6caa3';
   ctx.font = 'bold 12px "InterFont", sans-serif';
-  ctx.fillText(`💀 ${skillName} [Rank ${skillRank}]`, rightX, 120);
+  ctx.fillText(`💀 ${divineName} [Rank ${divineRank}]`, rightX, 120);
 
   ctx.fillStyle = '#a88967';
   ctx.font = '10px "InterFont", sans-serif';
-  ctx.fillText(skillDesc.substring(0, 32), rightX, 138);
-  if (skillDesc.length > 32) {
-    ctx.fillText(skillDesc.substring(32, 65) + '...', rightX, 150);
+  ctx.fillText(divineDesc.substring(0, 32), rightX, 138);
+  if (divineDesc.length > 32) {
+    ctx.fillText(divineDesc.substring(32, 65) + '...', rightX, 150);
   }
 
   // Histórico
@@ -248,20 +269,20 @@ export async function generateRpgProfile(data: any): Promise<Buffer> {
   ctx.fillStyle = '#c7b299';
   ctx.font = '12px "InterFont", sans-serif';
   ctx.fillText(`🏆 Vitórias: ${wins}  💀 Mortes: ${deaths}`, rightX, 205);
-  ctx.fillText(`⚔️ PvP: ${pvp}  👹 Bosses: ${bosses}`, rightX, 223);
+  ctx.fillText(`⚔️ PvP: ${pvpWins}W/${pvpLosses}L  👹 Bosses: ${bosses}`, rightX, 223);
 
-  // Cooldowns
+  // Cooldowns Reais
   ctx.fillStyle = '#f0e3ce';
   ctx.font = 'bold 13px "InterFont", sans-serif';
   ctx.fillText('🎲 COOLDOWNS RPG', rightX, 260);
 
-  ctx.fillStyle = '#2ecc71';
+  ctx.fillStyle = '#c7b299';
   ctx.font = '11px "InterFont", sans-serif';
-  ctx.fillText('🟢 Dungeon: Pronto', rightX, 280);
-  ctx.fillText('🟢 Caçada: Pronto', rightX, 298);
-  ctx.fillText('🟢 Explorar: Pronto', rightX, 316);
+  ctx.fillText(`Dungeon: ${formatCooldown(char.lastDungeon, 5)}`, rightX, 280);
+  ctx.fillText(`Viagem: ${formatCooldown(char.lastTravel, loc.travelCooldownMin)}`, rightX, 298);
+  ctx.fillText(`Explorar: ${formatCooldown(char.lastExplore, 3)}`, rightX, 316);
 
   return canvas.toBuffer('image/png');
 }
 
-export const generateProfileCard = generateRpgProfile;
+export const generateRpgProfile = generateProfileCard;

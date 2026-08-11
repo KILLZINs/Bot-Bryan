@@ -220,13 +220,23 @@ export async function handleRpgSelect(i: StringSelectMenuInteraction, action: st
         const option = i.values[0];
         let char = await getOrCreateCharacter(discordId, username);
 
-        // 🎯 Caçada (inicia o combate direto em modo 'hunt')
+        // 🎯 Caçada (Busca monstros da localização usando getEnemiesForLocation)
         if (option === 'cacar') {
           if (char.currentHp <= 0 || char.currentEnergy < 10) {
             await i.editReply({ embeds: [errorEmbed('Caçada indisponível', 'Você precisa estar vivo e ter pelo menos **10⚡** para caçar.')] });
             return;
           }
-          const { embed, rows } = await doBattleEnemy(char, 'random', i.guildId ?? '', 'hunt');
+          
+          const { getEnemiesForLocation } = await import('../constants/enemies');
+          const localEnemies = getEnemiesForLocation(char.currentLocation, char.level);
+          
+          if (!localEnemies || localEnemies.length === 0) {
+            await i.editReply({ embeds: [errorEmbed('Nenhum inimigo encontrado', 'Não há monstros selvagens para caçar neste local no momento.')] });
+            return;
+          }
+
+          const randomEnemy = localEnemies[Math.floor(Math.random() * localEnemies.length)];
+          const { embed, rows } = await doBattleEnemy(char, randomEnemy.id, i.guildId ?? '', 'hunt');
           await i.editReply({ embeds: [embed], files: [], components: rows });
           return;
         }

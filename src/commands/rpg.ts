@@ -22,11 +22,15 @@ export function buildProfileSelectMenu(): ActionRowBuilder<StringSelectMenuBuild
       .setPlaceholder('📍 Navegar pelo Hub do Aventureiro...')
       .addOptions(
         new StringSelectMenuOptionBuilder().setLabel('⚔️ Entrar na Dungeon').setValue('dungeon').setDescription('Explorar dungeons e batalhar contra monstros'),
+        new StringSelectMenuOptionBuilder().setLabel('🔍 Caçada & Explorar').setValue('explorar').setDescription('Explorar a região atual em busca de inimigos e recursos'),
         new StringSelectMenuOptionBuilder().setLabel('🎒 Inventário').setValue('inventario').setDescription('Ver seus itens e equipamentos'),
-        new StringSelectMenuOptionBuilder().setLabel('🏰 Ir para a Cidade').setValue('cidade').setDescription('Acessar lojas, forja e guilda'),
+        new StringSelectMenuOptionBuilder().setLabel('🏰 Ir para a Cidade').setValue('cidade').setDescription('Acessar lojas, forja, taverna e guilda'),
+        new StringSelectMenuOptionBuilder().setLabel('🥊 Treinar Atributos').setValue('treinar').setDescription('Treinar para ganhar atributos permanentemente'),
+        new StringSelectMenuOptionBuilder().setLabel('🎣 Pescaria').setValue('pescar').setDescription('Lançar a vara de pesca no lago do reino'),
+        new StringSelectMenuOptionBuilder().setLabel('🧘 Meditar').setValue('meditar').setDescription('Descansar para restaurar HP e Energia'),
         new StringSelectMenuOptionBuilder().setLabel('📋 Painel de Missões').setValue('missoes').setDescription('Ver suas missões diárias e semanais'),
         new StringSelectMenuOptionBuilder().setLabel('📜 Missões de Classe').setValue('missoes_classe').setDescription('Ver suas missões exclusivas de classe'),
-        new StringSelectMenuOptionBuilder().setLabel('✨ Habilidades').setValue('habilidades').setDescription('Gerenciar suas habilidades divinas'),
+        new StringSelectMenuOptionBuilder().setLabel('✨ Habilidades Divinas').setValue('habilidades').setDescription('Gerenciar suas habilidades e bênçãos'),
         new StringSelectMenuOptionBuilder().setLabel('📊 Distribuir Pontos').setValue('stats').setDescription('Atribuir pontos de atributo acumulados'),
       )
   );

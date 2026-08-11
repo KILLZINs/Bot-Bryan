@@ -9,16 +9,30 @@ try {
   console.error('Erro ao carregar fonte Inter-Bold:', e);
 }
 
+// Interface flexível que aceita o objeto do Prisma e o formato customizado
 export interface ProfileData {
-  username: string;
-  level: number;
-  hp: { current: number; max: number };
-  mana: { current: number; max: number };
-  attributes: { str: number; agi: number; int: number };
-  gold: number;
+  username?: string;
+  name?: string;
+  level?: number;
+  avatarUrl?: string;
+  gold?: number;
   guildName?: string;
-  avatarUrl: string;
-  equipments: {
+  
+  // Propriedades do formato direto do Prisma
+  currentHp?: number;
+  maxHp?: number;
+  currentMana?: number;
+  maxMana?: number;
+  str?: number;
+  agi?: number;
+  int?: number;
+  equipment?: any;
+
+  // Propriedades do formato agrupado
+  hp?: { current: number; max: number };
+  mana?: { current: number; max: number };
+  attributes?: { str: number; agi: number; int: number };
+  equipments?: {
     head?: string;
     armor?: string;
     weapon?: string;
@@ -28,11 +42,28 @@ export interface ProfileData {
   };
 }
 
-export async function generateRpgProfile(data: ProfileData, _extraParam?: any): Promise<Buffer> {
+export async function generateRpgProfile(data: any, _extraParam?: any): Promise<Buffer> {
   const width = 850;
   const height = 520;
   const canvas = createCanvas(width, height);
   const ctx = canvas.getContext('2d');
+
+  // Normalização dos dados para aceitar qualquer formato enviado pelo rpg.ts
+  const name = data.username || data.name || 'HERÓI';
+  const level = data.level ?? 1;
+  const hpCurrent = data.hp?.current ?? data.currentHp ?? 100;
+  const hpMax = data.hp?.max ?? data.maxHp ?? 100;
+  const manaCurrent = data.mana?.current ?? data.currentMana ?? 50;
+  const manaMax = data.mana?.max ?? data.maxMana ?? 50;
+  
+  const str = data.attributes?.str ?? data.str ?? 10;
+  const agi = data.attributes?.agi ?? data.agi ?? 10;
+  const intVal = data.attributes?.int ?? data.int ?? 10;
+  
+  const gold = data.gold ?? 0;
+  const guildName = data.guildName ?? 'Sem Guilda';
+  const avatarUrl = data.avatarUrl ?? '';
+  const eq = data.equipments || data.equipment || {};
 
   // 1. FUNDO E MOLDURA TEMÁTICA
   ctx.fillStyle = '#120f0d';
@@ -49,11 +80,11 @@ export async function generateRpgProfile(data: ProfileData, _extraParam?: any): 
   // 2. PAINEL ESQUERDO (Status & Atributos)
   ctx.fillStyle = '#f0e3ce';
   ctx.font = 'bold 22px "InterFont", sans-serif';
-  ctx.fillText(data.username ? data.username.toUpperCase() : 'HERÓI', 40, 55);
+  ctx.fillText(name.toUpperCase(), 40, 55);
 
   ctx.fillStyle = '#a88967';
   ctx.font = 'bold 14px "InterFont", sans-serif';
-  ctx.fillText(`Nível ${data.level ?? 1} • Aventureiro`, 40, 78);
+  ctx.fillText(`Nível ${level} • Aventureiro`, 40, 78);
 
   function drawBar(y: number, label: string, current: number, max: number, color: string) {
     ctx.fillStyle = '#d9c39e';
@@ -68,8 +99,8 @@ export async function generateRpgProfile(data: ProfileData, _extraParam?: any): 
     ctx.fillRect(40, y + 6, fillWidth, 10);
   }
 
-  drawBar(105, 'HP', data.hp?.current ?? 0, data.hp?.max ?? 100, '#a82a2a');
-  drawBar(145, 'MANA', data.mana?.current ?? 0, data.mana?.max ?? 100, '#2b62a3');
+  drawBar(105, 'HP', hpCurrent, hpMax, '#a82a2a');
+  drawBar(145, 'MANA', manaCurrent, manaMax, '#2b62a3');
 
   // Divisória
   ctx.strokeStyle = '#3d2e1d';
@@ -86,9 +117,9 @@ export async function generateRpgProfile(data: ProfileData, _extraParam?: any): 
 
   ctx.fillStyle = '#c7b299';
   ctx.font = '13px "InterFont", sans-serif';
-  ctx.fillText(`FOR (Força): ${data.attributes?.str ?? 0}`, 40, 230);
-  ctx.fillText(`AGI (Agilidade): ${data.attributes?.agi ?? 0}`, 40, 255);
-  ctx.fillText(`INT (Inteligência): ${data.attributes?.int ?? 0}`, 40, 280);
+  ctx.fillText(`FOR (Força): ${str}`, 40, 230);
+  ctx.fillText(`AGI (Agilidade): ${agi}`, 40, 255);
+  ctx.fillText(`INT (Inteligência): ${intVal}`, 40, 280);
 
   // 3. CENTRO (Paperdoll & Avatar)
   const centerX = 425;
@@ -103,7 +134,7 @@ export async function generateRpgProfile(data: ProfileData, _extraParam?: any): 
     { key: 'boots', label: 'Bota', x: centerX - 25, y: centerY + 175 }
   ];
 
-  // Linhas de conexão do avatar com os slots
+  // Linhas de conexão
   ctx.strokeStyle = '#4a3825';
   ctx.lineWidth = 2;
   for (const s of slotsCoords) {
@@ -114,9 +145,9 @@ export async function generateRpgProfile(data: ProfileData, _extraParam?: any): 
   }
 
   // Renderizar Avatar
-  if (data.avatarUrl) {
+  if (avatarUrl) {
     try {
-      const avatar = await loadImage(data.avatarUrl);
+      const avatar = await loadImage(avatarUrl);
       ctx.save();
       ctx.beginPath();
       ctx.arc(centerX, centerY - 10, 55, 0, Math.PI * 2);
@@ -145,9 +176,9 @@ export async function generateRpgProfile(data: ProfileData, _extraParam?: any): 
     ctx.fill();
     ctx.stroke();
 
-    const itemUrl = data.equipments?.[slot.key as keyof typeof data.equipments];
+    const itemUrl = eq[slot.key];
 
-    if (itemUrl) {
+    if (itemUrl && typeof itemUrl === 'string') {
       try {
         const itemImg = await loadImage(itemUrl);
         ctx.drawImage(itemImg, slot.x + 3, slot.y + 3, 44, 44);
@@ -172,11 +203,10 @@ export async function generateRpgProfile(data: ProfileData, _extraParam?: any): 
 
   ctx.fillStyle = '#c7b299';
   ctx.font = '13px "InterFont", sans-serif';
-  ctx.fillText(data.guildName ?? 'Sem Guilda', 620, 80);
-  ctx.fillText(`Ouro: ${(data.gold ?? 0).toLocaleString('pt-BR')} G`, 620, 110);
+  ctx.fillText(guildName, 620, 80);
+  ctx.fillText(`Ouro: ${gold.toLocaleString('pt-BR')} G`, 620, 110);
 
   return canvas.toBuffer('image/png');
 }
 
-// Alias para manter compatibilidade com importações antigas
 export const generateProfileCard = generateRpgProfile;

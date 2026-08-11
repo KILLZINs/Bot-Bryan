@@ -4,12 +4,11 @@
 
 import {
   SlashCommandBuilder, ChatInputCommandInteraction, EmbedBuilder,
-  ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder,
-  StringSelectMenuOptionBuilder, AttachmentBuilder,
+  ActionRowBuilder, StringSelectMenuBuilder, StringSelectMenuOptionBuilder, AttachmentBuilder,
 } from 'discord.js';
 import { Command } from '../types';
-import { getOrCreateCharacter, getCharacter, computeStats, setClass } from '../rpg/services/character';
-import { buildProfileEmbed, buildProfileButtons } from '../rpg/panels/profile';
+import { getOrCreateCharacter, getCharacter, computeStats } from '../rpg/services/character';
+import { buildProfileEmbed } from '../rpg/panels/profile';
 import { TIER1_CLASSES } from '../rpg/constants/classes';
 import { runPvp } from '../rpg/services/combat';
 import { errorEmbed, successEmbed } from '../utils/embeds';
@@ -45,7 +44,6 @@ export default {
     .addSubcommand(sub => sub.setName('info').setDescription('Info sobre uma classe').addStringOption(o => o.setName('classe').setDescription('ID da classe').setRequired(true))),
 
   async execute(interaction: ChatInputCommandInteraction) {
-    // Feature gate
     const { isFeatureEnabled, featureDisabledMsg } = await import('../utils/features');
     if (interaction.guildId && !(await isFeatureEnabled(interaction.guildId, 'featRpg'))) {
       return interaction.reply({ content: featureDisabledMsg('featRpg'), ephemeral: true });
@@ -71,14 +69,12 @@ export default {
         console.error('Erro ao gerar perfil em Canvas:', err);
       }
 
-      const components = [
-        buildProfileSelectMenu(),
-        ...buildProfileButtons(char)
-      ];
+      const components = [buildProfileSelectMenu()];
 
       if (!attachment) {
         await interaction.editReply({
           embeds: [buildProfileEmbed(char, stats)],
+          files: [],
           components,
         });
         return;
@@ -102,12 +98,11 @@ export default {
         await interaction.editReply({
           content: '> Você já tem um personagem! Aqui está seu perfil:',
           embeds: [buildProfileEmbed(existing, stats)],
-          components: buildProfileButtons(existing),
+          components: [buildProfileSelectMenu()],
         });
         return;
       }
 
-      // Seleção de classe
       const embed = new EmbedBuilder()
         .setColor(0x5865F2)
         .setTitle('⚔️ Bem-vindo ao RPG da Aliança Skyline!')
@@ -203,7 +198,6 @@ export default {
       });
 
       const { getClass } = await import('../rpg/constants/classes');
-      const { computeStats: cStats } = await import('../rpg/services/character');
 
       const lines = top.map((c, i) => {
         const cls = getClass(c.class);

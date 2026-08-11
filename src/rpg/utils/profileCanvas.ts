@@ -2,8 +2,9 @@ import { createCanvas, loadImage, GlobalFonts } from '@napi-rs/canvas';
 import path from 'path';
 import { getClass, karmaLabel, rpgXpForLevel } from '../constants/classes';
 import { getItem } from '../constants/items';
-import { getLocation } from '../constants/locations';
+import { getLocation, ENV_EMOJI } from '../constants/locations';
 import { DIVINE_SKILLS } from '../constants/skills';
+import { getMarriage, getPartner } from '../services/marriage';
 
 try {
   const fontPath = path.join(process.cwd(), 'src', 'rpg', 'fonts', 'Inter-Bold.ttf');
@@ -30,6 +31,7 @@ export async function generateProfileCard(char: any, stats: any, avatarUrlInput?
 
   const cls = getClass(char.class);
   const loc = getLocation(char.currentLocation);
+  const envLabel = ENV_EMOJI[char.environment] ?? char.environment;
   const eq = char.equipment;
 
   // --- EXTRAÇÃO E MAPEAMENTO DOS DADOS ---
@@ -61,6 +63,17 @@ export async function generateProfileCard(char: any, stats: any, avatarUrlInput?
   const power = stats?.combatPower ?? 0;
   const gold = char.gold ?? 0;
 
+  // Casamento
+  let marriageText = '💔 Solteiro(a)';
+  try {
+    const marriage = await getMarriage(char.discordId);
+    if (marriage) {
+      const partnerId = getPartner(marriage, char.discordId);
+      const daysTogether = Math.floor((Date.now() - marriage.marriedAt.getTime()) / 86400000);
+      marriageText = `💍 Partner: <@${partnerId}> (${daysTogether}d)`;
+    }
+  } catch { /* Ignora se der erro na busca */ }
+
   // Histórico
   const wins = char.totalWins ?? 0;
   const deaths = char.totalDeaths ?? 0;
@@ -79,7 +92,7 @@ export async function generateProfileCard(char: any, stats: any, avatarUrlInput?
     divineDesc = ds.description;
   }
 
-  // Resolução dos Equipamentos (Traduz o ID do item em nome/emoji)
+  // Tradução de Equipamentos
   const resolveItem = (itemId?: string | null) => {
     if (!itemId) return '—';
     const item = getItem(itemId);
@@ -88,14 +101,14 @@ export async function generateProfileCard(char: any, stats: any, avatarUrlInput?
 
   const slotItems = {
     helmet: resolveItem(eq?.helmet),
-    chest: resolveItem(eq?.chest || eq?.armor), // Peitoral
+    chest: resolveItem(eq?.chest || eq?.armor),
     weapon: resolveItem(eq?.weapon),
     shield: resolveItem(eq?.shield),
     pants: resolveItem(eq?.pants),
     boots: resolveItem(eq?.boots),
     gloves: resolveItem(eq?.gloves),
     ring: resolveItem(eq?.ring),
-    backpack: resolveItem(eq?.backpack), // Mochila
+    backpack: resolveItem(eq?.backpack),
     pet: resolveItem(eq?.pet),
   };
 
@@ -120,9 +133,9 @@ export async function generateProfileCard(char: any, stats: any, avatarUrlInput?
   ctx.fillText(`${name.toUpperCase()}`, 30, 42);
 
   ctx.fillStyle = '#a88967';
-  ctx.font = '13px "InterFont", sans-serif';
-  ctx.fillText(`Nível ${level} ${className} • Karma: ${karma} • GEN. ${gen}`, 30, 62);
-  ctx.fillText(`📍 ${locationName}`, 30, 80);
+  ctx.font = '12px "InterFont", sans-serif';
+  ctx.fillText(`Nível ${level} ${className} • Karma: ${karma} • GEN. ${gen}`, 30, 60);
+  ctx.fillText(`📍 ${locationName} (${envLabel})`, 30, 78);
 
   function drawBar(y: number, label: string, current: number, max: number, color: string) {
     const pct = Math.min(Math.round((current / (max || 1)) * 100), 100);
@@ -189,16 +202,13 @@ export async function generateProfileCard(char: any, stats: any, avatarUrlInput?
     }
   }
 
-  // 10 Slots mapeados (5 de cada lado)
   const slotsCoords = [
-    // Lado Esquerdo
     { key: 'helmet', label: 'Elmo', x: centerX - 150, y: centerY - 140 },
     { key: 'chest', label: 'Peito', x: centerX - 150, y: centerY - 75 },
     { key: 'gloves', label: 'Luva', x: centerX - 150, y: centerY - 10 },
     { key: 'pants', label: 'Calça', x: centerX - 150, y: centerY + 55 },
     { key: 'boots', label: 'Bota', x: centerX - 150, y: centerY + 120 },
 
-    // Lado Direito
     { key: 'weapon', label: 'Arma', x: centerX + 90, y: centerY - 140 },
     { key: 'shield', label: 'Escudo', x: centerX + 90, y: centerY - 75 },
     { key: 'ring', label: 'Anel', x: centerX + 90, y: centerY - 10 },
@@ -236,57 +246,63 @@ export async function generateProfileCard(char: any, stats: any, avatarUrlInput?
     ctx.fillText(truncatedName, slot.x + 5, slot.y + 30);
   }
 
-  // 3. PAINEL DIREITO: PODER, HABILIDADE, BATALHAS E COOLDOWNS
+  // 3. PAINEL DIREITO: PODER, HABILIDADE, BATALHAS E TODOS OS COOLDOWNS
   const rightX = 690;
 
   ctx.fillStyle = '#f0e3ce';
   ctx.font = 'bold 14px "InterFont", sans-serif';
   ctx.fillText(`⚔️ Poder: #${power.toLocaleString('pt-BR')}`, rightX, 42);
-  ctx.fillText(`🪙 Ouro: ${gold.toLocaleString('pt-BR')} G`, rightX, 65);
+  ctx.fillText(`🪙 Ouro: ${gold.toLocaleString('pt-BR')} G`, rightX, 60);
+
+  ctx.fillStyle = '#a88967';
+  ctx.font = '11px "InterFont", sans-serif';
+  ctx.fillText(marriageText.substring(0, 28), rightX, 78);
 
   ctx.strokeStyle = '#382b1d';
   ctx.lineWidth = 1;
   ctx.beginPath();
-  ctx.moveTo(rightX, 80);
-  ctx.lineTo(width - 30, 80);
+  ctx.moveTo(rightX, 86);
+  ctx.lineTo(width - 30, 86);
   ctx.stroke();
 
   // Habilidade Divina
   ctx.fillStyle = '#f0e3ce';
   ctx.font = 'bold 13px "InterFont", sans-serif';
-  ctx.fillText('✨ HABILIDADE DIVINA', rightX, 100);
+  ctx.fillText('✨ HABILIDADE DIVINA', rightX, 105);
 
   ctx.fillStyle = '#e6caa3';
-  ctx.font = 'bold 12px "InterFont", sans-serif';
-  ctx.fillText(`💀 ${divineName} [Rank ${divineRank}]`, rightX, 120);
+  ctx.font = 'bold 11px "InterFont", sans-serif';
+  ctx.fillText(`💀 ${divineName} [Rank ${divineRank}]`, rightX, 122);
 
   ctx.fillStyle = '#a88967';
   ctx.font = '10px "InterFont", sans-serif';
   ctx.fillText(divineDesc.substring(0, 32), rightX, 138);
-  if (divineDesc.length > 32) {
-    ctx.fillText(divineDesc.substring(32, 65) + '...', rightX, 150);
-  }
 
   // Histórico
   ctx.fillStyle = '#f0e3ce';
   ctx.font = 'bold 13px "InterFont", sans-serif';
-  ctx.fillText('📈 HISTÓRICO DE BATALHAS', rightX, 185);
-
-  ctx.fillStyle = '#c7b299';
-  ctx.font = '12px "InterFont", sans-serif';
-  ctx.fillText(`🏆 Vitórias: ${wins}  💀 Mortes: ${deaths}`, rightX, 205);
-  ctx.fillText(`⚔️ PvP: ${pvpWins}W/${pvpLosses}L  👹 Bosses: ${bosses}`, rightX, 223);
-
-  // Cooldowns Reais
-  ctx.fillStyle = '#f0e3ce';
-  ctx.font = 'bold 13px "InterFont", sans-serif';
-  ctx.fillText('🎲 COOLDOWNS RPG', rightX, 260);
+  ctx.fillText('📈 HISTÓRICO', rightX, 170);
 
   ctx.fillStyle = '#c7b299';
   ctx.font = '11px "InterFont", sans-serif';
-  ctx.fillText(`Dungeon: ${formatCooldown(char.lastDungeon, 5)}`, rightX, 280);
-  ctx.fillText(`Viagem: ${formatCooldown(char.lastTravel, loc.travelCooldownMin)}`, rightX, 298);
-  ctx.fillText(`Explorar: ${formatCooldown(char.lastExplore, 3)}`, rightX, 316);
+  ctx.fillText(`🏆 Vitórias: ${wins}  💀 Mortes: ${deaths}`, rightX, 188);
+  ctx.fillText(`⚔️ PvP: ${pvpWins}W/${pvpLosses}L  👹 Bosses: ${bosses}`, rightX, 204);
+
+  // Cooldowns Reais e Completos
+  ctx.fillStyle = '#f0e3ce';
+  ctx.font = 'bold 13px "InterFont", sans-serif';
+  ctx.fillText('🎲 COOLDOWNS RPG', rightX, 235);
+
+  ctx.fillStyle = '#c7b299';
+  ctx.font = '10px "InterFont", sans-serif';
+  ctx.fillText(`Dungeon: ${formatCooldown(char.lastDungeon, 5)}`, rightX, 252);
+  ctx.fillText(`Caçada: 🟢 Sem cd`, rightX, 268);
+  ctx.fillText(`Viagem: ${formatCooldown(char.lastTravel, loc.travelCooldownMin)}`, rightX, 284);
+  ctx.fillText(`Explorar: ${formatCooldown(char.lastExplore, 3)}`, rightX, 300);
+  ctx.fillText(`Treino: ${formatCooldown(char.lastTrain, 20)}`, rightX, 316);
+  ctx.fillText(`Pesca: ${formatCooldown(char.lastFishing, 10)}`, rightX, 332);
+  ctx.fillText(`Meditar: ${formatCooldown(char.lastRest, 30)}`, rightX, 348);
+  ctx.fillText(`PvP: ${formatCooldown(char.lastPvp, 10)}`, rightX, 364);
 
   return canvas.toBuffer('image/png');
 }

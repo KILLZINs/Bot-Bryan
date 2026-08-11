@@ -74,7 +74,8 @@ export async function handleRpgSelect(i: StringSelectMenuInteraction, action: st
             .setTitle('🎯 Central de Atividades do Aventureiro')
             .setDescription('Escolha qual atividade deseja realizar agora no reino:')
             .addFields(
-              { name: '🔍 Caçada & Explorar', value: 'Batalhe contra monstros e encontre recursos na área.', inline: true },
+              { name: '🎯 Caçada', value: 'Batalhe contra monstros selvagens da sua localização.', inline: true },
+              { name: '🧭 Explorar Região', value: 'Explore áreas do mapa em busca de eventos e recursos.', inline: true },
               { name: '🥊 Treinar', value: 'Fortaleça seus atributos físicos e mágicos.', inline: true },
               { name: '🎣 Pescaria', value: 'Pesque peixes valiosos e itens raros no lago.', inline: true },
               { name: '🧘 Meditar', value: 'Descanse para restaurar HP e Energia.', inline: true },
@@ -219,6 +220,18 @@ export async function handleRpgSelect(i: StringSelectMenuInteraction, action: st
         const option = i.values[0];
         let char = await getOrCreateCharacter(discordId, username);
 
+        // 🎯 Caçada de Monstros
+        if (option === 'cacar') {
+          const select = buildDungeonSelect(char);
+          await i.editReply({
+            embeds: [buildDungeonEmbed(char)],
+            files: [],
+            components: select ? [select, buildDungeonButtons(char)] : [buildDungeonButtons(char)],
+          });
+          return;
+        }
+
+        // 🧭 Explorar Região
         if (option === 'explorar') {
           const expModule: any = await import('../panels/exploracao');
           const embed = expModule.buildExploracaoEmbed ? await expModule.buildExploracaoEmbed(char) : buildDungeonEmbed(char);
@@ -232,6 +245,7 @@ export async function handleRpgSelect(i: StringSelectMenuInteraction, action: st
           return;
         }
 
+        // 🥊 Treinar Atributos
         if (option === 'treinar') {
           const { buildTreinarEmbed, buildTreinarSelect, buildTreinarButtons } = await import('../panels/treinar');
           const lastTrain = char.lastTrain;
@@ -244,6 +258,7 @@ export async function handleRpgSelect(i: StringSelectMenuInteraction, action: st
           return;
         }
 
+        // 🎣 Pescaria
         if (option === 'pescar') {
           const pescaModule: any = await import('../panels/pescaria');
           const embed = pescaModule.buildPescaEmbed ? await pescaModule.buildPescaEmbed(char) : buildProfileEmbed(char, computeStats(char));
@@ -257,6 +272,7 @@ export async function handleRpgSelect(i: StringSelectMenuInteraction, action: st
           return;
         }
 
+        // 🧘 Meditar
         if (option === 'meditar') {
           const meditarModule: any = await import('../panels/meditar');
           const embed = meditarModule.buildMeditarEmbed ? await meditarModule.buildMeditarEmbed(char) : buildProfileEmbed(char, computeStats(char));
@@ -270,6 +286,7 @@ export async function handleRpgSelect(i: StringSelectMenuInteraction, action: st
           return;
         }
 
+        // 🍺 Taverna
         if (option === 'taverna') {
           const { buildTavernaEmbed, buildTavernaMenuSelect, buildTavernaButtons } = await import('../panels/taverna');
           await i.editReply({

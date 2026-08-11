@@ -90,11 +90,12 @@ export async function handleRpgSelect(i: StringSelectMenuInteraction, action: st
         }
 
         if (option === 'habilidades') {
-          const { buildHabilidadesEmbed, buildHabilidadesSelect, buildHabilidadesButtons } = await import('../panels/skills');
+          const { buildHabilidadesEmbed, buildHabilidadesButtons } = await import('../panels/skills');
+          const { embed: habEmbed, select: habSelect } = buildHabilidadesEmbed(char);
           await i.editReply({
-            embeds: [buildHabilidadesEmbed(char)],
+            embeds: [habEmbed],
             files: [],
-            components: [buildHabilidadesSelect(char), buildHabilidadesButtons()],
+            components: habSelect ? [habSelect, buildHabilidadesButtons(char)] : [buildHabilidadesButtons(char)],
           });
           return;
         }

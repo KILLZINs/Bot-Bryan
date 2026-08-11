@@ -1,14 +1,12 @@
 import { createCanvas, loadImage, GlobalFonts } from '@napi-rs/canvas';
 import path from 'path';
 
-// Registrar a fonte localInter-Bold.ttf
-const fontPath = path.join(process.cwd(), 'src', 'rpg', 'fonts', 'Inter-Bold.ttf');
-
+// Registra a fonte local Inter-Bold
 try {
-  // O segundo parâmetro é o 'alias' que usamos no ctx.font
+  const fontPath = path.join(process.cwd(), 'src', 'rpg', 'fonts', 'Inter-Bold.ttf');
   GlobalFonts.registerFromPath(fontPath, 'InterFont');
 } catch (e) {
-  console.error('Erro ao carregar fonte do caminho:', fontPath, e);
+  console.error('Erro ao carregar fonte Inter-Bold:', e);
 }
 
 export interface ProfileData {
@@ -18,7 +16,7 @@ export interface ProfileData {
   mana: { current: number; max: number };
   attributes: { str: number; agi: number; int: number };
   gold: number;
-  guildName: string;
+  guildName?: string;
   avatarUrl: string;
   equipments: {
     head?: string;
@@ -88,9 +86,9 @@ export async function generateRpgProfile(data: ProfileData): Promise<Buffer> {
 
   ctx.fillStyle = '#c7b299';
   ctx.font = '13px "InterFont", sans-serif';
-  ctx.fillText(`FOR (Força): ${data.attributes.str}`, 40, 230);
-  ctx.fillText(`AGI (Agilidade): ${data.attributes.agi}`, 40, 255);
-  ctx.fillText(`INT (Inteligência): ${data.attributes.int}`, 40, 280);
+  ctx.fillText(`FOR (Força): ${data.attributes?.str ?? 0}`, 40, 230);
+  ctx.fillText(`AGI (Agilidade): ${data.attributes?.agi ?? 0}`, 40, 255);
+  ctx.fillText(`INT (Inteligência): ${data.attributes?.int ?? 0}`, 40, 280);
 
   // 3. CENTRO (Paperdoll & Avatar)
   const centerX = 425;
@@ -145,7 +143,7 @@ export async function generateRpgProfile(data: ProfileData): Promise<Buffer> {
     ctx.fill();
     ctx.stroke();
 
-    const itemUrl = data.equipments[slot.key as keyof typeof data.equipments];
+    const itemUrl = data.equipments?.[slot.key as keyof typeof data.equipments];
 
     if (itemUrl) {
       try {
@@ -168,12 +166,15 @@ export async function generateRpgProfile(data: ProfileData): Promise<Buffer> {
   // 4. PAINEL DIREITO
   ctx.fillStyle = '#f0e3ce';
   ctx.font = 'bold 15px "InterFont", sans-serif';
-  ctx.fillText('GUILDA', 620, 55);
+  ctx.fillText('GUILDA / ALIANÇA', 620, 55);
 
   ctx.fillStyle = '#c7b299';
   ctx.font = '13px "InterFont", sans-serif';
-  ctx.fillText(data.guildName, 620, 80);
-  ctx.fillText(`Ouro: ${data.gold.toLocaleString('pt-BR')} G`, 620, 110);
+  ctx.fillText(data.guildName ?? 'Sem Guilda', 620, 80);
+  ctx.fillText(`Ouro: ${(data.gold ?? 0).toLocaleString('pt-BR')} G`, 620, 110);
 
   return canvas.toBuffer('image/png');
 }
+
+// Alias de compatibilidade para resolver o erro TS2724 do build no Railway
+export const generateProfileCard = generateRpgProfile;

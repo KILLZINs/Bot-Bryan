@@ -29,7 +29,6 @@ export default {
     .addSubcommand(sub => sub.setName('info').setDescription('Info sobre uma classe').addStringOption(o => o.setName('classe').setDescription('ID da classe').setRequired(true))),
 
   async execute(interaction: ChatInputCommandInteraction) {
-    // Feature gate
     const { isFeatureEnabled, featureDisabledMsg } = await import('../utils/features');
     if (interaction.guildId && !(await isFeatureEnabled(interaction.guildId, 'featRpg'))) {
       return interaction.reply({ content: featureDisabledMsg('featRpg'), ephemeral: true });
@@ -49,18 +48,9 @@ export default {
       const embed = buildProfileEmbed(char, stats);
 
       try {
-        // Junta os dados base do personagem com os stats calculados de combate
-        const fullProfileData = {
-          ...char,
-          ...stats,
-          avatarUrl: interaction.user.displayAvatarURL({ extension: 'png', size: 256 })
-        };
-
-        // Gera a imagem do Canvas
-        const imageBuffer = await generateProfileCard(fullProfileData);
+        const avatarUrl = interaction.user.displayAvatarURL({ extension: 'png', size: 256 });
+        const imageBuffer = await generateProfileCard(char, stats, avatarUrl);
         attachment = new AttachmentBuilder(imageBuffer, { name: 'perfil.png' });
-        
-        // Atribui o anexo no Embed do perfil
         embed.setImage('attachment://perfil.png');
       } catch (err) {
         console.error('Erro ao gerar perfil em Canvas:', err);
@@ -89,7 +79,6 @@ export default {
         return;
       }
 
-      // Seleção de classe
       const embed = new EmbedBuilder()
         .setColor(0x5865F2)
         .setTitle('⚔️ Bem-vindo ao RPG da Aliança Skyline!')

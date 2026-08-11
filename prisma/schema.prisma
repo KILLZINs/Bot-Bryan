@@ -408,7 +408,6 @@ model RpgEquipment {
 
   @@map("rpg_equipment")
 }
-}
 
 model RpgInventoryItem {
   id          String   @id @default(cuid())

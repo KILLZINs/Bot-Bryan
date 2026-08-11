@@ -2,7 +2,7 @@
 // HANDLER DE BOTÕES RPG
 // ═══════════════════════════════════════════════════════════════════════
 
-import { ButtonInteraction, PermissionFlagsBits, ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
+import { ButtonInteraction, PermissionFlagsBits, ActionRowBuilder, ButtonBuilder, ButtonStyle, AttachmentBuilder } from 'discord.js';
 import { prisma } from '../../database/client';
 import { getOrCreateCharacter, computeStats, getCharacter, applyPassiveEnergyRegen } from '../services/character';
 import { buildProfileEmbed, buildProfileButtons, buildCidadeEmbed, buildCidadeButtons, buildCidadeButtons2, buildPontosEmbed, buildPontosSelect } from '../panels/profile';
@@ -16,15 +16,14 @@ import { buildGuildMenuEmbed, buildGuildMenuButtons, buildGuildInfoEmbed, buildG
 import { buildHabilidadesEmbed, buildHabilidadesButtons } from '../panels/skills';
 import { buildInventarioEmbed, buildInventarioButtons } from '../panels/inventario';
 import { errorEmbed, infoEmbed, successEmbed } from '../../utils/embeds';
-
-// ─── Router principal ──────────────────────────────────────────────────────
+import { generateProfileCard } from '../utils/profileCanvas';
+import { buildProfileSelectMenu } from '../../commands/rpg';
 
 export async function handleRpgButton(i: ButtonInteraction, action: string): Promise<void> {
   const discordId = i.user.id;
   const username  = i.user.username;
 
-  // Extrair parâmetros extras (ex: rpg:casamento_aceitar:proposalId)
-  const fullAction = i.customId.split(':').slice(1).join(':'); // tudo após prefix "rpg:"
+  const fullAction = i.customId.split(':').slice(1).join(':');
   const parts      = fullAction.split(':');
   const baseAction = parts[0];
   const param1     = parts[1];
@@ -32,15 +31,37 @@ export async function handleRpgButton(i: ButtonInteraction, action: string): Pro
   try {
     switch (baseAction) {
 
-      // ── Perfil ────────────────────────────────────────────────────────────
+      // ── Perfil (Retorna SEMPRE o Canvas + Apenas o Seletor) ─────────────────
       case 'perfil': {
         await i.deferUpdate();
         let char = await getOrCreateCharacter(discordId, username);
         char = await applyPassiveEnergyRegen(char);
         const stats = computeStats(char);
+
+        let attachment: AttachmentBuilder | null = null;
+        try {
+          const avatarUrl = i.user.displayAvatarURL({ extension: 'png', size: 256 });
+          const imageBuffer = await generateProfileCard(char, stats, avatarUrl);
+          attachment = new AttachmentBuilder(imageBuffer, { name: 'perfil.png' });
+        } catch (err) {
+          console.error('Erro ao gerar perfil Canvas no botão:', err);
+        }
+
+        const components = [buildProfileSelectMenu()];
+
+        if (!attachment) {
+          await i.editReply({
+            embeds: [buildProfileEmbed(char, stats)],
+            files: [],
+            components,
+          });
+          return;
+        }
+
         await i.editReply({
-          embeds: [buildProfileEmbed(char, stats)],
-          components: buildProfileButtons(char),
+          embeds: [],
+          files: [attachment],
+          components,
         });
         break;
       }
@@ -52,6 +73,7 @@ export async function handleRpgButton(i: ButtonInteraction, action: string): Pro
         const select = buildTravelSelect(char);
         await i.editReply({
           embeds: [buildTravelEmbed(char)],
+          files: [],
           components: select ? [select, buildTravelBackButton()] : [buildTravelBackButton()],
         });
         break;
@@ -63,7 +85,7 @@ export async function handleRpgButton(i: ButtonInteraction, action: string): Pro
         const char = await getOrCreateCharacter(discordId, username);
         const { embed, select } = await buildInventarioEmbed(char);
         const rows = select ? [select, buildInventarioButtons()] : [buildInventarioButtons()];
-        await i.editReply({ embeds: [embed], components: rows });
+        await i.editReply({ embeds: [embed], files: [], components: rows });
         break;
       }
 
@@ -74,6 +96,7 @@ export async function handleRpgButton(i: ButtonInteraction, action: string): Pro
         const stats = computeStats(char);
         await i.editReply({
           embeds: [buildPontosEmbed(char, stats)],
+          files: [],
           components: [buildPontosSelect(char.statPoints)],
         });
         break;
@@ -84,6 +107,7 @@ export async function handleRpgButton(i: ButtonInteraction, action: string): Pro
         await i.deferUpdate();
         await i.editReply({
           embeds: [buildCidadeEmbed()],
+          files: [],
           components: [buildCidadeButtons(), buildCidadeButtons2()],
         });
         break;
@@ -103,6 +127,7 @@ export async function handleRpgButton(i: ButtonInteraction, action: string): Pro
         dungeonRows.push(buildDungeonButtons(char));
         await i.editReply({
           embeds: [buildDungeonEmbed(char)],
+          files: [],
           components: dungeonRows,
         });
         break;
@@ -115,14 +140,13 @@ export async function handleRpgButton(i: ButtonInteraction, action: string): Pro
         const hasEnemies = !!select;
         await i.editReply({
           embeds: [buildHuntEmbed(char)],
+          files: [],
           components: select ? [select, buildHuntButtons(hasEnemies, char)] : [buildHuntButtons(false, char)],
         });
         break;
       }
 
-      // ── Batalha rápida aleatória ──────────────────────────────────────────
       case 'dungeon_tipo': {
-        // Dungeon+ está integrado ao painel normal de dungeon agora
         await i.deferUpdate();
         let char = await getOrCreateCharacter(discordId, username);
         char = await applyPassiveEnergyRegen(char);
@@ -133,7 +157,7 @@ export async function handleRpgButton(i: ButtonInteraction, action: string): Pro
         if (selectAlias) rowsAlias.push(selectAlias);
         if (typeSelectAlias) rowsAlias.push(typeSelectAlias);
         rowsAlias.push(buildDungeonButtons(char));
-        await i.editReply({ embeds: [buildDungeonEmbed(char)], components: rowsAlias });
+        await i.editReply({ embeds: [buildDungeonEmbed(char)], files: [], components: rowsAlias });
         break;
       }
 
@@ -141,16 +165,15 @@ export async function handleRpgButton(i: ButtonInteraction, action: string): Pro
         await i.deferUpdate();
         const char = await getOrCreateCharacter(discordId, username);
         if (char.currentHp <= 0) {
-          await i.editReply({ embeds: [errorEmbed('Sem HP', 'Você está sem HP! Vá à cidade e se cure primeiro.')], components: [] });
+          await i.editReply({ embeds: [errorEmbed('Sem HP', 'Você está sem HP! Vá à cidade e se cure primeiro.')], files: [], components: [] });
           return;
         }
         if (char.currentEnergy < 10) {
-          await i.editReply({ embeds: [errorEmbed('Sem Energia ⚡', `Você tem apenas **${char.currentEnergy}** de energia — mínimo para batalhar é **10**.\nVá à 🏰 Cidade → 🏥 Curar para restaurar energia.`)], components: [] });
+          await i.editReply({ embeds: [errorEmbed('Sem Energia ⚡', `Você tem apenas **${char.currentEnergy}** de energia — mínimo para batalhar é **10**.\nVá à 🏰 Cidade → 🏥 Curar para restaurar energia.`)], files: [], components: [] });
           return;
         }
         const { embed: battleEmbed, rows: battleRows } = await doBattleRandom(char, i.guildId ?? '');
-
-        await i.editReply({ embeds: [battleEmbed], components: battleRows });
+        await i.editReply({ embeds: [battleEmbed], files: [], components: battleRows });
         break;
       }
 
@@ -158,7 +181,7 @@ export async function handleRpgButton(i: ButtonInteraction, action: string): Pro
         await i.deferUpdate();
         const char = await getOrCreateCharacter(discordId, username);
         const { embed: battleEmbed, rows: battleRows } = await doBattleRandom(char, i.guildId ?? '', 'hunt');
-        await i.editReply({ embeds: [battleEmbed], components: battleRows });
+        await i.editReply({ embeds: [battleEmbed], files: [], components: battleRows });
         break;
       }
 
@@ -168,6 +191,7 @@ export async function handleRpgButton(i: ButtonInteraction, action: string): Pro
         if (!['attack', 'skill', 'defend', 'potion', 'flee'].includes(action)) {
           await i.editReply({
             embeds: [errorEmbed('Ação inválida', 'Essa ação de combate não existe.')],
+            files: [],
             components: [],
           });
           return;
@@ -175,29 +199,27 @@ export async function handleRpgButton(i: ButtonInteraction, action: string): Pro
         const char = await getOrCreateCharacter(discordId, username);
         try {
           const { embed, rows } = await doCombatAction(discordId, action, char);
-          await i.editReply({ embeds: [embed], components: rows });
+          await i.editReply({ embeds: [embed], files: [], components: rows });
         } catch (error) {
-          const message = error instanceof Error
-            ? error.message
-            : 'Não foi possível executar essa ação.';
+          const message = error instanceof Error ? error.message : 'Não foi possível executar essa ação.';
           await i.editReply({
             embeds: [errorEmbed('Ação não realizada', message)],
+            files: [],
             components: [],
           });
         }
         break;
       }
 
-      // ── Boss dungeon ──────────────────────────────────────────────────────
       case 'dungeon_boss': {
         await i.deferUpdate();
         const char = await getOrCreateCharacter(discordId, username);
         if (char.currentHp <= 0) {
-          await i.editReply({ embeds: [errorEmbed('Sem HP', 'Você está sem HP! Vá à cidade e se cure primeiro.')], components: [] });
+          await i.editReply({ embeds: [errorEmbed('Sem HP', 'Você está sem HP! Vá à cidade e se cure primeiro.')], files: [], components: [] });
           return;
         }
         if (char.currentEnergy < 10) {
-          await i.editReply({ embeds: [errorEmbed('Sem Energia ⚡', `Você tem apenas **${char.currentEnergy}** de energia — mínimo para batalhar é **10**.\nVá à 🏰 Cidade → 🏥 Curar para restaurar energia.`)], components: [] });
+          await i.editReply({ embeds: [errorEmbed('Sem Energia ⚡', `Você tem apenas **${char.currentEnergy}** de energia — mínimo para batalhar é **10**.\nVá à 🏰 Cidade → 🏥 Curar para restaurar energia.`)], files: [], components: [] });
           return;
         }
         const { getBossesForLocation } = await import('../constants/enemies');
@@ -205,55 +227,50 @@ export async function handleRpgButton(i: ButtonInteraction, action: string): Pro
         const loc = getLocation(char.currentLocation);
         const bosses = getBossesForLocation(loc.id).filter(b => char.level >= b.minLevel);
         if (bosses.length === 0) {
-          await i.editReply({ embeds: [errorEmbed('Sem Boss', 'Nenhum boss disponível aqui no seu nível.')] });
+          await i.editReply({ embeds: [errorEmbed('Sem Boss', 'Nenhum boss disponível aqui no seu nível.')], files: [] });
           return;
         }
         const boss = bosses[0];
         const { doBattleEnemy } = await import('../panels/dungeon');
         const { embed: bossEmbed, rows: bossRows } = await doBattleEnemy(char, boss.id, i.guildId ?? '');
-
-        await i.editReply({ embeds: [bossEmbed], components: bossRows });
+        await i.editReply({ embeds: [bossEmbed], files: [], components: bossRows });
         break;
       }
 
-      // ── Habilidades ───────────────────────────────────────────────────────
       case 'habilidades': {
         await i.deferUpdate();
         const char = await getOrCreateCharacter(discordId, username);
         const { embed, select } = buildHabilidadesEmbed(char);
         const rows = select ? [select, buildHabilidadesButtons(char)] : [buildHabilidadesButtons(char)];
-        await i.editReply({ embeds: [embed], components: rows });
+        await i.editReply({ embeds: [embed], files: [], components: rows });
         break;
       }
 
-      // ── Loja ──────────────────────────────────────────────────────────────
       case 'loja': {
         await i.deferUpdate();
         const char = await getOrCreateCharacter(discordId, username);
         await i.editReply({
           embeds: [buildShopEmbed(char)],
+          files: [],
           components: [buildShopCategorySelect(), buildShopButtons()],
         });
         break;
       }
 
-      // ── Curandeiro ────────────────────────────────────────────────────────
       case 'curandeiro': {
         await i.deferUpdate();
         const char = await getOrCreateCharacter(discordId, username);
         const stats = computeStats(char);
         const hpMissing = stats.maxHp - char.currentHp;
         const enMissing = stats.maxEnergy - char.currentEnergy;
-        // Recovery is a useful part of the loop, not a punishment that
-        // consumes the entire reward from the previous encounter.
         const cost = Math.max(5, Math.ceil(hpMissing * 0.12 + enMissing * 0.08));
 
         if (hpMissing === 0 && enMissing === 0) {
-          await i.editReply({ embeds: [infoEmbed('🏥 Curandeiro', '✅ Você já está com HP e Energia no máximo!')], components: [buildCidadeButtons(), buildCidadeButtons2()] });
+          await i.editReply({ embeds: [infoEmbed('🏥 Curandeiro', '✅ Você já está com HP e Energia no máximo!')], files: [], components: [buildCidadeButtons(), buildCidadeButtons2()] });
           return;
         }
         if (char.gold < cost) {
-          await i.editReply({ embeds: [errorEmbed('🏥 Ouro Insuficiente', `Curar custa **${cost} ouro**.\nVocê tem apenas **${char.gold} ouro**.\n\n❤️ HP faltando: **${hpMissing}** | ⚡ Energia faltando: **${enMissing}**`)], components: [buildCidadeButtons(), buildCidadeButtons2()] });
+          await i.editReply({ embeds: [errorEmbed('🏥 Ouro Insuficiente', `Curar custa **${cost} ouro**.\nVocê tem apenas **${char.gold} ouro**.\n\n❤️ HP faltando: **${hpMissing}** | ⚡ Energia faltando: **${enMissing}**`)], files: [], components: [buildCidadeButtons(), buildCidadeButtons2()] });
           return;
         }
 
@@ -262,48 +279,48 @@ export async function handleRpgButton(i: ButtonInteraction, action: string): Pro
           data: { currentHp: stats.maxHp, currentEnergy: stats.maxEnergy, gold: { decrement: cost }, lastRest: new Date() },
         });
         if (healed.count === 0) {
-          await i.editReply({ embeds: [errorEmbed('🏥 Ouro Insuficiente', `Curar custa **${cost} ouro** e seu saldo mudou. Tente novamente após conferir seu perfil.`)], components: [buildCidadeButtons(), buildCidadeButtons2()] });
+          await i.editReply({ embeds: [errorEmbed('🏥 Ouro Insuficiente', `Curar custa **${cost} ouro** e seu saldo mudou. Tente novamente após conferir seu perfil.`)], files: [], components: [buildCidadeButtons(), buildCidadeButtons2()] });
           return;
         }
 
         await i.editReply({
           embeds: [infoEmbed('🏥 Curado!', `HP e Energia restaurados por **${cost} ouro**.\n❤️ HP: **${stats.maxHp}/${stats.maxHp}** | ⚡ Energia: **${stats.maxEnergy}/${stats.maxEnergy}**`)],
+          files: [],
           components: [buildCidadeButtons(), buildCidadeButtons2()],
         });
         break;
       }
 
-      // ── Arena PvP ─────────────────────────────────────────────────────────
       case 'arena': {
         await i.deferUpdate();
         await i.editReply({
           embeds: [infoEmbed('⚔️ Arena PvP', 'Para desafiar alguém, use:\n`/rpg pvp @usuario`\n\nOu aguarde oponentes aleatórios no canal de arena.')],
+          files: [],
           components: [buildCidadeButtons(), buildCidadeButtons2()],
         });
         break;
       }
 
-      // ── Guilda ────────────────────────────────────────────────────────────
       case 'guild': {
         await i.deferUpdate();
         const char = await getOrCreateCharacter(discordId, username);
         const membership = await prisma.rpgGuildMember.findUnique({ where: { characterId: discordId } });
-        await i.editReply({ embeds: [buildGuildMenuEmbed(char)], components: [buildGuildMenuButtons(!!membership)] });
+        await i.editReply({ embeds: [buildGuildMenuEmbed(char)], files: [], components: [buildGuildMenuButtons(!!membership)] });
         break;
       }
 
       case 'guild_info': {
         await i.deferUpdate();
         const membership = await prisma.rpgGuildMember.findUnique({ where: { characterId: discordId } });
-        if (!membership) { await i.editReply({ embeds: [errorEmbed('Sem Guilda', 'Você não está em nenhuma guilda.')] }); return; }
-        await i.editReply({ embeds: [await buildGuildInfoEmbed(membership.guildId)], components: buildGuildInfoButtons(membership.role) });
+        if (!membership) { await i.editReply({ embeds: [errorEmbed('Sem Guilda', 'Você não está em nenhuma guilda.')], files: [] }); return; }
+        await i.editReply({ embeds: [await buildGuildInfoEmbed(membership.guildId)], files: [], components: buildGuildInfoButtons(membership.role) });
         break;
       }
 
       case 'guild_config': {
         const membership = await prisma.rpgGuildMember.findUnique({ where: { characterId: discordId } });
         if (!membership || (membership.role !== 'Líder' && membership.role !== 'Vice-Líder')) {
-          if (i.deferred || i.replied) await i.editReply({ embeds: [errorEmbed('Sem Permissão', 'Apenas Líder ou Vice-Líder podem configurar.')] });
+          if (i.deferred || i.replied) await i.editReply({ embeds: [errorEmbed('Sem Permissão', 'Apenas Líder ou Vice-Líder podem configurar.')], files: [] });
           else await i.reply({ embeds: [errorEmbed('Sem Permissão', 'Apenas Líder ou Vice-Líder podem configurar.')], ephemeral: true });
           return;
         }
@@ -314,7 +331,7 @@ export async function handleRpgButton(i: ButtonInteraction, action: string): Pro
       case 'guild_depositar': {
         const membership = await prisma.rpgGuildMember.findUnique({ where: { characterId: discordId } });
         if (!membership) {
-          if (i.deferred || i.replied) await i.editReply({ embeds: [errorEmbed('Sem Guilda', 'Você não está em nenhuma guilda.')] });
+          if (i.deferred || i.replied) await i.editReply({ embeds: [errorEmbed('Sem Guilda', 'Você não está em nenhuma guilda.')], files: [] });
           else await i.reply({ embeds: [errorEmbed('Sem Guilda', 'Você não está em nenhuma guilda.')], ephemeral: true });
           return;
         }
@@ -325,7 +342,7 @@ export async function handleRpgButton(i: ButtonInteraction, action: string): Pro
       case 'guild_anuncio': {
         const membership = await prisma.rpgGuildMember.findUnique({ where: { characterId: discordId } });
         if (!membership || (membership.role !== 'Líder' && membership.role !== 'Vice-Líder')) {
-          if (i.deferred || i.replied) await i.editReply({ embeds: [errorEmbed('Sem Permissão', 'Apenas Líder ou Vice-Líder podem definir o aviso.')] });
+          if (i.deferred || i.replied) await i.editReply({ embeds: [errorEmbed('Sem Permissão', 'Apenas Líder ou Vice-Líder podem definir o aviso.')], files: [] });
           else await i.reply({ embeds: [errorEmbed('Sem Permissão', 'Apenas Líder ou Vice-Líder podem definir o aviso.')], ephemeral: true });
           return;
         }
@@ -337,18 +354,17 @@ export async function handleRpgButton(i: ButtonInteraction, action: string): Pro
 
       case 'guild_buscar': {
         await i.deferUpdate();
-        await i.editReply({ embeds: [await buildGuildListEmbed()], components: [buildGuildMenuButtons(false)] });
+        await i.editReply({ embeds: [await buildGuildListEmbed()], files: [], components: [buildGuildMenuButtons(false)] });
         break;
       }
 
       case 'guild_sair': {
         await i.deferUpdate();
         const result = await leaveGuild(discordId);
-        await i.editReply({ embeds: [result.success ? successEmbed('Guilda', result.message) : errorEmbed('Erro', result.message)] });
+        await i.editReply({ embeds: [result.success ? successEmbed('Guilda', result.message) : errorEmbed('Erro', result.message)], files: [] });
         break;
       }
 
-      // ── Forja ─────────────────────────────────────────────────────────────
       case 'forja': {
         await i.deferUpdate();
         const { buildForjaEmbed } = await import('../panels/forja');
@@ -356,14 +372,11 @@ export async function handleRpgButton(i: ButtonInteraction, action: string): Pro
         const { embed, select } = buildForjaEmbed(char);
         await i.editReply({
           embeds: [embed],
+          files: [],
           components: select ? [select, buildCidadeButtons(), buildCidadeButtons2()] : [buildCidadeButtons(), buildCidadeButtons2()],
         });
         break;
       }
-
-      // ══════════════════════════════════════════════════════════════════════
-      // 🐉 BOSS MUNDIAL
-      // ══════════════════════════════════════════════════════════════════════
 
       case 'worldboss': {
         await i.deferUpdate();
@@ -375,7 +388,7 @@ export async function handleRpgButton(i: ButtonInteraction, action: string): Pro
           buildWorldBossEmbed(guildId),
           buildWorldBossButtons(guildId, isAdmin),
         ]);
-        await i.editReply({ embeds: [bossEmbed], components: bossButtons });
+        await i.editReply({ embeds: [bossEmbed], files: [], components: bossButtons });
         break;
       }
 
@@ -387,11 +400,10 @@ export async function handleRpgButton(i: ButtonInteraction, action: string): Pro
         const result = await attackWorldBoss(discordId, username, guildId);
 
         if (!result.success) {
-          await i.editReply({ embeds: [errorEmbed('Boss Mundial', result.message)] });
+          await i.editReply({ embeds: [errorEmbed('Boss Mundial', result.message)], files: [] });
           return;
         }
 
-        // Track missão de atacar boss mundial
         try {
           const { trackRpgMission } = await import('../../commands/utility/missoes');
           await trackRpgMission(discordId, guildId, 'atacar_boss_mundial', 1);
@@ -411,19 +423,17 @@ export async function handleRpgButton(i: ButtonInteraction, action: string): Pro
         );
 
         await i.followUp({ embeds: [attackResult], ephemeral: true });
-        await i.editReply({ embeds: [updatedBossEmbed], components: updatedButtons });
+        await i.editReply({ embeds: [updatedBossEmbed], files: [], components: updatedButtons });
         break;
       }
 
       case 'worldboss_spawn': {
-        // Verificar admin
         const member = i.member;
         const isAdmin = !!(member && 'permissions' in member && (member.permissions as any).has?.(PermissionFlagsBits.ManageGuild));
         if (!isAdmin) {
           await i.reply({ embeds: [errorEmbed('Sem Permissão', 'Apenas administradores podem invocar o Boss Mundial.')], ephemeral: true });
           return;
         }
-        // Mostrar seleção de template
         await i.deferUpdate();
         const { buildWorldBossSpawnSelect } = await import('../panels/worldBoss');
         const { EmbedBuilder } = await import('discord.js');
@@ -431,13 +441,9 @@ export async function handleRpgButton(i: ButtonInteraction, action: string): Pro
           .setColor(0xE74C3C)
           .setTitle('🐉 Invocar Boss Mundial — Passo 1')
           .setDescription('Escolha qual Boss Mundial deseja invocar para o servidor!');
-        await i.editReply({ embeds: [spawnEmbed], components: [buildWorldBossSpawnSelect()] });
+        await i.editReply({ embeds: [spawnEmbed], files: [], components: [buildWorldBossSpawnSelect()] });
         break;
       }
-
-      // ══════════════════════════════════════════════════════════════════════
-      // 💍 CASAMENTO
-      // ══════════════════════════════════════════════════════════════════════
 
       case 'casamento': {
         await i.deferUpdate();
@@ -446,7 +452,7 @@ export async function handleRpgButton(i: ButtonInteraction, action: string): Pro
           buildMarriageEmbed(discordId, i.client),
           buildMarriageButtons(discordId),
         ]);
-        await i.editReply({ embeds: [marriageEmbed], components: marriageButtons });
+        await i.editReply({ embeds: [marriageEmbed], files: [], components: marriageButtons });
         break;
       }
 
@@ -459,12 +465,11 @@ export async function handleRpgButton(i: ButtonInteraction, action: string): Pro
       case 'casamento_aceitar': {
         await i.deferUpdate();
         const proposalId = param1;
-        if (!proposalId) { await i.editReply({ embeds: [errorEmbed('Erro', 'ID da proposta inválido.')] }); return; }
+        if (!proposalId) { await i.editReply({ embeds: [errorEmbed('Erro', 'ID da proposta inválido.')], files: [] }); return; }
 
         const { acceptProposal } = await import('../services/marriage');
         const result = await acceptProposal(proposalId, discordId);
 
-        // Notificar via DM o proponente
         if (result.success && result.proposerId) {
           try {
             const proposerUser = await i.client.users.fetch(result.proposerId);
@@ -478,14 +483,14 @@ export async function handleRpgButton(i: ButtonInteraction, action: string): Pro
           buildMarriageButtons(discordId),
         ]);
         const feedbackEmbed = result.success ? successEmbed('💒 Casamento!', result.message) : errorEmbed('Erro', result.message);
-        await i.editReply({ embeds: [feedbackEmbed, marriageEmbed], components: marriageButtons });
+        await i.editReply({ embeds: [feedbackEmbed, marriageEmbed], files: [], components: marriageButtons });
         break;
       }
 
       case 'casamento_rejeitar': {
         await i.deferUpdate();
         const proposalId = param1;
-        if (!proposalId) { await i.editReply({ embeds: [errorEmbed('Erro', 'ID da proposta inválido.')] }); return; }
+        if (!proposalId) { await i.editReply({ embeds: [errorEmbed('Erro', 'ID da proposta inválido.')], files: [] }); return; }
 
         const { rejectProposal } = await import('../services/marriage');
         const result = await rejectProposal(proposalId, discordId);
@@ -496,7 +501,7 @@ export async function handleRpgButton(i: ButtonInteraction, action: string): Pro
           buildMarriageButtons(discordId),
         ]);
         const feedbackEmbed = result.success ? infoEmbed('💔 Proposta Recusada', result.message) : errorEmbed('Erro', result.message);
-        await i.editReply({ embeds: [feedbackEmbed, marriageEmbed], components: marriageButtons });
+        await i.editReply({ embeds: [feedbackEmbed, marriageEmbed], files: [], components: marriageButtons });
         break;
       }
 
@@ -507,7 +512,7 @@ export async function handleRpgButton(i: ButtonInteraction, action: string): Pro
           new ButtonBuilder().setCustomId('rpg:casamento_divorciar_executar').setLabel('💔 Confirmar Divórcio').setStyle(ButtonStyle.Danger),
           new ButtonBuilder().setCustomId('rpg:casamento').setLabel('❌ Cancelar').setStyle(ButtonStyle.Secondary),
         );
-        await i.editReply({ embeds: [buildDivorceConfirmEmbed()], components: [confirmRow] });
+        await i.editReply({ embeds: [buildDivorceConfirmEmbed()], files: [], components: [confirmRow] });
         break;
       }
 
@@ -522,13 +527,9 @@ export async function handleRpgButton(i: ButtonInteraction, action: string): Pro
           buildMarriageButtons(discordId),
         ]);
         const feedbackEmbed = result.success ? infoEmbed('💔 Divórcio', result.message) : errorEmbed('Erro', result.message);
-        await i.editReply({ embeds: [feedbackEmbed, marriageEmbed], components: marriageButtons });
+        await i.editReply({ embeds: [feedbackEmbed, marriageEmbed], files: [], components: marriageButtons });
         break;
       }
-
-      // ══════════════════════════════════════════════════════════════════════
-      // 📋 MISSÕES
-      // ══════════════════════════════════════════════════════════════════════
 
       case 'missoes': {
         await i.deferUpdate();
@@ -547,11 +548,10 @@ export async function handleRpgButton(i: ButtonInteraction, action: string): Pro
         ]);
 
         const missaoRows: any[] = claimSelect ? [claimSelect, buildMissoesButtons()] : [buildMissoesButtons()];
-        await i.editReply({ embeds: [missoesEmbed], components: missaoRows });
+        await i.editReply({ embeds: [missoesEmbed], files: [], components: missaoRows });
         break;
       }
 
-      // ── Estatísticas do Personagem ────────────────────────────────────────
       case 'stats': {
         await i.deferUpdate();
         const char = await getOrCreateCharacter(discordId, username);
@@ -610,6 +610,7 @@ export async function handleRpgButton(i: ButtonInteraction, action: string): Pro
 
         await i.editReply({
           embeds: [statsEmbed],
+          files: [],
           components: [new StatsAR<any>().addComponents(
             new StatsBB().setCustomId('rpg:perfil').setLabel('◀ Perfil').setStyle(StatsBS.Secondary),
             new StatsBB().setCustomId('rpg:stats').setLabel('🔄 Atualizar').setStyle(StatsBS.Secondary),
@@ -618,12 +619,11 @@ export async function handleRpgButton(i: ButtonInteraction, action: string): Pro
         break;
       }
 
-      // ── 🧘 Meditar ───────────────────────────────────────────────────────
       case 'meditar': {
         await i.deferUpdate();
         const char = await getOrCreateCharacter(discordId, username);
         const { buildMeditarEmbed, buildMeditarButtons } = await import('../panels/meditar');
-        await i.editReply({ embeds: [buildMeditarEmbed(char)], components: buildMeditarButtons(char) });
+        await i.editReply({ embeds: [buildMeditarEmbed(char)], files: [], components: buildMeditarButtons(char) });
         break;
       }
 
@@ -637,9 +637,9 @@ export async function handleRpgButton(i: ButtonInteraction, action: string): Pro
         const result = await startMeditation(char, optId);
         const updatedChar = await getOrCreateCharacter(discordId, username);
         if (!result.success) {
-          await i.editReply({ embeds: [errorEmbed('Meditação', result.message)], components: buildMeditarButtons(char) });
+          await i.editReply({ embeds: [errorEmbed('Meditação', result.message)], files: [], components: buildMeditarButtons(char) });
         } else {
-          await i.editReply({ embeds: [buildMeditarEmbed(updatedChar)], components: buildMeditarButtons(updatedChar) });
+          await i.editReply({ embeds: [buildMeditarEmbed(updatedChar)], files: [], components: buildMeditarButtons(updatedChar) });
         }
         break;
       }
@@ -650,7 +650,7 @@ export async function handleRpgButton(i: ButtonInteraction, action: string): Pro
         const { collectMeditation, buildMeditarEmbed, buildMeditarButtons } = await import('../panels/meditar');
         const result = await collectMeditation(char);
         if (!result.success) {
-          await i.editReply({ embeds: [errorEmbed('Meditação', result.message)] });
+          await i.editReply({ embeds: [errorEmbed('Meditação', result.message)], files: [] });
         } else {
           const updatedChar = await getOrCreateCharacter(discordId, username);
           const parts = [`❤️ +${result.hpGained} HP`, `⚡ +${result.energyGained} Energia`];
@@ -658,12 +658,11 @@ export async function handleRpgButton(i: ButtonInteraction, action: string): Pro
           const resultEmbed = new (await import('discord.js')).EmbedBuilder()
             .setColor(0x9B59B6).setTitle('🧘 Meditação Concluída!')
             .setDescription(parts.join(' | '));
-          await i.editReply({ embeds: [resultEmbed, buildMeditarEmbed(updatedChar)], components: buildMeditarButtons(updatedChar) });
+          await i.editReply({ embeds: [resultEmbed, buildMeditarEmbed(updatedChar)], files: [], components: buildMeditarButtons(updatedChar) });
         }
         break;
       }
 
-      // ── 🥊 Treinar ────────────────────────────────────────────────────────
       case 'treinar': {
         await i.deferUpdate();
         const char = await getOrCreateCharacter(discordId, username);
@@ -671,16 +670,15 @@ export async function handleRpgButton(i: ButtonInteraction, action: string): Pro
         const lastTrain = char.lastTrain;
         const onCd = lastTrain && (Date.now() - lastTrain.getTime()) < 20 * 60 * 1000;
         const embed = await buildTreinarEmbed(char);
-        await i.editReply({ embeds: [embed], components: [buildTreinarSelect(!!onCd), buildTreinarButtons()] });
+        await i.editReply({ embeds: [embed], files: [], components: [buildTreinarSelect(!!onCd), buildTreinarButtons()] });
         break;
       }
 
-      // ── 🍺 Taverna ────────────────────────────────────────────────────────
       case 'taverna': {
         await i.deferUpdate();
         const char = await getOrCreateCharacter(discordId, username);
         const { buildTavernaEmbed, buildTavernaMenuSelect, buildTavernaButtons } = await import('../panels/taverna');
-        await i.editReply({ embeds: [await buildTavernaEmbed(char)], components: [buildTavernaMenuSelect(), buildTavernaButtons()] });
+        await i.editReply({ embeds: [await buildTavernaEmbed(char)], files: [], components: [buildTavernaMenuSelect(), buildTavernaButtons()] });
         break;
       }
 
@@ -689,11 +687,10 @@ export async function handleRpgButton(i: ButtonInteraction, action: string): Pro
         const char = await getOrCreateCharacter(discordId, username);
         const { rollTavernaDice, buildTavernaButtons } = await import('../panels/taverna');
         const { embed } = await rollTavernaDice(char);
-        await i.editReply({ embeds: [embed], components: [buildTavernaButtons()] });
+        await i.editReply({ embeds: [embed], files: [], components: [buildTavernaButtons()] });
         break;
       }
 
-      // ── 🎣 Pescaria ───────────────────────────────────────────────────────
       case 'pescaria': {
         await i.deferUpdate();
         const char = await getOrCreateCharacter(discordId, username);
@@ -703,6 +700,7 @@ export async function handleRpgButton(i: ButtonInteraction, action: string): Pro
         const isReady = !!(session && session.reelableAt <= new Date());
         await i.editReply({
           embeds: [await buildPescariaEmbed(char)],
+          files: [],
           components: buildPescariaButtons(char, !!session, isReady),
         });
         break;
@@ -714,13 +712,14 @@ export async function handleRpgButton(i: ButtonInteraction, action: string): Pro
         const { castFishingLine, buildPescariaEmbed, buildPescariaButtons } = await import('../panels/pescaria');
         const result = await castFishingLine(char);
         if (!result.success) {
-          await i.editReply({ embeds: [errorEmbed('Pesca', result.message)] });
+          await i.editReply({ embeds: [errorEmbed('Pesca', result.message)], files: [] });
         } else {
           const updatedChar = await getOrCreateCharacter(discordId, username);
           const { prisma: db } = await import('../../database/client');
           const session = await db.rpgFishingSession.findUnique({ where: { discordId } });
           await i.editReply({
             embeds: [await buildPescariaEmbed(updatedChar)],
+            files: [],
             components: buildPescariaButtons(updatedChar, !!session, false),
           });
         }
@@ -733,25 +732,25 @@ export async function handleRpgButton(i: ButtonInteraction, action: string): Pro
         const { reelFishingLine, buildPescariaEmbed, buildPescariaButtons } = await import('../panels/pescaria');
         const result = await reelFishingLine(char);
         if (!result.success) {
-          await i.editReply({ embeds: [errorEmbed('Pesca', result.message!)] });
+          await i.editReply({ embeds: [errorEmbed('Pesca', result.message!)], files: [] });
         } else {
           const updatedChar = await getOrCreateCharacter(discordId, username);
           await i.editReply({
             embeds: [result.embed!],
+            files: [],
             components: buildPescariaButtons(updatedChar, false, false),
           });
         }
         break;
       }
 
-      // ── 🌍 Exploração ─────────────────────────────────────────────────────
       case 'exploracao': {
         await i.deferUpdate();
         const char = await getOrCreateCharacter(discordId, username);
         const { buildExploracaoEmbed, buildExploracaoButtons } = await import('../panels/exploracao');
         const lastExplore = char.lastExplore;
         const onCd = !!(lastExplore && (Date.now() - lastExplore.getTime()) < 3 * 60 * 1000);
-        await i.editReply({ embeds: [await buildExploracaoEmbed(char)], components: buildExploracaoButtons(onCd) });
+        await i.editReply({ embeds: [await buildExploracaoEmbed(char)], files: [], components: buildExploracaoButtons(onCd) });
         break;
       }
 
@@ -761,14 +760,13 @@ export async function handleRpgButton(i: ButtonInteraction, action: string): Pro
         const { doExplore, buildExploracaoEmbed, buildExploracaoButtons } = await import('../panels/exploracao');
         const result = await doExplore(char);
         if (!result.success) {
-          await i.editReply({ embeds: [errorEmbed('Exploração', result.message!)] });
+          await i.editReply({ embeds: [errorEmbed('Exploração', result.message!)], files: [] });
         } else {
-          await i.editReply({ embeds: [result.embed!], components: buildExploracaoButtons(true) });
+          await i.editReply({ embeds: [result.embed!], files: [], components: buildExploracaoButtons(true) });
         }
         break;
       }
 
-      // ── 🌎 Eventos de Mundo ───────────────────────────────────────────────
       case 'eventos': {
         await i.deferUpdate();
         const guildId = i.guildId ?? '';
@@ -778,32 +776,32 @@ export async function handleRpgButton(i: ButtonInteraction, action: string): Pro
         const isOwner = isBotOwner(discordId);
         const embed = await buildWorldEventsEmbed(guildId);
         const btns = buildWorldEventsButtons(guildId, isOwner, !!active, active?.eventType);
-        await i.editReply({ embeds: [embed], components: btns });
+        await i.editReply({ embeds: [embed], files: [], components: btns });
         break;
       }
 
       case 'evento_iniciar': {
         await i.deferUpdate();
         const { isBotOwner: isBotOwnerEvt } = await import('../../utils/allowlist');
-        if (!isBotOwnerEvt(discordId)) { await i.editReply({ embeds: [errorEmbed('Acesso Negado', 'Apenas donos do bot podem iniciar eventos de mundo.')] }); break; }
+        if (!isBotOwnerEvt(discordId)) { await i.editReply({ embeds: [errorEmbed('Acesso Negado', 'Apenas donos do bot podem iniciar eventos de mundo.')], files: [] }); break; }
         const { buildEventStartSelect, buildWorldEventsEmbed } = await import('../panels/world-events');
         const guildId = i.guildId ?? '';
         const embed = await buildWorldEventsEmbed(guildId);
-        await i.editReply({ embeds: [embed], components: [buildEventStartSelect()] });
+        await i.editReply({ embeds: [embed], files: [], components: [buildEventStartSelect()] });
         break;
       }
 
       case 'evento_atacar_boss': {
         await i.deferUpdate();
         const char = await getOrCreateCharacter(discordId, username);
-        if (char.currentHp <= 0) { await i.editReply({ embeds: [errorEmbed('Sem HP', 'Cure-se antes de atacar o boss!')] }); break; }
-        if (char.currentEnergy < 10) { await i.editReply({ embeds: [errorEmbed('Sem Energia', 'Precisa de 10⚡ para atacar!')] }); break; }
+        if (char.currentHp <= 0) { await i.editReply({ embeds: [errorEmbed('Sem HP', 'Cure-se antes de atacar o boss!')], files: [] }); break; }
+        if (char.currentEnergy < 10) { await i.editReply({ embeds: [errorEmbed('Sem Energia', 'Precisa de 10⚡ para atacar!')], files: [] }); break; }
         const { damageWorldBoss, buildWorldEventsEmbed, buildWorldEventsButtons, getActiveWorldEvent } = await import('../panels/world-events');
         const { isBotOwner: isBotOwnerBoss } = await import('../../utils/allowlist');
         const guildId = i.guildId ?? '';
         const activeCheck = await getActiveWorldEvent(guildId);
         if (!activeCheck || activeCheck.eventType !== 'world_boss') {
-          await i.editReply({ embeds: [errorEmbed('Sem Boss', 'Não há um Boss Apocalíptico ativo no momento!')] });
+          await i.editReply({ embeds: [errorEmbed('Sem Boss', 'Não há um Boss Apocalíptico ativo no momento!')], files: [] });
           break;
         }
         const stats = computeStats(char);
@@ -816,11 +814,10 @@ export async function handleRpgButton(i: ButtonInteraction, action: string): Pro
         const fb = result.killed
           ? (await import('../../utils/embeds')).successEmbed('💀 Boss Derrotado!', result.message)
           : (await import('../../utils/embeds')).infoEmbed('⚔️ Ataque', result.message);
-        await i.editReply({ embeds: [fb, embed], components: btns });
+        await i.editReply({ embeds: [fb, embed], files: [], components: btns });
         break;
       }
 
-      // ── 📜 Missões de Classe ──────────────────────────────────────────────
       case 'missoes_classe': {
         await i.deferUpdate();
         const char = await getOrCreateCharacter(discordId, username);
@@ -828,29 +825,28 @@ export async function handleRpgButton(i: ButtonInteraction, action: string): Pro
         const embed = await buildClassMissionsEmbed(char);
         const claimSel = await buildClassMissionsClaimSelect(discordId);
         const rows: any[] = claimSel ? [claimSel, buildClassMissionsButtons()] : [buildClassMissionsButtons()];
-        await i.editReply({ embeds: [embed], components: rows });
+        await i.editReply({ embeds: [embed], files: [], components: rows });
         break;
       }
 
-      // ── ⚔️ Dungeon por tipo ────────────────────────────────────────────────
       case 'dungeon_tipo': {
         await i.deferUpdate();
         const char = await getOrCreateCharacter(discordId, username);
         const { buildDungeonTypeEmbed, buildDungeonTypeSelect, buildDungeonTypeButtons } = await import('../panels/dungeon-tipo');
-        await i.editReply({ embeds: [buildDungeonTypeEmbed(char)], components: [buildDungeonTypeSelect(char), buildDungeonTypeButtons()] });
+        await i.editReply({ embeds: [buildDungeonTypeEmbed(char)], files: [], components: [buildDungeonTypeSelect(char), buildDungeonTypeButtons()] });
         break;
       }
 
       default:
         if (i.deferred || i.replied) {
-          await i.editReply({ embeds: [errorEmbed('Ação desconhecida', `Ação RPG \`${baseAction}\` não encontrada.`)] });
+          await i.editReply({ embeds: [errorEmbed('Ação desconhecida', `Ação RPG \`${baseAction}\` não encontrada.`)], files: [] });
         } else {
           await i.reply({ embeds: [errorEmbed('Ação desconhecida', `Ação RPG \`${baseAction}\` não encontrada.`)], ephemeral: true });
         }
     }
   } catch (err) {
     console.error(`[RPG Button Error] action=${baseAction}`, err);
-    const errMsg = { embeds: [errorEmbed('Erro RPG', 'Ocorreu um erro. Tente novamente.')] };
+    const errMsg = { embeds: [errorEmbed('Erro RPG', 'Ocorreu um erro. Tente novamente.')], files: [] };
     if (i.replied) await i.followUp({ ...errMsg, ephemeral: true }).catch(() => null);
     else if (i.deferred) await i.editReply(errMsg).catch(() => null);
     else await i.reply({ ...errMsg, ephemeral: true }).catch(() => null);

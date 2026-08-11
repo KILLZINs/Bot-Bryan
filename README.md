@@ -1,4 +1,4 @@
-É um bot feito no github por mim, mas deixo claro que foi utilizado para assistência inteligencia artificial em:
+É um bot feito no VScode por mim, mas deixo claro que foi utilizado para assistência inteligencia artificial em:
 - encontrar e identificar erros no código
 - desenvolver imagens usando @napi-rs/canvas
 No entanto o código foi digitado inteiramente por mim, sendo apenas orientado a corrigir erros pela i.a

@@ -2,7 +2,7 @@
 // HANDLER DE SELECT MENUS RPG
 // ═══════════════════════════════════════════════════════════════════════
 
-import { StringSelectMenuInteraction, AttachmentBuilder, ActionRowBuilder } from 'discord.js';
+import { StringSelectMenuInteraction, AttachmentBuilder, ActionRowBuilder, EmbedBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
 import { getOrCreateCharacter, computeStats, distributeStatPoints, applyPassiveEnergyRegen } from '../services/character';
 import { travelTo } from '../panels/travel';
 import { buildProfileEmbed } from '../panels/profile';
@@ -16,7 +16,7 @@ import { craftItem } from '../panels/forja';
 import { prisma } from '../../database/client';
 import { errorEmbed, successEmbed } from '../../utils/embeds';
 import { generateProfileCard } from '../utils/profileCanvas';
-import { buildProfileSelectMenu } from '../../commands/rpg';
+import { buildProfileSelectMenu, buildAtividadesSelectMenu } from '../../commands/rpg';
 
 export async function handleRpgSelect(i: StringSelectMenuInteraction, action: string): Promise<void> {
   const discordId = i.user.id;
@@ -44,7 +44,7 @@ export async function handleRpgSelect(i: StringSelectMenuInteraction, action: st
 
     switch (action) {
 
-      // ── Seletor do Perfil RPG (Navegação do Hub) ─────────────────────────
+      // ── Seletor do Perfil RPG (Hub Principal) ───────────────────────────
       case 'menu_perfil': {
         await i.deferUpdate();
         const option = i.values[0];
@@ -68,51 +68,57 @@ export async function handleRpgSelect(i: StringSelectMenuInteraction, action: st
           return;
         }
 
-        if (option === 'explorar') {
-          try {
-            const cacadaModule: any = await import('../panels/dungeon');
-            await i.editReply({
-              embeds: [buildDungeonEmbed(char)],
-              files: [],
-              components: [buildDungeonButtons(char)],
-            });
-          } catch {
-            await i.editReply({ embeds: [errorEmbed('Caçada', 'Modo de caçada temporariamente indisponível.')] });
-          }
-          return;
-        }
+        if (option === 'atividades') {
+          const embedAtividades = new EmbedBuilder()
+            .setColor(0x3498DB)
+            .setTitle('🎯 Central de Atividades do Aventureiro')
+            .setDescription('Escolha qual atividade deseja realizar agora no reino:')
+            .addFields(
+              { name: '🔍 Caçada & Explorar', value: 'Batalhe contra monstros e encontre recursos na área.', inline: true },
+              { name: '🥊 Treinar', value: 'Fortaleça seus atributos físicos e mágicos.', inline: true },
+              { name: '🎣 Pescaria', value: 'Pesque peixes valiosos e itens raros no lago.', inline: true },
+              { name: '🧘 Meditar', value: 'Descanse para restaurar HP e Energia.', inline: true },
+              { name: '🍺 Taverna', value: 'Consuma comidas e bebidas de suporte.', inline: true },
+            )
+            .setFooter({ text: '⚔️ Aliança Skyline RPG — Atividades' });
 
-        if (option === 'treinar') {
-          const { buildTreinarEmbed, buildTreinarSelect, buildTreinarButtons } = await import('../panels/treinar');
-          const lastTrain = char.lastTrain;
-          const onCd = !!(lastTrain && (Date.now() - lastTrain.getTime()) < 20 * 60 * 1000);
+          const backButton = new ActionRowBuilder<ButtonBuilder>().addComponents(
+            new ButtonBuilder().setCustomId('rpg:perfil').setLabel('◀ Voltar ao Perfil').setStyle(ButtonStyle.Secondary)
+          );
+
           await i.editReply({
-            embeds: [await buildTreinarEmbed(char)],
+            embeds: [embedAtividades],
             files: [],
-            components: [buildTreinarSelect(onCd), buildTreinarButtons()],
+            components: [buildAtividadesSelectMenu(), backButton],
           });
           return;
         }
 
-        if (option === 'pescar') {
-          try {
-            const { buildCidadeEmbed } = await import('../panels/profile');
-            await i.editReply({ embeds: [buildCidadeEmbed()] });
-          } catch {
-            await i.editReply({ embeds: [errorEmbed('Pesca', 'Acesse a vila ou cidade para pescar.')] });
-          }
+        if (option === 'viajar') {
+          const select = buildTravelSelect(char);
+          await i.editReply({
+            embeds: [buildTravelEmbed(char)],
+            files: [],
+            components: select ? [select, buildTravelBackButton()] : [buildTravelBackButton()],
+          });
           return;
         }
 
-        if (option === 'meditar') {
-          const meditarModule: any = await import('../panels/meditar');
-          const embed = meditarModule.buildMeditarEmbed ? await meditarModule.buildMeditarEmbed(char) : buildProfileEmbed(char, stats);
-          const rawBtns = meditarModule.buildMeditarButtons ? meditarModule.buildMeditarButtons(char) : [];
-          const components = Array.isArray(rawBtns) ? rawBtns : [rawBtns];
+        if (option === 'pvp') {
+          const embedPvp = new EmbedBuilder()
+            .setColor(0xE74C3C)
+            .setTitle('⚔️ Arena de Batalha PvP')
+            .setDescription('Para desafiar outro jogador em tempo real no servidor, utilize o comando:\n\n`/rpg pvp alvo:@jogador`')
+            .setFooter({ text: '⚔️ Aliança Skyline RPG — PvP' });
+
+          const backButton = new ActionRowBuilder<ButtonBuilder>().addComponents(
+            new ButtonBuilder().setCustomId('rpg:perfil').setLabel('◀ Voltar ao Perfil').setStyle(ButtonStyle.Secondary)
+          );
+
           await i.editReply({
-            embeds: [embed],
+            embeds: [embedPvp],
             files: [],
-            components: components.filter(Boolean),
+            components: [backButton],
           });
           return;
         }
@@ -204,6 +210,67 @@ export async function handleRpgSelect(i: StringSelectMenuInteraction, action: st
           files: attachment ? [attachment] : [],
           components,
         });
+        break;
+      }
+
+      // ── Submenu de Atividades ─────────────────────────────────────────────
+      case 'menu_atividades': {
+        await i.deferUpdate();
+        const option = i.values[0];
+        let char = await getOrCreateCharacter(discordId, username);
+
+        if (option === 'explorar') {
+          const { buildCaçadaEmbed, buildCaçadaSelect, buildCaçadaButtons } = await import('../panels/cacada');
+          const select = await buildCaçadaSelect(char);
+          await i.editReply({
+            embeds: [await buildCaçadaEmbed(char)],
+            files: [],
+            components: select ? [select, buildCaçadaButtons()] : [buildCaçadaButtons()],
+          });
+          return;
+        }
+
+        if (option === 'treinar') {
+          const { buildTreinarEmbed, buildTreinarSelect, buildTreinarButtons } = await import('../panels/treinar');
+          const lastTrain = char.lastTrain;
+          const onCd = !!(lastTrain && (Date.now() - lastTrain.getTime()) < 20 * 60 * 1000);
+          await i.editReply({
+            embeds: [await buildTreinarEmbed(char)],
+            files: [],
+            components: [buildTreinarSelect(onCd), buildTreinarButtons()],
+          });
+          return;
+        }
+
+        if (option === 'pescar') {
+          const { buildPescaEmbed, buildPescaButtons } = await import('../panels/pesca');
+          await i.editReply({
+            embeds: [await buildPescaEmbed(char)],
+            files: [],
+            components: [buildPescaButtons(char)],
+          });
+          return;
+        }
+
+        if (option === 'meditar') {
+          const { buildMeditarEmbed, buildMeditarButtons } = await import('../panels/meditar');
+          await i.editReply({
+            embeds: [await buildMeditarEmbed(char)],
+            files: [],
+            components: [buildMeditarButtons(char)],
+          });
+          return;
+        }
+
+        if (option === 'taverna') {
+          const { buildTavernaEmbed, buildTavernaMenuSelect, buildTavernaButtons } = await import('../panels/taverna');
+          await i.editReply({
+            embeds: [await buildTavernaEmbed(char)],
+            files: [],
+            components: [buildTavernaMenuSelect(), buildTavernaButtons()],
+          });
+          return;
+        }
         break;
       }
 
@@ -310,7 +377,6 @@ export async function handleRpgSelect(i: StringSelectMenuInteraction, action: st
         }
         const { getItem } = await import('../constants/items');
         const item = getItem(itemId);
-        const { EmbedBuilder } = await import('discord.js');
         await i.editReply({
           embeds: [new EmbedBuilder().setColor(0x3498DB).setTitle(`${item?.emoji ?? '❓'} ${item?.name ?? itemId}`).setDescription(item?.description ?? '').addFields(
             { name: '📊 Raridade', value: item?.rarity ?? '-', inline: true },
@@ -431,7 +497,6 @@ export async function handleRpgSelect(i: StringSelectMenuInteraction, action: st
         const templateIndex = parseInt(i.values[0], 10);
         const { buildWorldBossLevelSelect } = await import('../panels/worldBoss');
         const { WORLD_BOSS_TEMPLATES } = await import('../services/worldBoss');
-        const { EmbedBuilder } = await import('discord.js');
         const template = WORLD_BOSS_TEMPLATES[templateIndex];
         const step2Embed = new EmbedBuilder()
           .setColor(0xE74C3C)
@@ -511,7 +576,7 @@ export async function handleRpgSelect(i: StringSelectMenuInteraction, action: st
         const char = await getOrCreateCharacter(discordId, username);
         if (char.currentHp <= 0) { await i.editReply({ embeds: [errorEmbed('Sem HP', 'Cure-se antes de entrar na dungeon.')] }); break; }
         if (char.currentEnergy < 12) { await i.editReply({ embeds: [errorEmbed('Sem Energia ⚡', `Precisa de **12⚡** para entrar nesta dungeon. Você tem **${char.currentEnergy}⚡**.`)] }); break; }
-        const { doBattleWithType, buildDungeonTypeEmbed, buildDungeonTypeSelect, buildDungeonTypeButtons } = await import('../panels/dungeon-tipo');
+        const { doBattleWithType } = await import('../panels/dungeon-tipo');
         const { embed, rows } = await doBattleWithType(char, i.values[0], true, undefined, i.guildId ?? '');
         await i.editReply({ embeds: [embed], components: rows });
         break;

@@ -14,51 +14,69 @@ export async function generateRpgProfile(data: any, _extraParam?: any): Promise<
   const canvas = createCanvas(width, height);
   const ctx = canvas.getContext('2d');
 
-  // --- TRATAMENTO DOS DADOS (Compatibilidade com Prisma/Embed antigos) ---
-  const name = data.username || data.name || 'Aventureiro';
-  const rClass = data.class || 'Aventureiro';
+  // --- TRATAMENTO E MAPEAMENTO COMPLETO DE DADOS ---
+  const name = data.username || data.name || data.user?.username || 'Aventureiro';
+  const rClass = data.class || data.className || 'Aventureiro';
   const level = data.level ?? 1;
   const karma = data.karma || 'Neutro';
   const gen = data.generation ?? 1;
-  const location = data.locationName || data.location || 'Cavernas Sombrias (Noite)';
-  
-  // Status
+  const location = data.locationName || data.location || 'Cavernas Sombrias';
+
+  // Status Vitalidade & Recursos
   const currentHp = data.currentHp ?? data.hp?.current ?? 100;
   const maxHp = data.maxHp ?? data.hp?.max ?? 100;
-  const currentEnergy = data.currentEnergy ?? data.energy?.current ?? 100;
+  const currentEnergy = data.currentEnergy ?? data.energy ?? data.energy?.current ?? 100;
   const maxEnergy = data.maxEnergy ?? data.energy?.max ?? 100;
   const currentXp = data.xp ?? 0;
-  const maxXp = data.maxXp ?? 1000;
+  const maxXp = data.maxXp ?? (level * 1000);
 
-  // Atributos
+  // Atributos de Combate
   const str = data.str ?? data.attributes?.str ?? 10;
   const agi = data.agi ?? data.attributes?.agi ?? 10;
   const intVal = data.int ?? data.attributes?.int ?? 10;
   const vit = data.vit ?? data.attributes?.vit ?? 10;
   const sor = data.sor ?? data.attributes?.sor ?? 10;
 
-  // Combate
-  const atk = data.attack ?? (str * 2 + agi);
-  const def = data.defense ?? (vit * 2);
-  const crit = data.critChance ?? 15.0;
-  const dodge = data.dodgeChance ?? 5.0;
-  const power = data.combatPower ?? (atk + def * 1.5);
+  // Cálculos Derivados (caso não venham prontos)
+  const atk = data.attack ?? data.atk ?? (str * 2 + agi);
+  const def = data.defense ?? data.def ?? (vit * 2);
+  const crit = data.critChance ?? data.crit ?? 15.0;
+  const dodge = data.dodgeChance ?? data.dodge ?? 5.0;
+  const power = data.combatPower ?? data.power ?? (atk + def * 1.5);
 
   // Histórico & Recursos
   const gold = data.gold ?? 0;
-  const wins = data.wins ?? 0;
-  const deaths = data.deaths ?? 0;
-  const pvp = data.pvpRecord || '0W/0L';
-  const bosses = data.bossesKilled ?? 0;
+  const wins = data.wins ?? data.battlesWon ?? 0;
+  const deaths = data.deaths ?? data.battlesLost ?? 0;
+  const pvp = data.pvpRecord || `${data.pvpWins || 0}W/${data.pvpLoses || 0}L`;
+  const bosses = data.bossesKilled ?? data.bossKills ?? 0;
 
-  // Equipamentos e Habilidade
-  const eq = data.equipment || data.equipments || {};
-  const skill = data.divineSkill || { name: 'Nenhuma', rank: 'F', desc: 'Sem habilidade equipada.' };
-  const avatarUrl = data.avatarUrl || '';
+  // Equipamentos (Suporte a URLs diretas ou Objetos de Itens)
+  const rawEq = data.equipment || data.equipments || {};
+  const resolveIcon = (slotKey: string) => {
+    const item = rawEq[slotKey] || data[`equipped${slotKey.charAt(0).toUpperCase() + slotKey.slice(1)}`];
+    if (!item) return null;
+    if (typeof item === 'string') return item;
+    return item.iconUrl || item.icon || item.imageUrl || null;
+  };
 
-  // --- RENDERIZAÇÃO VISUAL ---
+  const eq = {
+    head: resolveIcon('head') || resolveIcon('elmo'),
+    chest: resolveIcon('chest') || resolveIcon('armor') || resolveIcon('peito'),
+    gloves: resolveIcon('gloves') || resolveIcon('luva'),
+    legs: resolveIcon('legs') || resolveIcon('calca'),
+    boots: resolveIcon('boots') || resolveIcon('bota'),
+    weapon: resolveIcon('weapon') || resolveIcon('arma'),
+    shield: resolveIcon('shield') || resolveIcon('escudo'),
+    ring: resolveIcon('ring') || resolveIcon('anel'),
+    backpack: resolveIcon('backpack') || resolveIcon('mochila'),
+    pet: resolveIcon('pet')
+  };
 
-  // 1. Fundo
+  const skill = data.divineSkill || data.skill || { name: 'Nenhuma', rank: 'F', desc: 'Sem habilidade equipada.' };
+  const avatarUrl = data.avatarUrl || data.user?.displayAvatarURL?.() || '';
+
+  // --- RENDERIZAÇÃO ---
   ctx.fillStyle = '#120f0d';
   ctx.fillRect(0, 0, width, height);
 
@@ -70,7 +88,7 @@ export async function generateRpgProfile(data: any, _extraParam?: any): Promise<
   ctx.fill();
   ctx.stroke();
 
-  // 2. PAINEL ESQUERDO: INFOS DO HERÓI & BARRAS
+  // Painel Esquerdo
   ctx.fillStyle = '#f0e3ce';
   ctx.font = 'bold 20px "InterFont", sans-serif';
   ctx.fillText(`${name.toUpperCase()}`, 30, 42);
@@ -98,7 +116,6 @@ export async function generateRpgProfile(data: any, _extraParam?: any): Promise<
   drawBar(133, 'HP', currentHp, maxHp, '#b82e2e');
   drawBar(161, 'ENERGIA', currentEnergy, maxEnergy, '#d19326');
 
-  // Divisória Esquerda
   ctx.strokeStyle = '#382b1d';
   ctx.lineWidth = 1;
   ctx.beginPath();
@@ -106,7 +123,6 @@ export async function generateRpgProfile(data: any, _extraParam?: any): Promise<
   ctx.lineTo(240, 185);
   ctx.stroke();
 
-  // Atributos de Combate
   ctx.fillStyle = '#f0e3ce';
   ctx.font = 'bold 13px "InterFont", sans-serif';
   ctx.fillText('ATRIBUTOS DE COMBATE', 30, 205);
@@ -116,16 +132,14 @@ export async function generateRpgProfile(data: any, _extraParam?: any): Promise<
   ctx.fillText(`FOR: ${str}  AGI: ${agi}  INT: ${intVal}`, 30, 225);
   ctx.fillText(`VIT: ${vit}  SOR: ${sor}`, 30, 242);
 
-  // Status de Ataque/Defesa
   ctx.fillStyle = '#e6caa3';
   ctx.fillText(`⚔️ Ataque: ${atk}   🛡️ Defesa: ${def}`, 30, 270);
   ctx.fillText(`💥 Crítico: ${crit}%   💨 Esquiva: ${dodge}%`, 30, 288);
 
-  // 3. CENTRO: PAPERDOLL COMPLETO COM TODOS OS SLOTS
+  // Centro (Paperdoll)
   const centerX = 450;
   const centerY = 270;
 
-  // Avatar no Centro
   if (avatarUrl) {
     try {
       const avatar = await loadImage(avatarUrl);
@@ -147,16 +161,13 @@ export async function generateRpgProfile(data: any, _extraParam?: any): Promise<
     }
   }
 
-  // Lista Completa de Equipamentos (10 Slots do Paperdoll)
   const slotsCoords = [
-    // Lado Esquerdo
     { key: 'head', label: 'Elmo', x: centerX - 140, y: centerY - 140 },
     { key: 'chest', label: 'Peito', x: centerX - 140, y: centerY - 75 },
     { key: 'gloves', label: 'Luva', x: centerX - 140, y: centerY - 10 },
     { key: 'legs', label: 'Calça', x: centerX - 140, y: centerY + 55 },
     { key: 'boots', label: 'Bota', x: centerX - 140, y: centerY + 120 },
 
-    // Lado Direito
     { key: 'weapon', label: 'Arma', x: centerX + 90, y: centerY - 140 },
     { key: 'shield', label: 'Escudo', x: centerX + 90, y: centerY - 75 },
     { key: 'ring', label: 'Anel', x: centerX + 90, y: centerY - 10 },
@@ -164,7 +175,6 @@ export async function generateRpgProfile(data: any, _extraParam?: any): Promise<
     { key: 'pet', label: 'Pet', x: centerX + 90, y: centerY + 120 }
   ];
 
-  // Linhas Conectoras do Avatar aos Slots
   ctx.strokeStyle = '#382b1d';
   ctx.lineWidth = 1.5;
   for (const s of slotsCoords) {
@@ -174,7 +184,6 @@ export async function generateRpgProfile(data: any, _extraParam?: any): Promise<
     ctx.stroke();
   }
 
-  // Renderizar Caixas e Itens
   for (const slot of slotsCoords) {
     ctx.fillStyle = '#080605';
     ctx.strokeStyle = '#523f2b';
@@ -184,8 +193,7 @@ export async function generateRpgProfile(data: any, _extraParam?: any): Promise<
     ctx.fill();
     ctx.stroke();
 
-    const itemData = eq[slot.key];
-    const itemUrl = typeof itemData === 'string' ? itemData : itemData?.iconUrl;
+    const itemUrl = eq[slot.key as keyof typeof eq];
 
     if (itemUrl) {
       try {
@@ -205,16 +213,13 @@ export async function generateRpgProfile(data: any, _extraParam?: any): Promise<
     }
   }
 
-  // 4. PAINEL DIREITO: HABILIDADES, BATALHAS E RECURSOS
+  // Painel Direito
   const rightX = 660;
-
-  // Poder de Combate & Ouro
   ctx.fillStyle = '#f0e3ce';
   ctx.font = 'bold 14px "InterFont", sans-serif';
   ctx.fillText(`⚔️ Poder: #${power}`, rightX, 42);
   ctx.fillText(`🪙 Ouro: ${gold.toLocaleString('pt-BR')} G`, rightX, 65);
 
-  // Divisória Direita
   ctx.strokeStyle = '#382b1d';
   ctx.lineWidth = 1;
   ctx.beginPath();
@@ -222,7 +227,6 @@ export async function generateRpgProfile(data: any, _extraParam?: any): Promise<
   ctx.lineTo(width - 30, 82);
   ctx.stroke();
 
-  // Habilidade Divina
   ctx.fillStyle = '#f0e3ce';
   ctx.font = 'bold 13px "InterFont", sans-serif';
   ctx.fillText('✨ HABILIDADE DIVINA', rightX, 105);
@@ -231,16 +235,14 @@ export async function generateRpgProfile(data: any, _extraParam?: any): Promise<
   ctx.font = 'bold 12px "InterFont", sans-serif';
   ctx.fillText(`${skill.name || 'Nenhuma'} [Rank ${skill.rank || 'F'}]`, rightX, 125);
 
-  // Quebra de linha da descrição
   ctx.fillStyle = '#a88967';
   ctx.font = '10px "InterFont", sans-serif';
-  const desc = skill.desc || 'Sem descrição.';
+  const desc = skill.desc || skill.description || 'Sem descrição.';
   ctx.fillText(desc.substring(0, 35), rightX, 143);
   if (desc.length > 35) {
     ctx.fillText(desc.substring(35, 70) + '...', rightX, 156);
   }
 
-  // Histórico de Batalhas
   ctx.fillStyle = '#f0e3ce';
   ctx.font = 'bold 13px "InterFont", sans-serif';
   ctx.fillText('📈 HISTÓRICO DE BATALHAS', rightX, 195);

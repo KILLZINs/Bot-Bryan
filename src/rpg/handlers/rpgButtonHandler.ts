@@ -22,6 +22,7 @@ import { buildProfileSelectMenu } from '../../commands/rpg';
 export async function handleRpgButton(i: ButtonInteraction, action: string): Promise<void> {
   const discordId = i.user.id;
   const username  = i.user.username;
+  let currentAction = action;
 
   try {
     // ── Tratamento imediato para as abas de Habilidades (Ativas / Passivas) ──
@@ -38,6 +39,7 @@ export async function handleRpgButton(i: ButtonInteraction, action: string): Pro
     const parts      = fullAction.split(':');
     const baseAction = parts[0];
     const param1     = parts[1];
+    currentAction    = baseAction;
 
     switch (baseAction) {
 
@@ -854,7 +856,7 @@ export async function handleRpgButton(i: ButtonInteraction, action: string): Pro
         }
     }
   } catch (err) {
-    console.error(`[RPG Button Error] action=${baseAction}`, err);
+    console.error(`[RPG Button Error] action=${currentAction}`, err);
     const errMsg = { embeds: [errorEmbed('Erro RPG', 'Ocorreu um erro. Tente novamente.')], files: [] };
     if (i.replied) await i.followUp({ ...errMsg, ephemeral: true }).catch(() => null);
     else if (i.deferred) await i.editReply(errMsg).catch(() => null);

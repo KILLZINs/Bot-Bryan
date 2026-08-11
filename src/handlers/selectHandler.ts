@@ -18,11 +18,9 @@ export async function handleSelect(interaction: AnySelectMenuInteraction) {
   try {
     if (prefix === 'ticket' && action === 'category') return await ticketCategory(interaction as StringSelectMenuInteraction);
     if (prefix === 'ticket_staff' && action === 'action') return await ticketStaffAction(interaction as StringSelectMenuInteraction, parts[2]);
-
-    // ── Tratamento do RPG e da Loja ─────────────────────────────────────────
     if (prefix === 'rpg_select') return await (await import('./../rpg/handlers/rpgSelectHandler')).handleRpgSelect(interaction as StringSelectMenuInteraction, action);
     
-    // Suporte ao menu da loja (loja_categoria)
+    // Suporte para o seletor de categorias da loja (loja_categoria)
     if (prefix === 'loja_categoria') {
       const selectedValue = (interaction as StringSelectMenuInteraction).values[0];
       const { handleButton } = await import('./buttonHandler');
@@ -62,6 +60,7 @@ async function ticketCategory(i: StringSelectMenuInteraction) {
 
 // ── Ticket Staff Panel ────────────────────────────────────────────────────────
 async function ticketStaffAction(i: StringSelectMenuInteraction, ticketId: string) {
+  // Permission: moderator or admin
   const member = i.member as GuildMember;
   const config = await getConfig(i.guild!.id);
   const isMod  = i.guild!.ownerId === i.user.id
@@ -78,6 +77,7 @@ async function ticketStaffAction(i: StringSelectMenuInteraction, ticketId: strin
 
   const guild = i.guild!;
 
+  // ── criar_call ────────────────────────────────────────────────────────────────
   if (action === 'criar_call') {
     await i.deferReply({ ephemeral: true });
     if (ticket.voiceChannelId) {
@@ -100,6 +100,7 @@ async function ticketStaffAction(i: StringSelectMenuInteraction, ticketId: strin
     return i.editReply({ embeds: [successEmbed('Call Criada', `Canal de voz criado: <#${voiceCh.id}>`)] });
   }
 
+  // ── deletar_call ──────────────────────────────────────────────────────────────
   if (action === 'deletar_call') {
     await i.deferReply({ ephemeral: true });
     if (!ticket.voiceChannelId) return i.editReply({ embeds: [errorEmbed('Sem Call', 'Não há canal de voz associado a este ticket.')] });
@@ -109,6 +110,7 @@ async function ticketStaffAction(i: StringSelectMenuInteraction, ticketId: strin
     return i.editReply({ embeds: [successEmbed('Call Deletada', 'Canal de voz removido.')] });
   }
 
+  // ── adicionar_membro ──────────────────────────────────────────────────────────
   if (action === 'adicionar_membro') {
     const { ModalBuilder: MB, TextInputBuilder: TIB, TextInputStyle: TIS, ActionRowBuilder: ARB } = await import('discord.js');
     const modal = new MB().setCustomId(`ticket_modal:add_member:${ticketId}`).setTitle('Adicionar Membro ao Ticket');
@@ -120,6 +122,7 @@ async function ticketStaffAction(i: StringSelectMenuInteraction, ticketId: strin
     return i.showModal(modal);
   }
 
+  // ── remover_membro ────────────────────────────────────────────────────────────
   if (action === 'remover_membro') {
     const { ModalBuilder: MB, TextInputBuilder: TIB, TextInputStyle: TIS, ActionRowBuilder: ARB } = await import('discord.js');
     const modal = new MB().setCustomId(`ticket_modal:remove_member:${ticketId}`).setTitle('Remover Membro do Ticket');
@@ -131,6 +134,7 @@ async function ticketStaffAction(i: StringSelectMenuInteraction, ticketId: strin
     return i.showModal(modal);
   }
 
+  // ── fechar_ticket ─────────────────────────────────────────────────────────────
   if (action === 'fechar_ticket') {
     await i.deferReply({ ephemeral: true });
     if (ticket.status === 'closed') return i.editReply({ embeds: [errorEmbed('Já Fechado', 'Este ticket já está fechado.')] });
@@ -141,6 +145,7 @@ async function ticketStaffAction(i: StringSelectMenuInteraction, ticketId: strin
       if (logCh) await logCh.send({ embeds: [baseEmbed(COLORS.ERROR).setTitle('🎫 Ticket Fechado').addFields({ name: 'Fechado por', value: i.user.tag, inline: true }, { name: 'Canal', value: ticket.channelId, inline: true })] });
     }
 
+    // DM de avaliação
     try {
       const author = await i.client.users.fetch(ticket.authorId).catch(() => null);
       if (author) {
@@ -173,6 +178,7 @@ async function ticketStaffAction(i: StringSelectMenuInteraction, ticketId: strin
   }
 }
 
+// ── Selfrole — toggle legado (backward compat com mensagens antigas) ─────────
 async function selfRoleChoose(i: StringSelectMenuInteraction) {
   const roleId = i.values[0];
   await i.deferReply({ ephemeral: true });
@@ -197,6 +203,7 @@ async function selfRoleChoose(i: StringSelectMenuInteraction) {
   }
 }
 
+// ── Selfrole — adicionar cargo explicitamente ─────────────────────────────────
 async function selfRoleAdd(i: StringSelectMenuInteraction) {
   const roleId = i.values[0];
   await i.deferReply({ ephemeral: true });
@@ -218,6 +225,7 @@ async function selfRoleAdd(i: StringSelectMenuInteraction) {
   }
 }
 
+// ── Selfrole — remover cargo explicitamente ───────────────────────────────────
 async function selfRoleRemove(i: StringSelectMenuInteraction) {
   const roleId = i.values[0];
   await i.deferReply({ ephemeral: true });
@@ -239,6 +247,7 @@ async function selfRoleRemove(i: StringSelectMenuInteraction) {
   }
 }
 
+// ── Selfrole Admin — select menu handlers ────────────────────────────────────
 async function selfRoleAdminSelect(i: AnySelectMenuInteraction, action: string, parts: string[]) {
   const { checkAdmin } = await import('../utils/permissions');
   if (!(await checkAdmin(i as any))) return;
@@ -249,6 +258,7 @@ async function selfRoleAdminSelect(i: AnySelectMenuInteraction, action: string, 
   const { errorEmbed, successEmbed, baseEmbed } = await import('../utils/embeds');
   const COLORS = { DARK: 0x2C3E50 as number };
 
+  // ── canal_for_criar: abre modal de título/descrição após escolher canal ──
   if (action === 'channel_for_criar') {
     const chanId = (i as ChannelSelectMenuInteraction).values[0];
     const { ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder: AR } = await import('discord.js');
@@ -260,10 +270,12 @@ async function selfRoleAdminSelect(i: AnySelectMenuInteraction, action: string, 
       new AR<any>().addComponents(new TextInputBuilder().setCustomId('descricao').setLabel('Descrição (opcional)').setStyle(TextInputStyle.Paragraph).setRequired(false).setMaxLength(500)),
     );
     return i.followUp({ content: '\u200b', components: [] }).then(() => (i as any).showModal(modal)).catch(async () => {
+      // fallback: can't show modal after deferUpdate, send follow-up with instructions
       await i.editReply({ embeds: [new EmbedBuilder().setColor(0x3498DB).setTitle('Passo 2 — Defina o Título').setDescription(`Canal selecionado: <#${chanId}>\n\nComo não é possível abrir um modal após selecionar o canal, clique em **🆕 Criar Menu** novamente e desta vez use o canal <#${chanId}>. Vamos melhorar isso em breve!`)], components: [] });
     });
   }
 
+  // ── menu_for_add: escolheu o menu, mostrar seletor de cargo ──────────────
   if (action === 'menu_for_add') {
     const menuId = (i as StringSelectMenuInteraction).values[0];
     const menu = await prisma.selfRoleMenu.findUnique({ where: { id: menuId }, include: { entries: true } });
@@ -280,6 +292,7 @@ async function selfRoleAdminSelect(i: AnySelectMenuInteraction, action: string, 
     return i.editReply({ embeds: [embed], components: [roleSelect] });
   }
 
+  // ── add_role: recebe o cargo selecionado pelo RoleSelectMenu ─────────────
   if (action === 'add_role') {
     const menuId = parts[2];
     const roleId = (i as RoleSelectMenuInteraction).values[0];
@@ -305,6 +318,7 @@ async function selfRoleAdminSelect(i: AnySelectMenuInteraction, action: string, 
     });
   }
 
+  // ── menu_for_rem: escolheu o menu, mostrar lista de entradas ─────────────
   if (action === 'menu_for_rem') {
     const menuId = (i as StringSelectMenuInteraction).values[0];
     const menu = await prisma.selfRoleMenu.findUnique({ where: { id: menuId }, include: { entries: true } });
@@ -328,6 +342,7 @@ async function selfRoleAdminSelect(i: AnySelectMenuInteraction, action: string, 
     return i.editReply({ embeds: [embed], components: [entrySelect] });
   }
 
+  // ── rem_entry: recebe a entrada a remover ─────────────────────────────────
   if (action === 'rem_entry') {
     const menuId = parts[2];
     const entryId = (i as StringSelectMenuInteraction).values[0];
@@ -347,6 +362,7 @@ async function selfRoleAdminSelect(i: AnySelectMenuInteraction, action: string, 
     });
   }
 
+  // ── menu_for_pub: escolheu o menu, mostrar botão de confirmação ──────────
   if (action === 'menu_for_pub') {
     const menuId = (i as StringSelectMenuInteraction).values[0];
     const menu = await prisma.selfRoleMenu.findUnique({ where: { id: menuId }, include: { entries: true } });

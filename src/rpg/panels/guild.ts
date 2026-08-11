@@ -27,12 +27,12 @@ export function buildGuildMenuButtons(hasMembership: boolean): ActionRowBuilder<
       new ButtonBuilder().setCustomId('rpg:guild_criar').setLabel('🆕 Criar Guilda').setStyle(ButtonStyle.Success),
       new ButtonBuilder().setCustomId('rpg:guild_buscar').setLabel('🔍 Buscar Guilds').setStyle(ButtonStyle.Primary),
     ]),
-    new ButtonBuilder().setCustomId('rpg:perfil').setLabel('◀ Voltar').setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId('rpg:cidade').setLabel('◀ Voltar à Cidade').setStyle(ButtonStyle.Secondary),
   );
 }
 
-/** Botões exibidos na tela de info da guilda — líderes/vice-líderes veem botões de gestão */
-export function buildGuildInfoButtons(role: string): ActionRowBuilder<ButtonBuilder>[] {
+/** Botões exibidos na tela de info da guilda — líderes/vice-líderes veem botões de gestão e alternador Aberta/Fechada */
+export function buildGuildInfoButtons(role: string, isOpen: boolean = true): ActionRowBuilder<ButtonBuilder>[] {
   const isManager = role === 'Líder' || role === 'Vice-Líder';
   const rows: ActionRowBuilder<ButtonBuilder>[] = [];
 
@@ -42,6 +42,8 @@ export function buildGuildInfoButtons(role: string): ActionRowBuilder<ButtonBuil
         new ButtonBuilder().setCustomId('rpg:guild_config').setLabel('⚙️ Configurar').setStyle(ButtonStyle.Primary),
         new ButtonBuilder().setCustomId('rpg:guild_anuncio').setLabel('📢 Aviso').setStyle(ButtonStyle.Secondary),
         new ButtonBuilder().setCustomId('rpg:guild_depositar').setLabel('💰 Depositar Ouro').setStyle(ButtonStyle.Success),
+        new ButtonBuilder().setCustomId('rpg:guild_convidar').setLabel('✉️ Convidar').setStyle(ButtonStyle.Primary),
+        new ButtonBuilder().setCustomId('rpg:guild_toggle_open').setLabel(isOpen ? '🔓 Aberta' : '🔒 Fechada').setStyle(isOpen ? ButtonStyle.Success : ButtonStyle.Danger),
       ),
     );
   }
@@ -68,6 +70,21 @@ export function guildConfigModal(): ModalBuilder {
     ),
     new ActionRowBuilder<TextInputBuilder>().addComponents(
       new TextInputBuilder().setCustomId('emblema').setLabel('Novo Emblema (1 emoji)').setStyle(TextInputStyle.Short).setRequired(false).setMaxLength(4),
+    ),
+  );
+  return modal;
+}
+
+export function guildConvidarModal(): ModalBuilder {
+  const modal = new ModalBuilder().setCustomId('rpg_modal:guild_convidar').setTitle('Convidar para a Guilda');
+  modal.addComponents(
+    new ActionRowBuilder<TextInputBuilder>().addComponents(
+      new TextInputBuilder()
+        .setCustomId('alvo_id')
+        .setLabel('ID ou Menção do Usuário no Discord')
+        .setStyle(TextInputStyle.Short)
+        .setRequired(true)
+        .setPlaceholder('Ex: 123456789012345678'),
     ),
   );
   return modal;
@@ -120,12 +137,14 @@ export async function buildGuildInfoEmbed(guildId: string): Promise<EmbedBuilder
     })
     .slice(0, 15)
     .map(m => {
-      if (!m.character) return null; // defensive: personagem deletado mas membro ainda existe
+      if (!m.character) return null;
       const roleEmoji = m.role === 'Líder' ? '👑' : m.role === 'Vice-Líder' ? '⭐' : m.role === 'Oficial' ? '🛡️' : '👤';
       return `${roleEmoji} **${m.character.username}** — Lv.${m.character.level} ${m.character.class}`;
     })
     .filter(Boolean)
     .join('\n');
+
+  const isOpen = (guild as any).isOpen ?? true;
 
   return new EmbedBuilder()
     .setColor(0x9B59B6)
@@ -135,6 +154,7 @@ export async function buildGuildInfoEmbed(guildId: string): Promise<EmbedBuilder
       { name: '📊 Nível da Guilda', value: `**${guild.level}**`, inline: true },
       { name: '💰 Ouro da Guilda', value: `**${guild.gold.toLocaleString('pt-BR')}**`, inline: true },
       { name: '👥 Membros', value: `**${guild.members.length}/${guild.maxMembers}**`, inline: true },
+      { name: '🚪 Tipo de Entrada', value: isOpen ? '🔓 **Aberta** (qualquer um pode entrar)' : '🔒 **Fechada** (requer convite)', inline: true },
       { name: '📋 Membros', value: memberLines || '*Sem membros*', inline: false },
       ...(guild.announcement ? [{ name: '📢 Aviso', value: guild.announcement, inline: false }] : []),
     )
@@ -148,15 +168,17 @@ export async function buildGuildListEmbed(): Promise<EmbedBuilder> {
     take: 10,
   });
 
-  const lines = guilds.map((g, i) =>
-    `**${i + 1}.** ${g.emblem} **${g.name}** [${g.tag}] — Nv.${g.level} | ${g.members.length}/${g.maxMembers} membros`
-  ).join('\n') || '*Nenhuma guilda criada ainda. Seja o primeiro!*';
+  const lines = guilds.map((g, i) => {
+    const isOpen = (g as any).isOpen ?? true;
+    const statusTag = isOpen ? '🔓 Aberta' : '🔒 Fechada';
+    return `**${i + 1}.** ${g.emblem} **${g.name}** [${g.tag}] — Nv.${g.level} | ${g.members.length}/${g.maxMembers} membros | ${statusTag}`;
+  }).join('\n') || '*Nenhuma guilda criada ainda. Seja o primeiro!*';
 
   return new EmbedBuilder()
     .setColor(0x9B59B6)
     .setTitle('🏛️ Top Guilds')
     .setDescription(lines)
-    .setFooter({ text: 'Use Criar Guilda para fundar a sua!' });
+    .setFooter({ text: 'Guildas Abertas permitem entrada direta pelo menu!' });
 }
 
 export function criarGuildaModal(): ModalBuilder {
@@ -188,7 +210,7 @@ export async function createGuild(
   const nameExists = await prisma.rpgGuild.findFirst({ where: { OR: [{ name: nome }, { tag: tagUpper }] } });
   if (nameExists) return { success: false, message: 'Já existe uma guilda com esse nome ou tag.' };
 
-  const guild = await prisma.rpgGuild.create({
+  await prisma.rpgGuild.create({
     data: {
       name: nome, tag: tagUpper,
       description: descricao || null,
@@ -200,6 +222,46 @@ export async function createGuild(
   return { success: true, message: `${emblema || '⚔️'} Guilda **${nome}** [${tagUpper}] criada com sucesso!` };
 }
 
+export async function toggleGuildOpen(discordId: string): Promise<{ success: boolean; message: string; isOpen?: boolean }> {
+  const membership = await prisma.rpgGuildMember.findUnique({ where: { characterId: discordId }, include: { guild: true } });
+  if (!membership || (membership.role !== 'Líder' && membership.role !== 'Vice-Líder')) {
+    return { success: false, message: 'Apenas Líderes ou Vice-Líderes podem alterar as permissões de entrada.' };
+  }
+
+  const currentStatus = (membership.guild as any).isOpen ?? true;
+  const newStatus = !currentStatus;
+
+  await prisma.rpgGuild.update({
+    where: { id: membership.guildId },
+    data: { isOpen: newStatus } as any,
+  });
+
+  return {
+    success: true,
+    isOpen: newStatus,
+    message: newStatus ? '🔓 Sua guilda agora está **ABERTA** para novos membros.' : '🔒 Sua guilda agora está **FECHADA** (somente via convite).',
+  };
+}
+
+export async function inviteToGuild(inviterId: string, targetId: string): Promise<{ success: boolean; message: string }> {
+  const membership = await prisma.rpgGuildMember.findUnique({ where: { characterId: inviterId }, include: { guild: true } });
+  if (!membership || (membership.role !== 'Líder' && membership.role !== 'Vice-Líder')) {
+    return { success: false, message: 'Apenas Líderes ou Vice-Líderes podem convidar jogadores.' };
+  }
+
+  const targetMembership = await prisma.rpgGuildMember.findUnique({ where: { characterId: targetId } });
+  if (targetMembership) {
+    return { success: false, message: 'Este jogador já faz parte de uma guilda.' };
+  }
+
+  const guild = await prisma.rpgGuild.findUnique({ where: { id: membership.guildId }, include: { members: true } });
+  if (!guild) return { success: false, message: 'Guilda não encontrada.' };
+  if (guild.members.length >= guild.maxMembers) return { success: false, message: 'A guilda atingiu o limite de membros!' };
+
+  await prisma.rpgGuildMember.create({ data: { characterId: targetId, guildId: membership.guildId, role: 'Membro' } });
+  return { success: true, message: `✉️ <@${targetId}> foi convidado e adicionado à guilda **${guild.emblem} ${guild.name}** com sucesso!` };
+}
+
 export async function joinGuild(discordId: string, guildId: string): Promise<{ success: boolean; message: string }> {
   const existing = await prisma.rpgGuildMember.findUnique({ where: { characterId: discordId } });
   if (existing) return { success: false, message: 'Você já faz parte de uma guilda.' };
@@ -207,6 +269,11 @@ export async function joinGuild(discordId: string, guildId: string): Promise<{ s
   const guild = await prisma.rpgGuild.findUnique({ where: { id: guildId }, include: { members: true } });
   if (!guild) return { success: false, message: 'Guilda não encontrada.' };
   if (guild.members.length >= guild.maxMembers) return { success: false, message: 'Guilda está cheia!' };
+
+  const isOpen = (guild as any).isOpen ?? true;
+  if (!isOpen) {
+    return { success: false, message: '🔒 Esta guilda é **FECHADA** e requer um convite de um Líder ou Vice-Líder para entrar.' };
+  }
 
   await prisma.rpgGuildMember.create({ data: { characterId: discordId, guildId } });
   return { success: true, message: `✅ Você entrou na guilda **${guild.emblem} ${guild.name}**!` };

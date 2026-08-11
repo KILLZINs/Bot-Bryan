@@ -33,7 +33,7 @@ export async function generateProfileCard(char: FullCharacter, stats: ComputedSt
   const loc = getLocation(char.currentLocation);
   const eq = char.equipment;
 
-  // --- TRATAMENTO E EXTRAÇÃO FIEL DOS DADOS ---
+  // --- EXTRAÇÃO E MAPEAMENTO FIEL DOS DADOS ---
   const name = char.username || 'Aventureiro';
   const className = cls?.name ?? char.class;
   const level = char.level ?? 1;

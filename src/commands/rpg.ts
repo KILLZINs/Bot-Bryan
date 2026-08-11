@@ -21,12 +21,12 @@ export function buildProfileSelectMenu(): ActionRowBuilder<StringSelectMenuBuild
       .setCustomId('rpg_select:menu_perfil')
       .setPlaceholder('📍 Navegar pelo Hub do Aventureiro...')
       .addOptions(
-        new StringSelectMenuOptionBuilder().setLabel('⚔️ Perfil & Status').setValue('perfil').setDescription('Ver seu perfil principal'),
+        new StringSelectMenuOptionBuilder().setLabel('⚔️ Entrar na Dungeon').setValue('dungeon').setDescription('Explorar dungeons e batalhar contra monstros'),
         new StringSelectMenuOptionBuilder().setLabel('🎒 Inventário').setValue('inventario').setDescription('Ver seus itens e equipamentos'),
         new StringSelectMenuOptionBuilder().setLabel('🏰 Ir para a Cidade').setValue('cidade').setDescription('Acessar lojas, forja e guilda'),
         new StringSelectMenuOptionBuilder().setLabel('📋 Painel de Missões').setValue('missoes').setDescription('Ver suas missões ativas'),
         new StringSelectMenuOptionBuilder().setLabel('✨ Habilidades').setValue('habilidades').setDescription('Gerenciar suas habilidades divinas'),
-        new StringSelectMenuOptionBuilder().setLabel('📊 Estatísticas Detalhadas').setValue('stats').setDescription('Ver histórico completo'),
+        new StringSelectMenuOptionBuilder().setLabel('📊 Distribuir Pontos').setValue('stats').setDescription('Atribuir pontos de atributo acumulados'),
       )
   );
 }

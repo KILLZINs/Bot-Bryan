@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════
-// HABILIDADES DIVINAS
+// HABILIDADES DIVINAS E TALENTOS PASSIVOS
 // ═══════════════════════════════════════════════════════════════════════
 
 export type SkillRank = 'F' | 'E' | 'D' | 'C' | 'B' | 'A' | 'S' | 'SS' | 'SSS';
@@ -28,8 +28,92 @@ export interface DivineSkill {
   };
 }
 
-export const DIVINE_SKILLS: Record<string, DivineSkill> = {
+// ─── Árvore de Talentos Passivos (Gasto de Pontos de Skill) ──────────────
+export interface PassiveTalent {
+  id: string;
+  name: string;
+  emoji: string;
+  description: string;
+  maxLevel: number;
+  costPerLevel: number;
+  statsPerLevel: {
+    attackPercent?: number;
+    defensePercent?: number;
+    maxHp?: number;
+    maxEnergy?: number;
+    critChance?: number;
+    goldBonus?: number;
+    xpBonus?: number;
+  };
+}
 
+export const PASSIVE_TALENTS: Record<string, PassiveTalent> = {
+  forca_bruta: {
+    id: 'forca_bruta',
+    name: 'Força Bruta',
+    emoji: '⚔️',
+    description: 'Aumenta o dano físico e mágico.',
+    maxLevel: 20,
+    costPerLevel: 1,
+    statsPerLevel: { attackPercent: 1 },
+  },
+  armadura_de_platina: {
+    id: 'armadura_de_platina',
+    name: 'Armadura de Platina',
+    emoji: '🛡️',
+    description: 'Aumenta a defesa total.',
+    maxLevel: 20,
+    costPerLevel: 1,
+    statsPerLevel: { defensePercent: 1.5 },
+  },
+  constituicao_heroica: {
+    id: 'constituicao_heroica',
+    name: 'Constituição Heroica',
+    emoji: '❤️',
+    description: 'Aumenta o HP máximo.',
+    maxLevel: 30,
+    costPerLevel: 1,
+    statsPerLevel: { maxHp: 15 },
+  },
+  canalizacao_de_mana: {
+    id: 'canalizacao_de_mana',
+    name: 'Canalização de Mana',
+    emoji: '⚡',
+    description: 'Aumenta a Energia máxima.',
+    maxLevel: 20,
+    costPerLevel: 1,
+    statsPerLevel: { maxEnergy: 8 },
+  },
+  olho_de_aguia_passivo: {
+    id: 'olho_de_aguia_passivo',
+    name: 'Olho de Águia',
+    emoji: '🎯',
+    description: 'Aumenta a chance de crítico.',
+    maxLevel: 15,
+    costPerLevel: 2,
+    statsPerLevel: { critChance: 0.8 },
+  },
+  avareza_do_aventureiro: {
+    id: 'avareza_do_aventureiro',
+    name: 'Avareza do Aventureiro',
+    emoji: '💰',
+    description: 'Aumenta o ganho de ouro em batalhas.',
+    maxLevel: 15,
+    costPerLevel: 2,
+    statsPerLevel: { goldBonus: 1.5 },
+  },
+  sabedoria_divina: {
+    id: 'sabedoria_divina',
+    name: 'Sabedoria Divina',
+    emoji: '⭐',
+    description: 'Aumenta o ganho de XP em batalhas.',
+    maxLevel: 10,
+    costPerLevel: 3,
+    statsPerLevel: { xpBonus: 2 },
+  },
+};
+
+export const DIVINE_SKILLS: Record<string, DivineSkill> = {
   // ─── Guerreiro ─────────────────────────────────────────────────────────────
   golpe_divino: {
     id: 'golpe_divino', name: 'Golpe Divino', emoji: '⚡',
@@ -52,7 +136,6 @@ export const DIVINE_SKILLS: Record<string, DivineSkill> = {
     energyCost: 40, cooldownRounds: 6, baseEffect: 80, rankMultiplier: 0.2,
     rankUpExpRequired: 700, unlockLevel: 12,
   },
-
   // ─── Mago ──────────────────────────────────────────────────────────────────
   meteorito_arcano: {
     id: 'meteorito_arcano', name: 'Meteorito Arcano', emoji: '☄️',
@@ -75,7 +158,6 @@ export const DIVINE_SKILLS: Record<string, DivineSkill> = {
     energyCost: 60, cooldownRounds: 8, baseEffect: 50, rankMultiplier: 0.1,
     rankUpExpRequired: 900, unlockLevel: 20,
   },
-
   // ─── Assassino ─────────────────────────────────────────────────────────────
   toque_de_ouro: {
     id: 'toque_de_ouro', name: 'Toque de Ouro', emoji: '💰',
@@ -99,7 +181,6 @@ export const DIVINE_SKILLS: Record<string, DivineSkill> = {
     energyCost: 55, cooldownRounds: 7, baseEffect: 0.6, rankMultiplier: 0.1,
     rankUpExpRequired: 800, unlockLevel: 18,
   },
-
   // ─── Arqueiro ──────────────────────────────────────────────────────────────
   flecha_divina: {
     id: 'flecha_divina', name: 'Flecha Divina', emoji: '✨',
@@ -122,7 +203,6 @@ export const DIVINE_SKILLS: Record<string, DivineSkill> = {
     energyCost: 20, cooldownRounds: 3, baseEffect: 100, rankMultiplier: 0,
     rankUpExpRequired: 450, unlockLevel: 7,
   },
-
   // ─── Sacerdote ─────────────────────────────────────────────────────────────
   bencao_divina: {
     id: 'bencao_divina', name: 'Bênção Divina', emoji: '✨',
@@ -146,7 +226,6 @@ export const DIVINE_SKILLS: Record<string, DivineSkill> = {
     energyCost: 45, cooldownRounds: 3, baseEffect: 2.5, rankMultiplier: 0.3,
     rankUpExpRequired: 650, unlockLevel: 12,
   },
-
   // ─── Ladrão ────────────────────────────────────────────────────────────────
   golpe_de_sorte: {
     id: 'golpe_de_sorte', name: 'Golpe de Sorte', emoji: '🍀',
@@ -171,7 +250,6 @@ export const DIVINE_SKILLS: Record<string, DivineSkill> = {
     rankUpExpRequired: 500, unlockLevel: 5,
     passive: { goldBonus: 20, xpBonus: 5 },
   },
-
   // ─── Monge ─────────────────────────────────────────────────────────────────
   palmada_trovejante: {
     id: 'palmada_trovejante', name: 'Palmada Trovejante', emoji: '⚡',
@@ -194,7 +272,6 @@ export const DIVINE_SKILLS: Record<string, DivineSkill> = {
     energyCost: 50, cooldownRounds: 4, baseEffect: 0.7, rankMultiplier: 0.1,
     rankUpExpRequired: 700, unlockLevel: 15,
   },
-
   // ─── Classes Avançadas ─────────────────────────────────────────────────────
   protecao_sagrada: {
     id: 'protecao_sagrada', name: 'Proteção Sagrada', emoji: '🌟',
@@ -289,7 +366,6 @@ export const DIVINE_SKILLS: Record<string, DivineSkill> = {
     energyCost: 45, cooldownRounds: 5, baseEffect: 1.8, rankMultiplier: 0.2,
     rankUpExpRequired: 700, unlockLevel: 12,
   },
-
   // ─── Lendárias ─────────────────────────────────────────────────────────────
   presenca_das_trevas: {
     id: 'presenca_das_trevas', name: 'Presença das Trevas', emoji: '🌑',

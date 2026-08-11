@@ -220,14 +220,14 @@ export async function handleRpgSelect(i: StringSelectMenuInteraction, action: st
         const option = i.values[0];
         let char = await getOrCreateCharacter(discordId, username);
 
-        // 🎯 Caçada de Monstros
+        // 🎯 Caçada (inicia o combate direto em modo 'hunt')
         if (option === 'cacar') {
-          const select = buildDungeonSelect(char);
-          await i.editReply({
-            embeds: [buildDungeonEmbed(char)],
-            files: [],
-            components: select ? [select, buildDungeonButtons(char)] : [buildDungeonButtons(char)],
-          });
+          if (char.currentHp <= 0 || char.currentEnergy < 10) {
+            await i.editReply({ embeds: [errorEmbed('Caçada indisponível', 'Você precisa estar vivo e ter pelo menos **10⚡** para caçar.')] });
+            return;
+          }
+          const { embed, rows } = await doBattleEnemy(char, 'random', i.guildId ?? '', 'hunt');
+          await i.editReply({ embeds: [embed], files: [], components: rows });
           return;
         }
 

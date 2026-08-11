@@ -24,8 +24,8 @@ function formatCooldown(date: Date | null | undefined, minutes: number): string 
 }
 
 export async function generateProfileCard(char: any, stats: any, avatarUrlInput?: string): Promise<Buffer> {
-  const width = 1000;
-  const height = 650;
+  const width = 800;
+  const height = 480;
   const canvas = createCanvas(width, height);
   const ctx = canvas.getContext('2d');
 
@@ -49,7 +49,7 @@ export async function generateProfileCard(char: any, stats: any, avatarUrlInput?
   const currentEnergy = char.currentEnergy ?? 100;
   const maxEnergy = stats?.maxEnergy ?? 100;
 
-  // Atributos de Combate
+  // Atributos
   const str = stats?.str ?? 10;
   const agi = stats?.agi ?? 10;
   const intVal = stats?.int ?? 10;
@@ -84,12 +84,10 @@ export async function generateProfileCard(char: any, stats: any, avatarUrlInput?
   // Habilidade Divina
   let divineName = 'Nenhuma';
   let divineRank = 'F';
-  let divineDesc = 'Sem habilidade equipada.';
   if (char.divineSkillId && DIVINE_SKILLS[char.divineSkillId]) {
     const ds = DIVINE_SKILLS[char.divineSkillId];
     divineName = ds.name;
     divineRank = String(char.divineSkillRank ?? 'F');
-    divineDesc = ds.description;
   }
 
   // Resolução de Equipamentos
@@ -114,203 +112,199 @@ export async function generateProfileCard(char: any, stats: any, avatarUrlInput?
 
   const avatarUrl = avatarUrlInput || char.avatarUrl || '';
 
-  // --- RENDERIZAÇÃO NO CANVAS ---
-  ctx.fillStyle = '#120f0d';
+  // --- RENDERIZAÇÃO ---
+  ctx.fillStyle = '#0f0c0a';
   ctx.fillRect(0, 0, width, height);
 
-  // Moldura principal
-  ctx.fillStyle = '#1a1411';
-  ctx.strokeStyle = '#523f2b';
-  ctx.lineWidth = 4;
+  ctx.fillStyle = '#17120e';
+  ctx.strokeStyle = '#634b35';
+  ctx.lineWidth = 3;
   ctx.beginPath();
-  ctx.roundRect(15, 15, width - 30, height - 30, 12);
+  ctx.roundRect(10, 10, width - 20, height - 20, 12);
   ctx.fill();
   ctx.stroke();
 
-  // 1. PAINEL ESQUERDO: INFOS E BARRAS DE STATUS
+  // 1. PAINEL ESQUERDO: INFOS E BARRAS (Texto Grande)
   ctx.fillStyle = '#ffffff';
-  ctx.font = 'bold 24px "InterFont", sans-serif';
-  ctx.fillText(`${name.toUpperCase()}`, 35, 52);
+  ctx.font = 'bold 26px "InterFont", sans-serif';
+  ctx.fillText(`${name.toUpperCase()}`, 25, 45);
 
-  ctx.fillStyle = '#d4af37';
+  ctx.fillStyle = '#f1c40f';
+  ctx.font = 'bold 15px "InterFont", sans-serif';
+  ctx.fillText(`Nv.${level} ${className} • Karma: ${karma} • GEN.${gen}`, 25, 68);
+
+  ctx.fillStyle = '#dcdcdc';
   ctx.font = '14px "InterFont", sans-serif';
-  ctx.fillText(`Nv.${level} ${className} • Karma: ${karma} • GEN. ${gen}`, 35, 75);
-  ctx.fillText(`📍 ${locationName} (${envLabel})`, 35, 96);
+  ctx.fillText(`📍 ${locationName} (${envLabel})`, 25, 88);
 
   function drawBar(y: number, label: string, current: number, max: number, color: string) {
     const pct = Math.min(Math.round((current / (max || 1)) * 100), 100);
-    ctx.fillStyle = '#f0e3ce';
+    ctx.fillStyle = '#ffffff';
     ctx.font = 'bold 13px "InterFont", sans-serif';
-    ctx.fillText(`${label}: ${current}/${max} (${pct}%)`, 35, y);
+    ctx.fillText(`${label}: ${current}/${max} (${pct}%)`, 25, y);
 
-    ctx.fillStyle = '#080605';
+    ctx.fillStyle = '#050403';
     ctx.beginPath();
-    ctx.roundRect(35, y + 6, 240, 12, 4);
+    ctx.roundRect(25, y + 5, 210, 10, 3);
     ctx.fill();
 
-    const fillWidth = Math.min(((current || 0) / (max || 1)) * 240, 240);
+    const fillWidth = Math.min(((current || 0) / (max || 1)) * 210, 210);
     ctx.fillStyle = color;
     ctx.beginPath();
-    ctx.roundRect(35, y + 6, fillWidth, 12, 4);
+    ctx.roundRect(25, y + 5, fillWidth, 10, 3);
     ctx.fill();
   }
 
-  drawBar(128, 'XP', currentXp, maxXp, '#a3a3a3');
-  drawBar(165, 'HP', currentHp, maxHp, '#e74c3c');
-  drawBar(202, 'ENERGIA', currentEnergy, maxEnergy, '#f39c12');
+  drawBar(118, 'XP', currentXp, maxXp, '#bdc3c7');
+  drawBar(150, 'HP', currentHp, maxHp, '#e74c3c');
+  drawBar(182, 'ENERGIA', currentEnergy, maxEnergy, '#f39c12');
 
-  // Divisória
-  ctx.strokeStyle = '#382b1d';
+  ctx.strokeStyle = '#423223';
   ctx.lineWidth = 1.5;
   ctx.beginPath();
-  ctx.moveTo(35, 235);
-  ctx.lineTo(275, 235);
+  ctx.moveTo(25, 212);
+  ctx.lineTo(235, 212);
   ctx.stroke();
 
-  // Atributos de Combate Reais
+  // COMBATE
   ctx.fillStyle = '#f39c12';
   ctx.font = 'bold 15px "InterFont", sans-serif';
-  ctx.fillText('📊 ATRIBUTOS DE COMBATE', 35, 260);
+  ctx.fillText('📊 ATRIBUTOS DE COMBATE', 25, 235);
+
+  ctx.fillStyle = '#ffffff';
+  ctx.font = 'bold 14px "InterFont", sans-serif';
+  ctx.fillText(`FOR: ${str}  AGI: ${agi}  INT: ${intVal}`, 25, 260);
+  ctx.fillText(`VIT: ${vit}  SOR: ${lck}`, 25, 280);
 
   ctx.fillStyle = '#f0e3ce';
-  ctx.font = '14px "InterFont", sans-serif';
-  ctx.fillText(`FOR: ${str}   AGI: ${agi}   INT: ${intVal}`, 35, 288);
-  ctx.fillText(`VIT: ${vit}   SOR: ${lck}`, 35, 312);
+  ctx.fillText(`⚔️ Ataque: ${atk}  🛡️ Defesa: ${def}`, 25, 310);
+  ctx.fillText(`💥 Crit: ${crit.toFixed(1)}%  💨 Esq: ${dodge.toFixed(1)}%`, 25, 332);
 
-  ctx.fillStyle = '#e6caa3';
-  ctx.font = 'bold 14px "InterFont", sans-serif';
-  ctx.fillText(`⚔️ Ataque: ${atk}    🛡️ Defesa: ${def}`, 35, 345);
-  ctx.fillText(`💥 Crítico: ${crit.toFixed(1)}%    💨 Esquiva: ${dodge.toFixed(1)}%`, 35, 372);
-
-  // 2. PAINEL CENTRAL: PAPERDOLL COMPLETO
-  const centerX = 500;
-  const centerY = 290;
+  // 2. PAINEL CENTRAL: AVATAR & EQUIPAMENTOS
+  const centerX = 400;
+  const centerY = 230;
 
   if (avatarUrl) {
     try {
       const avatar = await loadImage(avatarUrl);
       ctx.save();
       ctx.beginPath();
-      ctx.arc(centerX, centerY - 20, 52, 0, Math.PI * 2);
+      ctx.arc(centerX, centerY, 46, 0, Math.PI * 2);
       ctx.closePath();
       ctx.clip();
-      ctx.drawImage(avatar, centerX - 52, centerY - 72, 104, 104);
+      ctx.drawImage(avatar, centerX - 46, centerY - 46, 92, 92);
       ctx.restore();
 
-      ctx.strokeStyle = '#d4af37';
+      ctx.strokeStyle = '#f1c40f';
       ctx.lineWidth = 3;
       ctx.beginPath();
-      ctx.arc(centerX, centerY - 20, 52, 0, Math.PI * 2);
+      ctx.arc(centerX, centerY, 46, 0, Math.PI * 2);
       ctx.stroke();
     } catch (err) {
-      console.error('Erro ao carregar avatar no Canvas:', err);
+      console.error('Erro avatar Canvas:', err);
     }
   }
 
   const slotsCoords = [
-    { key: 'helmet', label: 'Elmo', x: centerX - 165, y: centerY - 145 },
-    { key: 'chest', label: 'Peito', x: centerX - 165, y: centerY - 80 },
-    { key: 'gloves', label: 'Luva', x: centerX - 165, y: centerY - 15 },
-    { key: 'pants', label: 'Calça', x: centerX - 165, y: centerY + 50 },
-    { key: 'boots', label: 'Bota', x: centerX - 165, y: centerY + 115 },
+    { key: 'helmet', label: 'Elmo', x: centerX - 145, y: centerY - 130 },
+    { key: 'chest', label: 'Peito', x: centerX - 145, y: centerY - 70 },
+    { key: 'gloves', label: 'Luva', x: centerX - 145, y: centerY - 10 },
+    { key: 'pants', label: 'Calça', x: centerX - 145, y: centerY + 50 },
+    { key: 'boots', label: 'Bota', x: centerX - 145, y: centerY + 110 },
 
-    { key: 'weapon', label: 'Arma', x: centerX + 90, y: centerY - 145 },
-    { key: 'shield', label: 'Escudo', x: centerX + 90, y: centerY - 80 },
-    { key: 'ring', label: 'Anel', x: centerX + 90, y: centerY - 15 },
-    { key: 'backpack', label: 'Mochila', x: centerX + 90, y: centerY + 50 },
-    { key: 'pet', label: 'Pet', x: centerX + 90, y: centerY + 115 }
+    { key: 'weapon', label: 'Arma', x: centerX + 75, y: centerY - 130 },
+    { key: 'shield', label: 'Escudo', x: centerX + 75, y: centerY - 70 },
+    { key: 'ring', label: 'Anel', x: centerX + 75, y: centerY - 10 },
+    { key: 'backpack', label: 'Mochila', x: centerX + 75, y: centerY + 50 },
+    { key: 'pet', label: 'Pet', x: centerX + 75, y: centerY + 110 }
   ];
 
-  ctx.strokeStyle = '#382b1d';
+  ctx.strokeStyle = '#423223';
   ctx.lineWidth = 1.5;
   for (const s of slotsCoords) {
     ctx.beginPath();
-    ctx.moveTo(centerX, centerY - 20);
-    ctx.lineTo(s.x + 37, s.y + 25);
+    ctx.moveTo(centerX, centerY);
+    ctx.lineTo(s.x + 35, s.y + 22);
     ctx.stroke();
   }
 
   for (const slot of slotsCoords) {
     const itemName = slotItems[slot.key as keyof typeof slotItems] || '—';
 
-    ctx.fillStyle = '#0a0806';
+    ctx.fillStyle = '#0d0a08';
     ctx.strokeStyle = '#523f2b';
     ctx.lineWidth = 2;
     ctx.beginPath();
-    ctx.roundRect(slot.x, slot.y, 75, 50, 6);
+    ctx.roundRect(slot.x, slot.y, 70, 44, 5);
     ctx.fill();
     ctx.stroke();
 
-    ctx.fillStyle = '#a88967';
+    ctx.fillStyle = '#f39c12';
     ctx.font = 'bold 10px "InterFont", sans-serif';
-    ctx.fillText(slot.label.toUpperCase(), slot.x + 6, slot.y + 14);
+    ctx.fillText(slot.label.toUpperCase(), slot.x + 5, slot.y + 13);
 
-    ctx.fillStyle = itemName !== '—' ? '#ffffff' : '#4a3b2c';
-    ctx.font = '11px "InterFont", sans-serif';
-    const truncatedName = itemName.length > 11 ? itemName.substring(0, 10) + '..' : itemName;
-    ctx.fillText(truncatedName, slot.x + 6, slot.y + 34);
+    ctx.fillStyle = itemName !== '—' ? '#ffffff' : '#523f2b';
+    ctx.font = 'bold 11px "InterFont", sans-serif';
+    const truncatedName = itemName.length > 10 ? itemName.substring(0, 9) + '..' : itemName;
+    ctx.fillText(truncatedName, slot.x + 5, slot.y + 31);
   }
 
-  // 3. PAINEL DIREITO: PODER, HABILIDADE, HISTÓRICO E COOLDOWNS
-  const rightX = 730;
+  // 3. PAINEL DIREITO: STATUS, HABILIDADE & COOLDOWNS
+  const rightX = 580;
 
   ctx.fillStyle = '#ffffff';
   ctx.font = 'bold 16px "InterFont", sans-serif';
-  ctx.fillText(`⚔️ Poder: #${power.toLocaleString('pt-BR')}`, rightX, 52);
+  ctx.fillText(`⚔️ Poder: #${power.toLocaleString('pt-BR')}`, rightX, 45);
 
   ctx.fillStyle = '#f1c40f';
   ctx.font = 'bold 15px "InterFont", sans-serif';
-  ctx.fillText(`🪙 Ouro: ${gold.toLocaleString('pt-BR')} G`, rightX, 75);
+  ctx.fillText(`🪙 Ouro: ${gold.toLocaleString('pt-BR')} G`, rightX, 68);
 
-  ctx.fillStyle = '#d4af37';
-  ctx.font = '12px "InterFont", sans-serif';
-  ctx.fillText(marriageText.substring(0, 30), rightX, 96);
+  ctx.fillStyle = '#e6caa3';
+  ctx.font = '13px "InterFont", sans-serif';
+  ctx.fillText(marriageText.substring(0, 26), rightX, 88);
 
-  ctx.strokeStyle = '#382b1d';
+  ctx.strokeStyle = '#423223';
   ctx.lineWidth = 1.5;
   ctx.beginPath();
-  ctx.moveTo(rightX, 106);
-  ctx.lineTo(width - 35, 106);
+  ctx.moveTo(rightX, 98);
+  ctx.lineTo(width - 25, 98);
   ctx.stroke();
 
   // Habilidade Divina
   ctx.fillStyle = '#f39c12';
   ctx.font = 'bold 14px "InterFont", sans-serif';
-  ctx.fillText('✨ HABILIDADE DIVINA', rightX, 130);
+  ctx.fillText('✨ HABILIDADE DIVINA', rightX, 118);
 
   ctx.fillStyle = '#ffffff';
   ctx.font = 'bold 13px "InterFont", sans-serif';
-  ctx.fillText(`💀 ${divineName} [Rank ${divineRank}]`, rightX, 150);
-
-  ctx.fillStyle = '#a88967';
-  ctx.font = '11px "InterFont", sans-serif';
-  ctx.fillText(divineDesc.substring(0, 32), rightX, 168);
+  ctx.fillText(`💀 ${divineName} [Rank ${divineRank}]`, rightX, 138);
 
   // Histórico
   ctx.fillStyle = '#f39c12';
   ctx.font = 'bold 14px "InterFont", sans-serif';
-  ctx.fillText('📈 HISTÓRICO DE BATALHAS', rightX, 205);
+  ctx.fillText('📈 HISTÓRICO', rightX, 172);
 
-  ctx.fillStyle = '#f0e3ce';
+  ctx.fillStyle = '#ffffff';
   ctx.font = '13px "InterFont", sans-serif';
-  ctx.fillText(`🏆 Vitórias: ${wins}   💀 Mortes: ${deaths}`, rightX, 228);
-  ctx.fillText(`⚔️ PvP: ${pvpWins}W/${pvpLosses}L   👹 Bosses: ${bosses}`, rightX, 248);
+  ctx.fillText(`🏆 Vitórias: ${wins}   💀 Mortes: ${deaths}`, rightX, 192);
+  ctx.fillText(`⚔️ PvP: ${pvpWins}W/${pvpLosses}L   👹 Bosses: ${bosses}`, rightX, 210);
 
   // Cooldowns
   ctx.fillStyle = '#f39c12';
   ctx.font = 'bold 14px "InterFont", sans-serif';
-  ctx.fillText('🎲 COOLDOWNS RPG', rightX, 285);
+  ctx.fillText('🎲 COOLDOWNS RPG', rightX, 245);
 
-  ctx.fillStyle = '#f0e3ce';
-  ctx.font = '12px "InterFont", sans-serif';
-  ctx.fillText(`Dungeon: ${formatCooldown(char.lastDungeon, 5)}`, rightX, 308);
-  ctx.fillText(`Caçada: 🟢 Sem cd`, rightX, 328);
-  ctx.fillText(`Viagem: ${formatCooldown(char.lastTravel, loc.travelCooldownMin)}`, rightX, 348);
-  ctx.fillText(`Explorar: ${formatCooldown(char.lastExplore, 3)}`, rightX, 368);
-  ctx.fillText(`Treino: ${formatCooldown(char.lastTrain, 20)}`, rightX, 388);
-  ctx.fillText(`Pesca: ${formatCooldown(char.lastFishing, 10)}`, rightX, 408);
-  ctx.fillText(`Meditar: ${formatCooldown(char.lastRest, 30)}`, rightX, 428);
-  ctx.fillText(`PvP: ${formatCooldown(char.lastPvp, 10)}`, rightX, 448);
+  ctx.fillStyle = '#ffffff';
+  ctx.font = '13px "InterFont", sans-serif';
+  ctx.fillText(`Dungeon: ${formatCooldown(char.lastDungeon, 5)}`, rightX, 268);
+  ctx.fillText(`Caçada: 🟢 Sem cd`, rightX, 288);
+  ctx.fillText(`Viagem: ${formatCooldown(char.lastTravel, loc.travelCooldownMin)}`, rightX, 308);
+  ctx.fillText(`Explorar: ${formatCooldown(char.lastExplore, 3)}`, rightX, 328);
+  ctx.fillText(`Treino: ${formatCooldown(char.lastTrain, 20)}`, rightX, 348);
+  ctx.fillText(`Pesca: ${formatCooldown(char.lastFishing, 10)}`, rightX, 368);
+  ctx.fillText(`Meditar: ${formatCooldown(char.lastRest, 30)}`, rightX, 388);
+  ctx.fillText(`PvP: ${formatCooldown(char.lastPvp, 10)}`, rightX, 408);
 
   return canvas.toBuffer('image/png');
 }

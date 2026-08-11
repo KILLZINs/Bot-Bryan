@@ -22,7 +22,7 @@ export function buildProfileSelectMenu(): ActionRowBuilder<StringSelectMenuBuild
       .setPlaceholder('📍 Navegar pelo Hub do Aventureiro...')
       .addOptions(
         new StringSelectMenuOptionBuilder().setLabel('⚔️ Entrar na Dungeon').setValue('dungeon').setDescription('Explorar dungeons e batalhar contra monstros'),
-        new StringSelectMenuOptionBuilder().setLabel('🎯 Atividades & Cooldowns').setValue('atividades').setDescription('Caçada, treino, pesca, meditação e taverna'),
+        new StringSelectMenuOptionBuilder().setLabel('🎯 Atividades').setValue('atividades').setDescription('Caçada, treino, pesca, meditação e taverna'),
         new StringSelectMenuOptionBuilder().setLabel('🎒 Inventário').setValue('inventario').setDescription('Ver seus itens e equipamentos'),
         new StringSelectMenuOptionBuilder().setLabel('🏰 Ir para a Cidade').setValue('cidade').setDescription('Acessar lojas, forja e guilda'),
         new StringSelectMenuOptionBuilder().setLabel('🧭 Viajar').setValue('viajar').setDescription('Mudar de mapa ou região no reino'),

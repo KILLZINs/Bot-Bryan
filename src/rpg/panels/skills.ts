@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════
-// PAINEL DE HABILIDADES E ÁRVORE DE PASSIVAS
+// PAINEL DE HABILIDADES & ÁRVORE DE PASSIVAS
 // ═══════════════════════════════════════════════════════════════════════
 
 import {
@@ -10,95 +10,126 @@ import { FullCharacter } from '../services/character';
 import { DIVINE_SKILLS, PASSIVE_TALENTS, skillEffectValue, nextSkillRank } from '../constants/skills';
 import { getClass } from '../constants/classes';
 
-export function buildHabilidadesEmbed(char: FullCharacter): { embed: EmbedBuilder; select: ActionRowBuilder<StringSelectMenuBuilder> | null } {
+export function buildHabilidadesEmbed(char: FullCharacter, viewMode: 'ativas' | 'passivas' = 'ativas'): { embed: EmbedBuilder; components: ActionRowBuilder<any>[] } {
   const cls = getClass(char.class);
   const availableSkills = cls?.divineSkills.map(id => DIVINE_SKILLS[id]).filter(Boolean) ?? [];
 
-  let currentSkillText = '*Nenhuma habilidade divina equipada.*';
-  if (char.divineSkillId) {
-    const ds = DIVINE_SKILLS[char.divineSkillId];
-    if (ds) {
-      const next = nextSkillRank(char.divineSkillRank as any);
-      currentSkillText = [
-        `${ds.emoji} **${ds.name}** [Rank **${char.divineSkillRank}**]`,
-        `> ${ds.description}`,
-        `> Tipo: \`${ds.type}\` | Custo: \`${ds.energyCost} Energia\``,
-        next ? (() => {
-          const SKILL_RANKS = ['F', 'E', 'D', 'C', 'B', 'A', 'S', 'SS', 'SSS'];
-          const RANK_MULT   = [1, 2, 4, 8, 16, 32, 64, 128];
-          const rankIdx     = SKILL_RANKS.indexOf(char.divineSkillRank as string);
-          const requiredXp  = ds.rankUpExpRequired * (RANK_MULT[rankIdx] ?? 1);
-          return `> XP para Rank ${next}: **${char.divineSkillExp}/${requiredXp}**`;
-        })() : '> **RANK MÁXIMO SSS** 🌟',
-      ].join('\n');
+  // Lista de habilidades ativas equipadas (suporta múltiplas salvas em char.equippedSkills como array JSON ou string[])
+  const equippedIds: string[] = Array.isArray(char.equippedSkills) 
+    ? (char.equippedSkills as string[]) 
+    : (char.divineSkillId ? [char.divineSkillId] : []);
+
+  if (viewMode === 'ativas') {
+    let equippedText = '*Nenhuma habilidade equipada.*';
+    if (equippedIds.length > 0) {
+      equippedText = equippedIds.map(id => {
+        const ds = DIVINE_SKILLS[id];
+        if (!ds) return null;
+        return `${ds.emoji} **${ds.name}** [Rank **${char.divineSkillRank}**]\n> Tipo: \`${ds.type}\` | Custo: \`${ds.energyCost} Energia\`\n> ${ds.description}`;
+      }).filter(Boolean).join('\n\n');
     }
-  }
 
-  // Listar Árvore de Talentos Passivos Comprados
-  const talentLevels = (char.talentLevels as Record<string, number> | null) ?? {};
-  const talentsText = Object.values(PASSIVE_TALENTS).map(t => {
-    const lvl = talentLevels[t.id] ?? 0;
-    return `${t.emoji} **${t.name}** [Nv.${lvl}/${t.maxLevel}] (Custo: ${t.costPerLevel} pts)\n> ${t.description}`;
-  }).join('\n\n');
+    const skillListText = availableSkills.length > 0
+      ? availableSkills.map(s => {
+          const isEquipped = equippedIds.includes(s.id);
+          return `${isEquipped ? '✅' : '○'} ${s.emoji} **${s.name}** — Lv.${s.unlockLevel}+\n> ${s.description}`;
+        }).join('\n\n')
+      : '*Nenhuma habilidade disponível para sua classe.*';
 
-  let dmgHint = '';
-  if (char.divineSkillId) {
-    const ds = DIVINE_SKILLS[char.divineSkillId];
-    if (ds && ds.type === 'ataque') {
-      const eff = skillEffectValue(ds, char.divineSkillRank as any);
-      dmgHint = `\n> 📐 Multiplicador de dano atual: **×${eff.toFixed(2)}**`;
-    }
-  }
-
-  const embed = new EmbedBuilder()
-    .setColor(0xF1C40F)
-    .setTitle('✨ Habilidades & Árvore de Passivas')
-    .setDescription(
-      `Gerencie sua habilidade divina e gaste seus **Pontos de Skill** para upar talentos passivos permanentes!\n` +
-      `Sua classe: **${cls?.name ?? char.class}** ${cls?.emoji ?? ''}`
-    )
-    .addFields(
-      { name: '⚡ Habilidade Equipada', value: currentSkillText + dmgHint, inline: false },
-      { name: '🧬 Árvore de Talentos Passivos', value: talentsText, inline: false },
-      { name: '🔑 Pontos de Skill Disponíveis', value: `**${char.skillPoints}** pts`, inline: true },
-      { name: '📊 Nível Atual', value: `**${char.level}**`, inline: true },
-    )
-    .setFooter({ text: 'Selecione abaixo para equipar habilidade ou evoluir um talento passivo.' });
-
-  // Criar seletor unificado: Equipe de Habilidade ou Upgrade de Passiva
-  const unlockedSkills = availableSkills.filter(s => char.level >= s.unlockLevel);
-  
-  const skillOptions = unlockedSkills.map(s =>
-    new StringSelectMenuOptionBuilder()
-      .setLabel(`[Habilidade] ${s.name}`)
-      .setValue(`skill:${s.id}`)
-      .setEmoji(s.emoji.trim())
-      .setDescription(`Equipar • Custo: ${s.energyCost} energia`)
-      .setDefault(char.divineSkillId === s.id)
-  );
-
-  const talentOptions = Object.values(PASSIVE_TALENTS).map(t => {
-    const lvl = talentLevels[t.id] ?? 0;
-    const canBuy = lvl < t.maxLevel && char.skillPoints >= t.costPerLevel;
-    return new StringSelectMenuOptionBuilder()
-      .setLabel(`[Talento] ${t.name} (Nv.${lvl}/${t.maxLevel})`)
-      .setValue(`talent:${t.id}`)
-      .setEmoji(t.emoji.trim())
-      .setDescription(canBuy ? `Evoluir • Custo: ${t.costPerLevel} pts` : `[Máximo ou Sem Pontos]`);
-  });
-
-  const allOptions = [...skillOptions, ...talentOptions].slice(0, 25);
-
-  const select = allOptions.length > 0
-    ? new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(
-        new StringSelectMenuBuilder()
-          .setCustomId('rpg_select:equipar_skill')
-          .setPlaceholder('🎯 Escolha uma habilidade ou evoluir talento passivo...')
-          .addOptions(allOptions)
+    const embed = new EmbedBuilder()
+      .setColor(0xF1C40F)
+      .setTitle('✨ Gerenciador de Habilidades Divinas')
+      .setDescription(
+        `Gerencie suas habilidades ativas. Você pode equipar **múltiplas habilidades** para usar em combate!\n` +
+        `Sua classe: **${cls?.name ?? char.class}** ${cls?.emoji ?? ''}`
       )
-    : null;
+      .addFields(
+        { name: '⚡ Habilidades Equipadas Atualmente', value: equippedText, inline: false },
+        { name: `📚 Habilidades da Classe — ${cls?.name ?? 'sua classe'}`, value: skillListText, inline: false },
+        { name: '🔑 Pontos de Skill', value: `**${char.skillPoints}** pts`, inline: true },
+        { name: '📊 Nível Atual', value: `**${char.level}**`, inline: true },
+      )
+      .setFooter({ text: 'Selecione abaixo para equipar/desequipar habilidades.' });
 
-  return { embed, select };
+    const unlocked = availableSkills.filter(s => char.level >= s.unlockLevel);
+    const select = unlocked.length > 0
+      ? new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(
+          new StringSelectMenuBuilder()
+            .setCustomId('rpg_select:equipar_multiplas_skills')
+            .setPlaceholder('Selecione para alternar (Equipar/Desequipar)...')
+            .setMinValues(1)
+            .setMaxValues(Math.min(unlocked.length, 3)) // Permite até 3 habilidades ativas simultâneas
+            .addOptions(
+              unlocked.map(s =>
+                new StringSelectMenuOptionBuilder()
+                  .setLabel(`${s.name} [${s.type}]`)
+                  .setValue(s.id)
+                  .setEmoji(s.emoji.trim())
+                  .setDescription(`Custo: ${s.energyCost} energia | Lv.${s.unlockLevel}+`)
+                  .setDefault(equippedIds.includes(s.id))
+              )
+            )
+        )
+      : null;
+
+    const navRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
+      new ButtonBuilder().setCustomId('rpg_skills_tab:ativas').setLabel('⚔️ Habilidades Ativas').setStyle(ButtonStyle.Primary),
+      new ButtonBuilder().setCustomId('rpg_skills_tab:passivas').setLabel('🧬 Talentos Passivos').setStyle(ButtonStyle.Secondary),
+    );
+
+    const btnRow = buildHabilidadesButtons(char);
+    const components = select ? [select, navRow, btnRow] : [navRow, btnRow];
+
+    return { embed, components };
+  } else {
+    // Modo Passivas (Árvore de Talentos)
+    const talentLevels = (char.talentLevels as Record<string, number> | null) ?? {};
+    const talentsText = Object.values(PASSIVE_TALENTS).map(t => {
+      const lvl = talentLevels[t.id] ?? 0;
+      return `${t.emoji} **${t.name}** [Nv.${lvl}/${t.maxLevel}] (Custo: ${t.costPerLevel} pts)\n> ${t.description}`;
+    }).join('\n\n');
+
+    const embed = new EmbedBuilder()
+      .setColor(0x3498DB)
+      .setTitle('🧬 Árvore de Talentos Passivos')
+      .setDescription(
+        `Gaste seus **Pontos de Skill** para evoluir bônus passivos permanentes!\n` +
+        `Pontos disponíveis: **${char.skillPoints} pts**`
+      )
+      .addFields(
+        { name: '🌳 Talentos Disponíveis', value: talentsText, inline: false },
+      )
+      .setFooter({ text: 'Selecione um talento abaixo para evoluir o nível.' });
+
+    const talentOptions = Object.values(PASSIVE_TALENTS).map(t => {
+      const lvl = talentLevels[t.id] ?? 0;
+      const canBuy = lvl < t.maxLevel && char.skillPoints >= t.costPerLevel;
+      return new StringSelectMenuOptionBuilder()
+        .setLabel(`${t.name} (Nv.${lvl}/${t.maxLevel})`)
+        .setValue(`talent:${t.id}`)
+        .setEmoji(t.emoji.trim())
+        .setDescription(canBuy ? `Evoluir • Custo: ${t.costPerLevel} pts` : `[Nível Máximo Atingido ou Sem Pontos]`);
+    });
+
+    const select = talentOptions.length > 0
+      ? new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(
+          new StringSelectMenuBuilder()
+            .setCustomId('rpg_select:evoluir_talento')
+            .setPlaceholder('🧬 Escolha um talento passivo para evoluir...')
+            .addOptions(talentOptions)
+        )
+      : null;
+
+    const navRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
+      new ButtonBuilder().setCustomId('rpg_skills_tab:ativas').setLabel('⚔️ Habilidades Ativas').setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId('rpg_skills_tab:passivas').setLabel('🧬 Talentos Passivos').setStyle(ButtonStyle.Primary),
+    );
+
+    const btnRow = buildHabilidadesButtons(char);
+    const components = select ? [select, navRow, btnRow] : [navRow, btnRow];
+
+    return { embed, components };
+  }
 }
 
 export function buildHabilidadesButtons(char: FullCharacter): ActionRowBuilder<ButtonBuilder> {

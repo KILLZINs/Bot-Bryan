@@ -866,7 +866,7 @@ export default {
       const {
         ensureDailyMissions,
         ensureWeeklyMissions,
-      } = await import('../../commands/utility/missoes');
+      } = await import('../commands/utility/missoes');
 
       await Promise.all([
         ensureDailyMissions(authorId, guildId),

@@ -22,25 +22,25 @@ import { buildProfileSelectMenu } from '../../commands/rpg';
 export async function handleRpgButton(i: ButtonInteraction, action: string): Promise<void> {
   const discordId = i.user.id;
   const username  = i.user.username;
-
-  const fullAction = i.customId.split(':').slice(1).join(':');
-  const parts      = fullAction.split(':');
-  const baseAction = parts[0];
-  const param1     = parts[1];
+  const rawId     = i.customId;
 
   try {
-    switch (baseAction) {
-      
-      // ── ABAS DE HABILIDADES ────────────────────────────────────────────────
-      case 'skills_tab': {
-        await i.deferUpdate();
-        const tab = (param1 === 'passivas') ? 'passivas' : 'classe';
-        const char = await getOrCreateCharacter(discordId, username);
-        const { embed, components } = await buildHabilidadesEmbed(char, tab);
-        await i.editReply({ embeds: [embed], files: [], components });
-        break;
-      }
+    // ── Tratamento cego de falhas de prefixo para as abas ───────────────────
+    if (rawId.includes('skills_tab:')) {
+      await i.deferUpdate();
+      const tab = rawId.includes('passivas') ? 'passivas' : 'classe';
+      const char = await getOrCreateCharacter(discordId, username);
+      const { embed, components } = await buildHabilidadesEmbed(char, tab);
+      await i.editReply({ embeds: [embed], files: [], components });
+      return;
+    }
 
+    const fullAction = i.customId.split(':').slice(1).join(':');
+    const parts      = fullAction.split(':');
+    const baseAction = parts[0];
+    const param1     = parts[1];
+
+    switch (baseAction) {
       // ── Perfil ─────────────────────────────────────────────────────────────
       case 'perfil': {
         await i.deferUpdate();
@@ -837,7 +837,7 @@ export async function handleRpgButton(i: ButtonInteraction, action: string): Pro
         }
     }
   } catch (err) {
-    console.error(`[RPG Button Error] action=${action}`, err);
+    console.error(`[RPG Button Error] ID=${rawId}`, err);
     const errMsg = { embeds: [errorEmbed('Erro RPG', 'Ocorreu um erro ao processar o botão.')], files: [] };
     if (i.replied) await i.followUp({ ...errMsg, ephemeral: true }).catch(() => null);
     else if (i.deferred) await i.editReply(errMsg).catch(() => null);

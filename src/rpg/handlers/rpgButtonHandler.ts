@@ -25,7 +25,7 @@ export async function handleRpgButton(i: ButtonInteraction, action: string): Pro
   const rawId     = i.customId;
 
   try {
-    // ── Tratamento cego de falhas de prefixo para as abas ───────────────────
+    // ── Tratamento para as abas de Habilidades ───────────────────────────────
     if (rawId.includes('skills_tab:')) {
       await i.deferUpdate();
       const tab = rawId.includes('passivas') ? 'passivas' : 'classe';
@@ -41,7 +41,6 @@ export async function handleRpgButton(i: ButtonInteraction, action: string): Pro
     const param1     = parts[1];
 
     switch (baseAction) {
-      // ── Perfil ─────────────────────────────────────────────────────────────
       case 'perfil': {
         await i.deferUpdate();
         let char = await getOrCreateCharacter(discordId, username);

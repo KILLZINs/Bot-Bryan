@@ -25,9 +25,10 @@ export async function handleRpgButton(i: ButtonInteraction, action: string): Pro
   let currentAction = action;
 
   try {
+    // ── Tratamento corrigido e unificado para as abas de Habilidades ───────
     if (action.startsWith('rpg_skills_tab:')) {
       await i.deferUpdate();
-      const tab = action.split(':')[1] as 'ativas' | 'passivas';
+      const tab = action.split(':')[1] as 'classe' | 'passivas';
       const char = await getOrCreateCharacter(discordId, username);
       const { embed, components } = await buildHabilidadesEmbed(char, tab);
       await i.editReply({ embeds: [embed], files: [], components });
@@ -128,7 +129,7 @@ export async function handleRpgButton(i: ButtonInteraction, action: string): Pro
       case 'habilidades': {
         await i.deferUpdate();
         const char = await getOrCreateCharacter(discordId, username);
-        const { embed, components } = await buildHabilidadesEmbed(char, 'ativas');
+        const { embed, components } = await buildHabilidadesEmbed(char, 'classe');
         await i.editReply({ embeds: [embed], files: [], components });
         break;
       }

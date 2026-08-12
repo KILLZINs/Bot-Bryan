@@ -15,13 +15,11 @@ export async function buildHabilidadesEmbed(char: FullCharacter, viewMode: 'ativ
   const cls = getClass(char.class);
   const availableSkills = cls?.divineSkills.map(id => DIVINE_SKILLS[id]).filter(Boolean) ?? [];
 
-  // Busca as habilidades aprendidas/registradas no banco para extrair o Rank e o XP de cada uma
   const learnedSkillsList = await prisma.rpgLearnedSkill.findMany({
     where: { characterId: char.discordId }
   });
   const learnedMap = new Map(learnedSkillsList.map(s => [s.skillId, s]));
 
-  // Habilidades ativas equipadas (suporta array JSON ou string única antiga)
   const equippedIds: string[] = Array.isArray(char.equippedSkills) 
     ? (char.equippedSkills as string[]) 
     : (char.divineSkillId ? [char.divineSkillId] : []);
@@ -35,7 +33,7 @@ export async function buildHabilidadesEmbed(char: FullCharacter, viewMode: 'ativ
         const learned = learnedMap.get(id);
         const rank = learned?.rank ?? char.divineSkillRank ?? 'F';
         const exp = learned?.exp ?? char.divineSkillExp ?? 0;
-        const nextExp = 100 * Math.pow(1.5, ['F', 'E', 'D', 'C', 'B', 'A', 'S'].indexOf(rank) + 1); // Exemplo de calculo de XP para proximo rank
+        const nextExp = 100 * Math.pow(1.5, ['F', 'E', 'D', 'C', 'B', 'A', 'S'].indexOf(rank) + 1);
 
         return `${ds.emoji} **${ds.name}** [Rank **${rank}**]\n> 📈 XP: \`${exp} / ${Math.round(nextExp)}\` | Custo: \`${ds.energyCost} Energia\`\n> ${ds.description}`;
       }).filter(Boolean).join('\n\n');
@@ -99,7 +97,6 @@ export async function buildHabilidadesEmbed(char: FullCharacter, viewMode: 'ativ
 
     return { embed, components };
   } else {
-    // Modo Passivas (Árvore de Talentos)
     const talentLevels = (char.talentLevels as Record<string, number> | null) ?? {};
     const talentsText = Object.values(PASSIVE_TALENTS).map(t => {
       const lvl = talentLevels[t.id] ?? 0;
@@ -150,7 +147,7 @@ export async function buildHabilidadesEmbed(char: FullCharacter, viewMode: 'ativ
 }
 
 export function buildHabilidadesButtons(): ActionRowBuilder<ButtonBuilder> {
-  return newActionRowBuilder<ButtonBuilder>().addComponents(
+  return new ActionRowBuilder<ButtonBuilder>().addComponents(
     new ButtonBuilder().setCustomId('rpg:habilidades').setLabel('🔄 Atualizar').setStyle(ButtonStyle.Secondary),
     new ButtonBuilder().setCustomId('rpg:perfil').setLabel('◀ Perfil').setStyle(ButtonStyle.Secondary),
     new ButtonBuilder().setCustomId('rpg:cidade').setLabel('🏰 Cidade').setStyle(ButtonStyle.Primary),

@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════
-// PAINEL DE HABILIDADES & ÁRVORE DE PASSIVAS
+// PAINEL DE Habilidades & ÁRVORE DE PASSIVAS
 // ═══════════════════════════════════════════════════════════════════════
 
 import {
@@ -80,7 +80,7 @@ export async function buildHabilidadesEmbed(char: FullCharacter, viewMode: 'clas
     const select = unlocked.length > 0
       ? new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(
           new StringSelectMenuBuilder()
-            .setCustomId('rpg_select:equipar_multiplas_skills')
+            .setCustomId('rpg:equipar_multiplas_skills') // Adicionado o prefixo rpg:
             .setPlaceholder('Selecione para alternar (Equipar/Desequipar)...')
             .setMinValues(1)
             .setMaxValues(Math.min(unlocked.length, 3))
@@ -98,8 +98,8 @@ export async function buildHabilidadesEmbed(char: FullCharacter, viewMode: 'clas
       : null;
 
     const navRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
-      new ButtonBuilder().setCustomId('rpg_skills_tab:classe').setLabel('⚔️ Habilidades de Classe').setStyle(ButtonStyle.Primary),
-      new ButtonBuilder().setCustomId('rpg_skills_tab:passivas').setLabel('🧬 Talentos Passivos').setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId('rpg:skills_tab:classe').setLabel('⚔️ Habilidades de Classe').setStyle(ButtonStyle.Primary),
+      new ButtonBuilder().setCustomId('rpg:skills_tab:passivas').setLabel('🧬 Talentos Passivos').setStyle(ButtonStyle.Secondary),
     );
 
     const btnRow = buildHabilidadesButtons();
@@ -139,15 +139,15 @@ export async function buildHabilidadesEmbed(char: FullCharacter, viewMode: 'clas
     const select = talentOptions.length > 0
       ? new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(
           new StringSelectMenuBuilder()
-            .setCustomId('rpg_select:evoluir_talento')
+            .setCustomId('rpg:evoluir_talento') // Adicionado o prefixo rpg:
             .setPlaceholder('🧬 Escolha um talento passivo para evoluir...')
             .addOptions(talentOptions)
         )
       : null;
 
     const navRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
-      new ButtonBuilder().setCustomId('rpg_skills_tab:classe').setLabel('⚔️ Habilidades de Classe').setStyle(ButtonStyle.Secondary),
-      new ButtonBuilder().setCustomId('rpg_skills_tab:passivas').setLabel('🧬 Talentos Passivos').setStyle(ButtonStyle.Primary),
+      new ButtonBuilder().setCustomId('rpg:skills_tab:classe').setLabel('⚔️ Habilidades de Classe').setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId('rpg:skills_tab:passivas').setLabel('🧬 Talentos Passivos').setStyle(ButtonStyle.Primary),
     );
 
     const btnRow = buildHabilidadesButtons();

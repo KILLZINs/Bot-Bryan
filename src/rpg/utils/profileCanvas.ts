@@ -28,7 +28,7 @@ function formatCooldown(date: Date | null | undefined, minutes: number): string 
 }
 
 // ==========================================
-// ÍCONES VETORIAIS DESENHADOS À MÃO (Sem Emojis!)
+// ÍCONES VETORIAIS DE ALTA PRECISÃO
 // ==========================================
 function drawCoinIcon(ctx: any, x: number, y: number) {
   ctx.save();
@@ -155,66 +155,85 @@ export async function generateProfileCard(char: any, stats: any, avatarUrlInput?
   const avatarUrl = avatarUrlInput || char.avatarUrl || '';
 
   // ==========================================
-  // RENDERIZAÇÃO: CENÁRIO DE OUTRO MUNDO (FANTASIA MEDIEVAL)
+  // AMBIENTE DE FUNDO MEDIEVAL DE OUTRO MUNDO
   // ==========================================
 
-  // 1. Céu de Crepúsculo Místico (Gradiente Vertical)
-  const skyGrad = ctx.createLinearGradient(0, 0, 0, height);
-  skyGrad.addColorStop(0, '#120b1e'); // Roxo místico escuro no topo
-  skyGrad.addColorStop(0.5, '#20132d');
-  skyGrad.addColorStop(1, '#3b1c18'); // Tom de terra/fogo queimado no horizonte
-  ctx.fillStyle = skyGrad;
+  // 1. Céu Místico Profundo (Atmosphere)
+  const bgGrad = ctx.createLinearGradient(0, 0, width, height);
+  bgGrad.addColorStop(0, '#090612'); // Noite arcana profunda
+  bgGrad.addColorStop(0.4, '#1b1128'); // Roxo neblina de masmorra/reino sombrio
+  bgGrad.addColorStop(1, '#2c120c'); // Toque de fogo/magia de masmorra no chão
+  ctx.fillStyle = bgGrad;
   ctx.fillRect(0, 0, width, height);
 
-  // 2. Silhueta de Montanhas/Colinas ao Fundo (Paisagem Medieval)
-  ctx.fillStyle = '#160d0b';
+  // 2. Textura Procedural de Pedras de Masmorra / Castelo Antigo ao Fundo
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.015)';
+  for (let i = 0; i < width; i += 40) {
+    ctx.fillRect(i, 0, 1, height);
+  }
+  for (let j = 0; j < height; j += 40) {
+    ctx.fillRect(0, j, width, 1);
+  }
+
+  // 3. Montanhas / Ruínas Medievais Distantes na Linha do Horizonte
+  ctx.fillStyle = '#0f0a0e';
   ctx.beginPath();
   ctx.moveTo(0, height);
-  ctx.lineTo(0, 350);
-  ctx.bezierCurveTo(150, 300, 300, 360, 450, 330);
-  ctx.bezierCurveTo(600, 300, 720, 340, width, 320);
+  ctx.lineTo(0, 310);
+  ctx.bezierCurveTo(120, 260, 280, 330, 420, 290);
+  ctx.bezierCurveTo(580, 250, 700, 320, width, 280);
   ctx.lineTo(width, height);
   ctx.closePath();
   ctx.fill();
 
-  // Colinas frontais mais escuras
-  ctx.fillStyle = '#0a0605';
-  ctx.beginPath();
-  ctx.moveTo(0, height);
-  ctx.lineTo(0, 400);
-  ctx.bezierCurveTo(200, 370, 400, 430, 600, 390);
-  ctx.bezierCurveTo(700, 370, 780, 410, width, 380);
-  ctx.lineTo(width, height);
-  ctx.closePath();
-  ctx.fill();
+  // Torres / Muralhas Estilizadas de Castelo ao Fundo
+  ctx.fillStyle = '#140c11';
+  ctx.fillRect(180, 240, 45, 80);
+  ctx.fillRect(195, 215, 15, 25); // Torre central
+  ctx.fillRect(620, 220, 60, 100);
 
-  // 3. Camada de Escurecimento Translúcida para dar Leitura (Vignette/Overlay)
-  ctx.fillStyle = 'rgba(6, 4, 3, 0.78)';
+  // 4. Efeito de Iluminação Mágica / Névoa Arcana (Glow centralizado atrás do avatar)
+  const lightGlow = ctx.createRadialGradient(425, 240, 20, 425, 240, 320);
+  lightGlow.addColorStop(0, 'rgba(142, 68, 173, 0.22)'); // Brilho roxo místico
+  lightGlow.addColorStop(0.5, 'rgba(41, 128, 185, 0.1)'); // Azul frio
+  lightGlow.addColorStop(1, 'rgba(0, 0, 0, 0)');
+  ctx.fillStyle = lightGlow;
   ctx.fillRect(0, 0, width, height);
 
-  // 4. Moldura Externa Estilo Placa de Aço/Bronze Rústico
-  ctx.strokeStyle = '#2b2118';
+  // 5. Camada Escura Semi-Transparente para Contraste Perfeito dos Textos
+  ctx.fillStyle = 'rgba(8, 6, 10, 0.65)';
+  ctx.fillRect(0, 0, width, height);
+
+  // Moldura Externa de Aço Antigo / Cobre
+  ctx.strokeStyle = '#2c221e';
   ctx.lineWidth = 4;
   ctx.strokeRect(6, 6, width - 12, height - 12);
 
-  ctx.strokeStyle = '#c5a059'; // Borda dourada medieval
+  ctx.strokeStyle = '#d4af37'; // Fio de Ouro Real
   ctx.lineWidth = 1.5;
   ctx.strokeRect(10, 10, width - 20, height - 20);
 
-  // Função para desenhar Painéis de UI com textura escura e borda rústica
-  function drawRpgPanel(x: number, y: number, w: number, h: number) {
-    ctx.fillStyle = 'rgba(12, 9, 8, 0.92)';
-    ctx.strokeStyle = '#4a3828';
+  // Função para criar Painéis de UI Estilo "Vidro Esfumaçado de Pedra" (Permite ver o fundo)
+  function drawGlassPanel(x: number, y: number, w: number, h: number) {
+    ctx.fillStyle = 'rgba(14, 11, 16, 0.82)'; // Semi-transparente para ver o background
+    ctx.strokeStyle = '#5a4533'; // Borda bronzeada medieval
     ctx.lineWidth = 2;
     ctx.beginPath();
     ctx.roundRect(x, y, w, h, 8);
     ctx.fill();
     ctx.stroke();
+
+    // Brilho superior interno (Efeito de relevo UI)
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.04)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.roundRect(x + 2, y + 2, w - 4, h - 4, 6);
+    ctx.stroke();
   }
 
-  drawRpgPanel(22, 22, 240, 456); // Esquerdo
-  drawRpgPanel(274, 22, 302, 456); // Central
-  drawRpgPanel(588, 22, 240, 456); // Direito
+  drawGlassPanel(22, 22, 240, 456); // Painel Esquerdo
+  drawGlassPanel(274, 22, 302, 456); // Painel Central
+  drawGlassPanel(588, 22, 240, 456); // Painel Direito
 
   // ------------------------------------------
   // PAINEL ESQUERDO: STATUS & ATRIBUTOS
@@ -223,14 +242,14 @@ export async function generateProfileCard(char: any, stats: any, avatarUrlInput?
   ctx.font = 'bold 18px "InterFont", sans-serif';
   ctx.fillText(name.toUpperCase(), 38, 52);
 
-  ctx.fillStyle = '#e6caa3';
+  ctx.fillStyle = '#f1c40f';
   ctx.font = 'bold 11px "InterFont", sans-serif';
   ctx.fillText(`NV.${level} | ${className.toUpperCase()}`, 38, 70);
-  ctx.fillStyle = '#9c8b7c';
+  ctx.fillStyle = '#bfa58a';
   ctx.fillText(`KARMA: ${karma}  •  GEN: ${gen}`, 38, 86);
   ctx.fillText(`LOCAL: ${locationName}`, 38, 102);
 
-  // Barras de Status com Cores Temáticas
+  // Barras de Status Estilizadas
   function drawRpgBar(y: number, label: string, current: number, max: number, barColor: string, iconDrawFn?: Function) {
     const pct = Math.min(Math.round((current / (max || 1)) * 100), 100);
     
@@ -245,12 +264,12 @@ export async function generateProfileCard(char: any, stats: any, avatarUrlInput?
       ctx.fillText(`${label}: ${current} / ${max} (${pct}%)`, 38, y);
     }
 
-    const startX = iconDrawFn ? 38 : 38;
-    const barWidth = iconDrawFn ? 210 : 210;
+    const startX = 38;
+    const barWidth = 210;
 
     // Fundo da barra
     ctx.fillStyle = '#050403';
-    ctx.strokeStyle = '#261c14';
+    ctx.strokeStyle = '#2d2119';
     ctx.lineWidth = 1;
     ctx.beginPath();
     ctx.roundRect(startX, y + 4, barWidth, 8, 3);
@@ -267,12 +286,12 @@ export async function generateProfileCard(char: any, stats: any, avatarUrlInput?
     }
   }
 
-  drawRpgBar(122, 'XP', currentXp, maxXp, '#bdc3c7');
-  drawRpgBar(156, 'HP', currentHp, maxHp, '#c0392b', drawHeartIcon);
-  drawRpgBar(190, 'ENERGIA', currentEnergy, maxEnergy, '#d35400', drawEnergyIcon);
+  drawRpgBar(122, 'XP', currentXp, maxXp, '#95a5a6');
+  drawRpgBar(156, 'HP', currentHp, maxHp, '#e74c3c', drawHeartIcon);
+  drawRpgBar(190, 'ENERGIA', currentEnergy, maxEnergy, '#f39c12', drawEnergyIcon);
 
   // Separador
-  ctx.strokeStyle = '#261c14';
+  ctx.strokeStyle = '#3a2d21';
   ctx.lineWidth = 1;
   ctx.beginPath();
   ctx.moveTo(38, 215);
@@ -288,7 +307,7 @@ export async function generateProfileCard(char: any, stats: any, avatarUrlInput?
   ctx.fillText(`FOR: ${str}    AGI: ${agi}    INT: ${intVal}`, 38, 262);
   ctx.fillText(`VIT: ${vit}    SOR: ${lck}`, 38, 282);
 
-  ctx.fillStyle = '#c8b6a6';
+  ctx.fillStyle = '#dfd3c3';
   ctx.font = '11px "InterFont", sans-serif';
   ctx.fillText(`Ataque: ${atk}   Defesa: ${def}`, 38, 312);
   ctx.fillText(`Critico: ${crit.toFixed(1)}%   Esquiva: ${dodge.toFixed(1)}%`, 38, 332);
@@ -314,8 +333,8 @@ export async function generateProfileCard(char: any, stats: any, avatarUrlInput?
     { key: 'pet', label: 'Pet', x: centerX + 45, y: centerY + 102 }
   ];
 
-  // Linhas de conexão estilo runa/cabo ligando o avatar aos itens
-  ctx.strokeStyle = '#4a3828';
+  // Linhas de conexão das runas de inventário
+  ctx.strokeStyle = '#5a4533';
   ctx.lineWidth = 1.5;
   for (const s of slotsCoords) {
     const slotCenterX = s.x + 45;
@@ -331,7 +350,7 @@ export async function generateProfileCard(char: any, stats: any, avatarUrlInput?
     ctx.stroke();
   }
 
-  // Avatar com Borda Rústica/Dourada
+  // Avatar com Borda Real Dourada
   if (avatarUrl) {
     try {
       const avatar = await loadImage(avatarUrl);
@@ -353,12 +372,12 @@ export async function generateProfileCard(char: any, stats: any, avatarUrlInput?
     }
   }
 
-  // Renderizar Slots de Equipamentos
+  // Renderizar Slots de Equipamento
   for (const slot of slotsCoords) {
     const itemName = slotItems[slot.key as keyof typeof slotItems] || '—';
 
-    ctx.fillStyle = '#080605';
-    ctx.strokeStyle = '#4a3828';
+    ctx.fillStyle = 'rgba(8, 6, 5, 0.88)';
+    ctx.strokeStyle = '#5a4533';
     ctx.lineWidth = 1.5;
     ctx.beginPath();
     ctx.roundRect(slot.x, slot.y, 90, 48, 5);
@@ -369,7 +388,7 @@ export async function generateProfileCard(char: any, stats: any, avatarUrlInput?
     ctx.font = 'bold 9px "InterFont", sans-serif';
     ctx.fillText(`[ ${slot.label.toUpperCase()} ]`, slot.x + 6, slot.y + 13);
 
-    ctx.fillStyle = itemName !== '—' ? '#ffffff' : '#524334';
+    ctx.fillStyle = itemName !== '—' ? '#ffffff' : '#6c5844';
     ctx.font = 'bold 11px "InterFont", sans-serif';
 
     if (itemName.length > 13) {
@@ -404,7 +423,7 @@ export async function generateProfileCard(char: any, stats: any, avatarUrlInput?
   ctx.font = '11px "InterFont", sans-serif';
   ctx.fillText(marriageText, rightX, 90);
 
-  ctx.strokeStyle = '#261c14';
+  ctx.strokeStyle = '#3a2d21';
   ctx.lineWidth = 1;
   ctx.beginPath();
   ctx.moveTo(rightX, 102);

@@ -417,12 +417,10 @@ export async function handleRpgSelect(i: StringSelectMenuInteraction, action: st
         const classId = i.values[0].replace('start_class:', '');
         const { setClass, getOrCreateCharacter } = await import('../services/character');
         
-        // 🔮 O GATILHO MÁGICO AQUI: Cria o personagem no banco ANTES de aplicar a classe
         await getOrCreateCharacter(discordId, username);
 
         const result = await setClass(discordId, classId);
         
-        // Se der erro mesmo assim, limpa o menu da tela (components: []) para evitar repetição
         if (!result.success) { 
           await i.editReply({ embeds: [errorEmbed('Erro', result.message)], components: [] }); 
           return; 
@@ -504,14 +502,26 @@ export async function handleRpgSelect(i: StringSelectMenuInteraction, action: st
         break;
       }
 
+      // ═══════════════════════════════════════════════════════════════════════
+      // INTEGRAÇÃO: TIPOS ESPECIAIS (Fogo, Gelo...) -> CRAWLER ELEMENTAL
+      // ═══════════════════════════════════════════════════════════════════════
       case 'dungeon_tipo_escolher': {
         await i.deferUpdate();
+        const typeId = i.values[0];
         const char = await getOrCreateCharacter(discordId, username);
-        if (char.currentHp <= 0) { await i.editReply({ embeds: [errorEmbed('Sem HP', 'Cure-se antes de entrar na dungeon.')] }); break; }
-        if (char.currentEnergy < 12) { await i.editReply({ embeds: [errorEmbed('Sem Energia ⚡', `Precisa de **12⚡** para entrar nesta dungeon. Você tem **${char.currentEnergy}⚡**.`)] }); break; }
-        const { doBattleWithType } = await import('../panels/dungeon-tipo');
-        const { embed, rows } = await doBattleWithType(char, i.values[0], true, undefined, i.guildId ?? '');
-        await i.editReply({ embeds: [embed], components: rows });
+        
+        const { startExpedition, buildDungeonCrawlerEmbed } = await import('../panels/dungeon');
+        
+        // Passamos o typeId da Dungeon direto para a expedição!
+        const res = await startExpedition(char, char.currentLocation, typeId);
+        
+        if (!res.success) {
+            await i.editReply({ embeds: [errorEmbed('Expedição Bloqueada', res.error!)], components: [] });
+            return;
+        }
+        
+        const { embeds, components } = buildDungeonCrawlerEmbed(char, res.run!);
+        await i.editReply({ embeds, components });
         break;
       }
 

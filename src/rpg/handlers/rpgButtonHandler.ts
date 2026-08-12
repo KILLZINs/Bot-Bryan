@@ -837,7 +837,7 @@ export async function handleRpgButton(i: ButtonInteraction, action: string): Pro
         }
     }
   } catch (err) {
-    console.error(`[RPG Button Error] action=${currentAction}`, err);
+    console.error(`[RPG Button Error] action=${action}`, err);
     const errMsg = { embeds: [errorEmbed('Erro RPG', 'Ocorreu um erro ao processar o botão.')], files: [] };
     if (i.replied) await i.followUp({ ...errMsg, ephemeral: true }).catch(() => null);
     else if (i.deferred) await i.editReply(errMsg).catch(() => null);

@@ -25,7 +25,6 @@ export async function handleRpgButton(i: ButtonInteraction, action: string): Pro
   const rawId     = i.customId;
 
   try {
-    // ── Tratamento para as abas de Habilidades ───────────────────────────────
     if (rawId.includes('skills_tab:')) {
       await i.deferUpdate();
       const tab = rawId.includes('passivas') ? 'passivas' : 'classe';
@@ -41,6 +40,87 @@ export async function handleRpgButton(i: ButtonInteraction, action: string): Pro
     const param1     = parts[1];
 
     switch (baseAction) {
+      // ═══════════════════════════════════════════════════════════════════════
+      // NOVO SISTEMA: DUNGEON CRAWLER (EXPEDIÇÕES)
+      // ═══════════════════════════════════════════════════════════════════════
+      case 'rpg_crawl': {
+        await i.deferUpdate();
+        const crawlAction = param1; 
+        let char = await getOrCreateCharacter(discordId, username);
+
+        const { activeExpeditions, buildDungeonCrawlerEmbed, processRandomDungeonEvent, startExpedition, doBattleRandom, doBattleEnemy, buildDungeonEmbed, buildDungeonButtons } = await import('../panels/dungeon');
+
+        // INICIAR EXPEDIÇÃO
+        if (crawlAction.startsWith('start_')) {
+          const locId = crawlAction.replace('start_', '');
+          const res = await startExpedition(char, locId);
+          if (!res.success) {
+            await i.editReply({ embeds: [errorEmbed('Expedição Bloqueada', res.error!)], files: [], components: [] });
+            return;
+          }
+          const { embeds, components } = buildDungeonCrawlerEmbed(char, res.run!);
+          await i.editReply({ embeds, files: [], components });
+          return;
+        }
+
+        // VERIFICA SE A EXPEDIÇÃO AINDA EXISTE
+        const run = activeExpeditions.get(discordId);
+        if (!run) {
+          await i.editReply({ embeds: [errorEmbed('Expedição Perdida', 'Sua expedição acabou ou foi cancelada.')], files: [], components: [buildDungeonButtons(char)] });
+          return;
+        }
+
+        // FUGIR
+        if (crawlAction === 'flee') {
+          activeExpeditions.delete(discordId);
+          await i.editReply({ embeds: [buildDungeonEmbed(char)], files: [], components: [buildDungeonButtons(char)] });
+          return;
+        }
+
+        // CONTINUAR APÓS VITÓRIA
+        if (crawlAction === 'continue') {
+          const { embeds, components } = buildDungeonCrawlerEmbed(char, run);
+          await i.editReply({ embeds, files: [], components });
+          return;
+        }
+
+        // SALA DE EVENTO
+        if (crawlAction === 'event') {
+          await processRandomDungeonEvent(char, run);
+          char = await getOrCreateCharacter(discordId, username); // Atualiza HP/Ouro
+          const { embeds, components } = buildDungeonCrawlerEmbed(char, run);
+          await i.editReply({ embeds, files: [], components });
+          return;
+        }
+
+        // SALA DE COMBATE NORMAL
+        if (crawlAction === 'fight') {
+          const { embed, rows } = await doBattleRandom(char, i.guildId ?? '', 'dungeon');
+          await i.editReply({ embeds: [embed], files: [], components: rows });
+          return;
+        }
+
+        // SALA DO BOSS
+        if (crawlAction === 'boss') {
+          const { getBossesForLocation } = await import('../constants/enemies');
+          const bosses = getBossesForLocation(run.locationId, char.level);
+          if (bosses.length === 0) {
+            activeExpeditions.delete(discordId);
+            await i.editReply({ embeds: [infoEmbed('Vitória', 'A câmara final estava vazia... Você concluiu a expedição!')], components: [buildDungeonButtons(char)] });
+            return;
+          }
+          const boss = bosses[Math.floor(Math.random() * bosses.length)];
+          const { embed, rows } = await doBattleEnemy(char, boss.id, i.guildId ?? '', 'dungeon');
+          await i.editReply({ embeds: [embed], files: [], components: rows });
+          return;
+        }
+        break;
+      }
+      
+      // ═══════════════════════════════════════════════════════════════════════
+      // DEMAIS BOTÕES
+      // ═══════════════════════════════════════════════════════════════════════
+
       case 'perfil': {
         await i.deferUpdate();
         let char = await getOrCreateCharacter(discordId, username);
@@ -358,9 +438,11 @@ export async function handleRpgButton(i: ButtonInteraction, action: string): Pro
 
       case 'forja': {
         await i.deferUpdate();
-        const { buildForjaEmbed } = await import('../panels/forja');
+        const { buildForjaEmbed, buildForjaSelect } = await import('../panels/forja');
         const char = await getOrCreateCharacter(discordId, username);
-        const { embed, select } = buildForjaEmbed(char);
+        const inventory = await prisma.rpgInventoryItem.findMany({ where: { characterId: discordId, quantity: { gt: 0 } } });
+        const embed = buildForjaEmbed(char, inventory);
+        const select = buildForjaSelect(char);
         await i.editReply({
           embeds: [embed],
           files: [],
@@ -817,14 +899,6 @@ export async function handleRpgButton(i: ButtonInteraction, action: string): Pro
         const claimSel = await buildClassMissionsClaimSelect(discordId);
         const rows: any[] = claimSel ? [claimSel, buildClassMissionsButtons()] : [buildClassMissionsButtons()];
         await i.editReply({ embeds: [embed], files: [], components: rows });
-        break;
-      }
-
-      case 'dungeon_tipo': {
-        await i.deferUpdate();
-        const char = await getOrCreateCharacter(discordId, username);
-        const { buildDungeonTypeEmbed, buildDungeonTypeSelect, buildDungeonTypeButtons } = await import('../panels/dungeon-tipo');
-        await i.editReply({ embeds: [buildDungeonTypeEmbed(char)], files: [], components: [buildDungeonTypeSelect(char), buildDungeonTypeButtons()] });
         break;
       }
 

@@ -1,213 +1,104 @@
 export type ItemType = 'weapon' | 'helmet' | 'chest' | 'pants' | 'boots' | 'gloves' | 'shield' | 'ring' | 'backpack' | 'pet' | 'consumable' | 'material';
 export type ItemRarity = 'common' | 'uncommon' | 'rare' | 'epic' | 'legendary' | 'mythic';
 
+// ─── CONSTANTES RETROCOMPATÍVEIS (Para o Inventário antigo) ───
+export const RARITY_EMOJI: Record<string, string> = {
+  common: '⬜', uncommon: '🟩', rare: '🟦', epic: '🟪', legendary: '🟧', mythic: '🟥'
+};
+
+export const SLOT_NAME: Record<string, string> = {
+  weapon: 'Arma', helmet: 'Elmo', chest: 'Peitoral', pants: 'Calça', boots: 'Bota',
+  gloves: 'Luvas', shield: 'Escudo', ring: 'Anel', backpack: 'Mochila', pet: 'Pet',
+  consumable: 'Consumível', material: 'Material'
+};
+
+export const SLOT_EMOJI: Record<string, string> = {
+  weapon: '⚔️', helmet: '⛑️', chest: '👕', pants: '👖', boots: '👟',
+  gloves: '🧤', shield: '🛡️', ring: '💍', backpack: '🎒', pet: '🐾',
+  consumable: '🧪', material: '📦'
+};
+
+// ─── INTERFACE HÍBRIDA ───
 export interface Item {
   id: string;
   name: string;
   emoji: string;
   type: ItemType;
+  slot: ItemType;         // Apelido para o inventario.ts
   rarity: ItemRarity;
   description: string;
-  buyPrice?: number; // Se não tiver buyPrice, não vende na loja (só drop ou quest)
+  buyPrice?: number;
   sellPrice: number;
+  price: number;          // Apelido para a loja antiga
+  minLevel: number;       // Apelido para checagem antiga
+  maxStack: number;       // Apelido para o inventario
+  classRestriction?: string[]; // Apelido
+  effect?: string;        // Apelido
   stats?: {
-    str?: number;
-    agi?: number;
-    int?: number;
-    vit?: number;
-    lck?: number;
-    attack?: number;
-    defense?: number;
-    maxHp?: number;
+    str?: number; agi?: number; int?: number; vit?: number; lck?: number;
+    attack?: number; defense?: number; maxHp?: number;
+    hp?: number;          // Apelido
+    energy?: number;      // Apelido
+    critBonus?: number;   // Apelido
+    dodgeBonus?: number;  // Apelido
+    goldBonus?: number;   // Apelido
+    xpBonus?: number;     // Apelido
+    dropBonus?: number;   // Apelido
   };
   healHp?: number;
   healEnergy?: number;
 }
 
+export type RpgItem = Item;
+
+// ─── RECEITAS DA FORJA (Para consertar a forja.ts) ───
+export interface CraftRecipe {
+  resultItemId: string;
+  resultQty: number;
+  costGold: number;
+  ingredients: { itemId: string; qty: number }[];
+}
+export const CRAFT_RECIPES: CraftRecipe[] = []; 
+
+// ─── CATÁLOGO DE ITENS ───
 export const ITEMS: Record<string, Item> = {
-  // ==========================================
-  // ⚔️ ARMAS
-  // ==========================================
   espada_madeira: {
-    id: 'espada_madeira',
-    name: 'Espada de Madeira',
-    emoji: '🪵',
-    type: 'weapon',
-    rarity: 'common',
-    description: 'Uma espada de treinamento leve. Melhor que bater com as mãos.',
-    buyPrice: 50,
-    sellPrice: 10,
+    id: 'espada_madeira', name: 'Espada de Madeira', emoji: '🪵',
+    type: 'weapon', slot: 'weapon', rarity: 'common', description: 'Uma espada leve.',
+    buyPrice: 50, price: 50, sellPrice: 10, minLevel: 1, maxStack: 1,
     stats: { attack: 5, str: 1 },
   },
   adaga_ferro: {
-    id: 'adaga_ferro',
-    name: 'Adaga de Ferro',
-    emoji: '🗡️',
-    type: 'weapon',
-    rarity: 'common',
-    description: 'Arma rápida e fácil de esconder.',
-    buyPrice: 120,
-    sellPrice: 35,
+    id: 'adaga_ferro', name: 'Adaga de Ferro', emoji: '🗡️',
+    type: 'weapon', slot: 'weapon', rarity: 'common', description: 'Rápida e letal.',
+    buyPrice: 120, price: 120, sellPrice: 35, minLevel: 3, maxStack: 1,
     stats: { attack: 12, agi: 3 },
   },
-  espada_aco: {
-    id: 'espada_aco',
-    name: 'Espada de Aço Longa',
-    emoji: '⚔️',
-    type: 'weapon',
-    rarity: 'uncommon',
-    description: 'Uma lâmina afiada forjada pela guilda da cidade.',
-    buyPrice: 450,
-    sellPrice: 150,
-    stats: { attack: 28, str: 5, agi: 2 },
-  },
-  cajado_arcano: {
-    id: 'cajado_arcano',
-    name: 'Cajado Arcano Aprendiz',
-    emoji: '🪄',
-    type: 'weapon',
-    rarity: 'uncommon',
-    description: 'Madeira imbuída com mana cristalizada.',
-    buyPrice: 500,
-    sellPrice: 160,
-    stats: { attack: 15, int: 10 },
-  },
-  lamina_sombria: {
-    id: 'lamina_sombria',
-    name: 'Lâmina Sombria',
-    emoji: '🌙',
-    type: 'weapon',
-    rarity: 'rare',
-    description: 'Esculpidas no escuro das Cavernas Sombrias. (Apenas Drop)',
-    sellPrice: 600, // Sem buyPrice = Só dropa de monstro!
-    stats: { attack: 55, agi: 15, lck: 5 },
-  },
-
-  // ==========================================
-  // 🛡️ ARMADURAS & EQUIPAMENTOS
-  // ==========================================
-  roupa_campones: {
-    id: 'roupa_campones',
-    name: 'Roupas de Camponês',
-    emoji: '👕',
-    type: 'chest',
-    rarity: 'common',
-    description: 'Roupas simples de tecido. Não protegem de nada.',
-    buyPrice: 30,
-    sellPrice: 5,
-    stats: { defense: 2 },
-  },
-  armadura_couro: {
-    id: 'armadura_couro',
-    name: 'Armadura de Couro',
-    emoji: '🧥',
-    type: 'chest',
-    rarity: 'common',
-    description: 'Couro curtido que oferece uma leve proteção.',
-    buyPrice: 150,
-    sellPrice: 40,
-    stats: { defense: 10, vit: 2 },
-  },
   peitoral_ferro: {
-    id: 'peitoral_ferro',
-    name: 'Peitoral de Ferro',
-    emoji: '🛡️',
-    type: 'chest',
-    rarity: 'uncommon',
-    description: 'Armadura pesada que pode aguentar alguns cortes.',
-    buyPrice: 600,
-    sellPrice: 200,
-    stats: { defense: 25, vit: 8, agi: -2 }, // Tira agilidade por ser pesada
+    id: 'peitoral_ferro', name: 'Peitoral de Ferro', emoji: '🛡️',
+    type: 'chest', slot: 'chest', rarity: 'uncommon', description: 'Armadura pesada.',
+    buyPrice: 600, price: 600, sellPrice: 200, minLevel: 5, maxStack: 1,
+    stats: { defense: 25, vit: 8 },
   },
-  anel_da_sorte: {
-    id: 'anel_da_sorte',
-    name: 'Anel do Leprechaun',
-    emoji: '💍',
-    type: 'ring',
-    rarity: 'rare',
-    description: 'Dizem que quem usa este anel encontra mais ouro.',
-    buyPrice: 1200,
-    sellPrice: 400,
-    stats: { lck: 25, defense: 2 },
-  },
-
-  // ==========================================
-  // 🧪 CONSUMÍVEIS (Poções da Loja)
-  // ==========================================
   pocao_hp_pequena: {
-    id: 'pocao_hp_pequena',
-    name: 'Poção de Vida Menor',
-    emoji: '🧪',
-    type: 'consumable',
-    rarity: 'common',
-    description: 'Recupera 50 de HP instantaneamente.',
-    buyPrice: 25,
-    sellPrice: 5,
-    healHp: 50,
+    id: 'pocao_hp_pequena', name: 'Poção de Vida Menor', emoji: '🧪',
+    type: 'consumable', slot: 'consumable', rarity: 'common', description: 'Recupera 50 HP.',
+    buyPrice: 25, price: 25, sellPrice: 5, minLevel: 1, maxStack: 99,
+    healHp: 50, stats: { hp: 50 }
   },
-  pocao_hp_media: {
-    id: 'pocao_hp_media',
-    name: 'Poção de Vida Média',
-    emoji: '🩸',
-    type: 'consumable',
-    rarity: 'uncommon',
-    description: 'Recupera 150 de HP instantaneamente.',
-    buyPrice: 70,
-    sellPrice: 15,
-    healHp: 150,
-  },
-  pocao_energia: {
-    id: 'pocao_energia',
-    name: 'Elixir de Energia',
-    emoji: '⚡',
-    type: 'consumable',
-    rarity: 'rare',
-    description: 'Recupera 40 de Energia para você caçar mais.',
-    buyPrice: 150,
-    sellPrice: 30,
-    healEnergy: 40,
-  },
-
-  // ==========================================
-  // 📦 MATERIAIS (Drops de Monstros)
-  // ==========================================
   couro_de_lobo: {
-    id: 'couro_de_lobo',
-    name: 'Couro de Lobo Selvagem',
-    emoji: '🐺',
-    type: 'material',
-    rarity: 'common',
-    description: 'Um couro rústico vendido na cidade por algumas moedas.',
-    sellPrice: 12,
-  },
-  osso_esqueleto: {
-    id: 'osso_esqueleto',
-    name: 'Osso Arcano',
-    emoji: '🦴',
-    type: 'material',
-    rarity: 'common',
-    description: 'Um osso antigo rangendo com magia negra fraca.',
-    sellPrice: 18,
-  },
-  presa_venenosa: {
-    id: 'presa_venenosa',
-    name: 'Presa Venenosa',
-    emoji: '🦷',
-    type: 'material',
-    rarity: 'uncommon',
-    description: 'Pingando veneno letal. Alquimistas pagam bem por isso.',
-    sellPrice: 45,
+    id: 'couro_de_lobo', name: 'Couro de Lobo Selvagem', emoji: '🐺',
+    type: 'material', slot: 'material', rarity: 'common', description: 'Couro rústico.',
+    price: 0, sellPrice: 12, minLevel: 1, maxStack: 999,
   },
   essencia_sombria: {
-    id: 'essencia_sombria',
-    name: 'Essência Sombria',
-    emoji: '🔮',
-    type: 'material',
-    rarity: 'epic',
-    description: 'Cristal puro de escuridão dropado por líderes das sombras.',
-    sellPrice: 250,
+    id: 'essencia_sombria', name: 'Essência Sombria', emoji: '🔮',
+    type: 'material', slot: 'material', rarity: 'epic', description: 'Pura escuridão.',
+    price: 0, sellPrice: 250, minLevel: 1, maxStack: 999,
   },
 };
+
+export const ITEM_LIST = Object.values(ITEMS);
 
 export function getItem(id: string): Item | undefined {
   return ITEMS[id];

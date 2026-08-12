@@ -22,7 +22,7 @@ export interface DungeonRun {
   locationId: string;
   currentFloor: number;
   maxFloors: number;
-  dungeonTypeId?: string; // NOVO: Guarda o tipo elemental da Dungeon
+  dungeonTypeId?: string;
   logs: string[];
 }
 
@@ -43,9 +43,13 @@ export async function startExpedition(char: FullCharacter, locationId: string, d
 
   activeExpeditions.set(char.discordId, run);
   
+  // ⏳ O PULO DO GATO: Aplica o Cooldown logo na entrada da Expedição
   await prisma.rpgCharacter.update({
     where: { discordId: char.discordId },
-    data: { currentEnergy: { decrement: 10 } }
+    data: { 
+        currentEnergy: { decrement: 10 },
+        lastDungeon: new Date() // Trava a porta por 5 minutos caso ele fuja/morra!
+    }
   });
 
   return { success: true, run };
@@ -102,7 +106,6 @@ export function buildDungeonButtons(char: FullCharacter): ActionRowBuilder<Butto
   const cd = isDungeonOnCooldown(char, 5);
   const hasEnemies = getEnemiesForLocation(loc.id, char.level).length > 0 || getBossesForLocation(loc.id).filter(b => char.level >= b.minLevel).length > 0;
 
-  // CORREÇÃO DOS IDs DOS BOTÕES (rpg:crawl:start)
   return new ActionRowBuilder<ButtonBuilder>().addComponents(
     new ButtonBuilder().setCustomId(`rpg:crawl:start`).setLabel('🚪 Adentrar Expedição').setStyle(ButtonStyle.Danger).setDisabled(!hasEnemies || cd.onCooldown || char.currentHp <= 0),
     new ButtonBuilder().setCustomId('rpg:dungeon').setLabel('🔄 Atualizar').setStyle(ButtonStyle.Secondary),
@@ -258,8 +261,14 @@ export async function doBattleRandom(char: FullCharacter, guildId?: string, mode
   const enemies = getEnemiesForLocation(loc.id, char.level);
   if (enemies.length === 0) return { embed: new EmbedBuilder().setColor(0xE74C3C).setTitle('Sem Inimigos').setDescription('Nenhum inimigo encontrado.'), rows: [mode === 'hunt' ? buildHuntButtons(false, char) : buildDungeonButtons(char)] };
   const enemy = enemies[Math.floor(Math.random() * enemies.length)];
+  
+  // 🔮 O PASSE LIVRE DA EXPEDIÇÃO! 
+  // Se o cara está na expedição, disfarçamos o mode de 'hunt' para o combat.ts não barrar o cooldown.
+  const isExped = activeExpeditions.has(char.discordId);
+  const internalMode = isExped ? 'hunt' : mode;
+
   let turn;
-  try { turn = await startInteractiveCombat(char, enemy, guildId, mode); } catch (error) {
+  try { turn = await startInteractiveCombat(char, enemy, guildId, internalMode); } catch (error) {
     if (error instanceof CombatBlockedError) return { embed: new EmbedBuilder().setColor(0xF39C12).setTitle('⏳ Bloqueado').setDescription(error.message), rows: [mode === 'hunt' ? buildHuntButtons(true, char) : buildDungeonButtons(char)] };
     throw error;
   }
@@ -269,8 +278,13 @@ export async function doBattleRandom(char: FullCharacter, guildId?: string, mode
 export async function doBattleEnemy(char: FullCharacter, enemyId: string, guildId?: string, mode: CombatMode = 'dungeon'): Promise<{ embed: EmbedBuilder; rows: ActionRowBuilder<ButtonBuilder>[] }> {
   const enemy = getEnemy(enemyId);
   if (!enemy) return { embed: new EmbedBuilder().setColor(0xE74C3C).setTitle('Erro').setDescription('Inimigo não encontrado.'), rows: [] };
+  
+  // 🔮 O PASSE LIVRE DA EXPEDIÇÃO!
+  const isExped = activeExpeditions.has(char.discordId);
+  const internalMode = isExped ? 'hunt' : mode;
+
   let turn;
-  try { turn = await startInteractiveCombat(char, enemy, guildId, mode); } catch (error) {
+  try { turn = await startInteractiveCombat(char, enemy, guildId, internalMode); } catch (error) {
     if (error instanceof CombatBlockedError) return { embed: new EmbedBuilder().setColor(0xF39C12).setTitle('⏳ Bloqueado').setDescription(error.message), rows: [mode === 'hunt' ? buildHuntButtons(true, char) : buildDungeonButtons(char)] };
     throw error;
   }
@@ -283,12 +297,15 @@ export async function doCombatAction(discordId: string, action: CombatAction, ch
 }
 
 function buildCombatTurnEmbed(turn: CombatTurn, char: FullCharacter): { embed: EmbedBuilder; rows: ActionRowBuilder<ButtonBuilder>[] } {
+  const isExped = activeExpeditions.has(char.discordId);
+
   if (!turn.finished) {
     const stats = computeStats(char);
     const hpPct = stats.maxHp > 0 ? turn.playerHp / stats.maxHp : 0;
     const enemyPct = turn.enemyMaxHp > 0 ? turn.enemyHp / turn.enemyMaxHp : 0;
     const fullLog = turn.log.join('\n');
     const logSlice = fullLog.length > 2200 ? '...\n' + fullLog.slice(-2050) : fullLog;
+    
     const actionRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
       new ButtonBuilder().setCustomId('rpg:combate_acao:attack').setLabel('⚔️ Atacar').setStyle(ButtonStyle.Danger),
       new ButtonBuilder().setCustomId('rpg:combate_acao:skill').setLabel(turn.skillName ? `✨ ${turn.skillName}` : '✨ Habilidade').setStyle(ButtonStyle.Primary).setDisabled(!turn.skillReady),
@@ -296,9 +313,15 @@ function buildCombatTurnEmbed(turn: CombatTurn, char: FullCharacter): { embed: E
       new ButtonBuilder().setCustomId('rpg:combate_acao:potion').setLabel('🧪 Poção').setStyle(ButtonStyle.Success).setDisabled(!turn.potionAvailable),
       new ButtonBuilder().setCustomId('rpg:combate_acao:flee').setLabel('🏃 Fugir').setStyle(ButtonStyle.Secondary),
     );
+    
     const status = [ `❤️ Você: **${turn.playerHp}/${stats.maxHp}**`, `👹 ${turn.enemyName}: **${turn.enemyHp}/${turn.enemyMaxHp}**`].join('  •  ');
+    
+    // Maquia o título para a Expedição não ficar com título de Caçada
+    const titleText = isExped ? '⚔️ Expedição' : turn.mode === 'hunt' ? '🌲 Caçada' : '⚔️ Dungeon';
+    const color = isExped ? 0xE74C3C : turn.mode === 'hunt' ? 0x2ECC71 : 0xE74C3C;
+
     return {
-      embed: new EmbedBuilder().setColor(turn.mode === 'hunt' ? 0x2ECC71 : 0xE74C3C).setTitle(`${turn.mode === 'hunt' ? '🌲 Caçada' : '⚔️ Expedição'} — Rodada ${turn.round || 1}`).setDescription(logSlice).addFields({ name: '📊 Combate', value: status }),
+      embed: new EmbedBuilder().setColor(color).setTitle(`${titleText} — Rodada ${turn.round || 1}`).setDescription(logSlice).addFields({ name: '📊 Combate', value: status }),
       rows: [actionRow],
     };
   }
@@ -320,21 +343,27 @@ function buildCombatResultEmbed(result: NonNullable<CombatTurn['result']>, char:
     embed.addFields({ name: `🎁 Itens!`, value: dropText });
   }
 
-  const isExpedition = activeExpeditions.has(char.discordId) && mode === 'dungeon';
+  const isExpedition = activeExpeditions.has(char.discordId);
   let continueBtn: ButtonBuilder;
 
   if (isExpedition && result.result === 'vitoria') {
       const run = activeExpeditions.get(char.discordId)!;
       run.currentFloor++;
       if (run.currentFloor > run.maxFloors) {
-          // BOTAO DE COLETAR RECOMPENSA FINAL DA EXPEDIÇÃO!
           continueBtn = new ButtonBuilder().setCustomId('rpg:crawl:finish').setLabel('🏆 Resgatar Recompensas!').setStyle(ButtonStyle.Success);
       } else {
           continueBtn = new ButtonBuilder().setCustomId('rpg:crawl:continue').setLabel('🚪 Avançar na Expedição').setStyle(ButtonStyle.Success);
       }
   } else {
       if (isExpedition) activeExpeditions.delete(char.discordId); // Perdeu ou Fugiu: Limpa a run
-      continueBtn = new ButtonBuilder().setCustomId(mode === 'hunt' ? 'rpg:caca_aleatoria' : 'rpg:dungeon').setLabel(mode === 'hunt' ? '🌲 Caçar Novamente' : 'Voltar à Entrada').setStyle(ButtonStyle.Secondary).setDisabled(result.playerHpLeft <= 0);
+      
+      const isHunt = mode === 'hunt' && !isExpedition; // Garante que a expedição volte pro menu de dungeon e não pro de caça
+      
+      continueBtn = new ButtonBuilder()
+        .setCustomId(isHunt ? 'rpg:caca_aleatoria' : 'rpg:dungeon')
+        .setLabel(isHunt ? '🌲 Caçar Novamente' : 'Voltar à Entrada')
+        .setStyle(isHunt ? ButtonStyle.Success : ButtonStyle.Secondary)
+        .setDisabled(result.playerHpLeft <= 0);
   }
 
   const combatBtns = new ActionRowBuilder<ButtonBuilder>().addComponents(

@@ -673,11 +673,15 @@ export async function handleRpgSelect(i: StringSelectMenuInteraction, action: st
       }
 
       default:
-        await i.editReply({ embeds: [errorEmbed('Ação desconhecida', `Select RPG \`${action}\` não encontrado.`)] });
+        if (i.deferred || i.replied) {
+          await i.editReply({ embeds: [errorEmbed('Acesso', `Ação \`${baseAction}\` não encontrada.`)], files: [] });
+        } else {
+          await i.reply({ embeds: [errorEmbed('Acesso', `Ação \`${baseAction}\` não encontrada.`)], ephemeral: true });
+        }
     }
   } catch (err) {
-    console.error(`[RPG Select Error] action=${action}`, err);
-    const errMsg = { embeds: [errorEmbed('Erro RPG', 'Ocorreu um erro. Tente novamente.')] };
+    console.error(`[RPG Button Error] action=${currentAction}`, err);
+    const errMsg = { embeds: [errorEmbed('Erro RPG', 'Ocorreu um erro ao processar o botão.')], files: [] };
     if (i.replied) await i.followUp({ ...errMsg, ephemeral: true }).catch(() => null);
     else if (i.deferred) await i.editReply(errMsg).catch(() => null);
     else await i.reply({ ...errMsg, ephemeral: true }).catch(() => null);

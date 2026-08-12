@@ -34,7 +34,7 @@ export interface Item {
   maxStack: number;       // Apelido para o inventario
   classRestriction?: string[]; // Apelido
   effect?: string;        // Apelido
-  stats?: {
+  stats: {                // Obrigatório para resolver o "possibly undefined"
     str?: number; agi?: number; int?: number; vit?: number; lck?: number;
     attack?: number; defense?: number; maxHp?: number;
     hp?: number;          // Apelido
@@ -53,6 +53,11 @@ export type RpgItem = Item;
 
 // ─── RECEITAS DA FORJA (Para consertar a forja.ts) ───
 export interface CraftRecipe {
+  id: string;
+  outputItem: string;
+  outputQty: number;
+  craftTimeMin: number;
+  minLevel: number;
   resultItemId: string;
   resultQty: number;
   costGold: number;
@@ -90,11 +95,13 @@ export const ITEMS: Record<string, Item> = {
     id: 'couro_de_lobo', name: 'Couro de Lobo Selvagem', emoji: '🐺',
     type: 'material', slot: 'material', rarity: 'common', description: 'Couro rústico.',
     price: 0, sellPrice: 12, minLevel: 1, maxStack: 999,
+    stats: {} // Resolve o problema de stats undefined
   },
   essencia_sombria: {
     id: 'essencia_sombria', name: 'Essência Sombria', emoji: '🔮',
     type: 'material', slot: 'material', rarity: 'epic', description: 'Pura escuridão.',
     price: 0, sellPrice: 250, minLevel: 1, maxStack: 999,
+    stats: {} // Resolve o problema de stats undefined
   },
 };
 

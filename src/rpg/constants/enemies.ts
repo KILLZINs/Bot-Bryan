@@ -10,8 +10,9 @@ export interface Enemy {
   name: string;
   emoji: string;
   level: number;
-  location: string;        // Para o filtro da dungeon
-  type: 'normal' | 'boss'; // Para a dungeon.ts não quebrar
+  minLevel: number;        // Apelido para a dungeon não quebrar
+  location: string;
+  type: 'normal' | 'elite' | 'boss'; // Adicionado "elite" para compatibilidade
   hp: number;
   baseHp: number;          // Apelido pro combate
   attack: number;
@@ -30,7 +31,7 @@ export interface Enemy {
 
 export const ENEMIES: Enemy[] = [
   {
-    id: 'lobo_selvagem', name: 'Lobo Selvagem', emoji: '🐺', level: 2,
+    id: 'lobo_selvagem', name: 'Lobo Selvagem', emoji: '🐺', level: 2, minLevel: 1,
     location: 'floresta_inicial', type: 'normal',
     hp: 80, baseHp: 80, attack: 12, baseAttack: 12, defense: 3, baseDefense: 3,
     xpReward: 25, goldMin: 5, goldMax: 15, goldReward: { min: 5, max: 15 },
@@ -38,7 +39,7 @@ export const ENEMIES: Enemy[] = [
     dropTable: [{ itemId: 'couro_de_lobo', chance: 70 }],
   },
   {
-    id: 'goblin_ladrao', name: 'Goblin Ladrão', emoji: '👺', level: 4,
+    id: 'goblin_ladrao', name: 'Goblin Ladrão', emoji: '👺', level: 4, minLevel: 3,
     location: 'floresta_inicial', type: 'normal',
     hp: 120, baseHp: 120, attack: 22, baseAttack: 22, defense: 8, baseDefense: 8,
     xpReward: 45, goldMin: 25, goldMax: 50, goldReward: { min: 25, max: 50 },
@@ -46,7 +47,7 @@ export const ENEMIES: Enemy[] = [
     dropTable: [{ itemId: 'pocao_hp_pequena', chance: 30 }],
   },
   {
-    id: 'cavaleiro_sombrio', name: 'Cavaleiro Sombrio', emoji: '🥷', level: 15,
+    id: 'cavaleiro_sombrio', name: 'Cavaleiro Sombrio', emoji: '🥷', level: 15, minLevel: 10,
     location: 'cavernas_sombrias', type: 'boss',
     hp: 800, baseHp: 800, attack: 110, baseAttack: 110, defense: 60, baseDefense: 60,
     xpReward: 350, goldMin: 150, goldMax: 300, goldReward: { min: 150, max: 300 },
@@ -60,8 +61,11 @@ export function getEnemy(id: string): Enemy | undefined {
   return ENEMIES.find(e => e.id === id);
 }
 
-// ─── FUNÇÕES DE AMBIENTE (Resolve o erro da Dungeon e Handler) ───
-export function scaleEnemy(enemy: Enemy, playerLevel: number): Enemy {
+// ─── FUNÇÕES DE AMBIENTE ───
+
+// Parâmetro opcional `playerLevel` resolve o erro de 1 vs 2 argumentos da dungeon.ts!
+export function scaleEnemy(enemy: Enemy, playerLevel?: number): Enemy {
+  if (!playerLevel) return enemy;
   const levelDiff = Math.max(0, playerLevel - enemy.level);
   const scale = 1 + (levelDiff * 0.1);
   return {

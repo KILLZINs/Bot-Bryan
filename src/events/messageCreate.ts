@@ -85,7 +85,7 @@ const CREATE_SUKI_WEBHOOK_REGEX =
   /\b(?:cria|criar|configure|configurar|ativa|ativar)\b[\s\S]*\b(?:suki|webhook)\b/i;
 
 // ============================================================
-// UTILIDADES & MEMÓRIA
+// UTILIDADES & MEMÓRIA (OTIMIZADO PARA ECONOMIA DE TOKENS)
 // ============================================================
 
 function today() {
@@ -116,10 +116,10 @@ function thisWeek() {
 
 async function fetchChannelMemory(
   message: Message,
-  limit = 8
+  limit = 5 // Reduzido para economizar tokens e acelerar a resposta da API
 ): Promise<{ role: 'user' | 'assistant'; content: string }[]> {
   try {
-    const fetched = await message.channel.messages.fetch({ limit: 12 });
+    const fetched = await message.channel.messages.fetch({ limit: 6 });
     const memory: { role: 'user' | 'assistant'; content: string }[] = [];
 
     const sorted = Array.from(fetched.values())
@@ -495,7 +495,6 @@ export default {
       const sukiKey = `${guildId}:${authorId}`;
       const now = Date.now();
 
-      // MÁGICA 1: Aviso de Cooldown pra ngm achar q ela quebrou
       if (now - (sukiCooldowns.get(sukiKey) ?? 0) < 8000) {
         const warn = await message.reply('⏳ Segura a emoção! Espera eu respirar (8s) pra responder de novo!').catch(() => null);
         if (warn) setTimeout(() => warn.delete().catch(() => null), 4000);
@@ -534,12 +533,12 @@ export default {
         return;
       }
 
-      // MÁGICA 2: Pingando o usuário que chamou ela (Simulando Reply visual)
+      // Envio otimizado e limpo (sem duplicar menção no texto)
       await webhook.send({
-        content: `<@${message.author.id}> ${response}`,
+        content: response,
         username: SUKI_WEBHOOK_NAME,
         ...(SUKI_WEBHOOK_AVATAR ? { avatarURL: SUKI_WEBHOOK_AVATAR } : {}),
-        allowedMentions: { users: [message.author.id] }, // Libera a marcação pra notificar ele
+        allowedMentions: { parse: [] },
       }).catch(async err => {
         console.error('[Suki Webhook] Erro ao enviar:', err);
         await message.reply('Deu erro pra eu aparecer como Suki 😭').catch(() => null);
@@ -606,7 +605,6 @@ export default {
         const now = Date.now();
 
         if (now - (sukiCooldowns.get(sukiKey) ?? 0) < 8000) {
-          // Aqui ela só ignora silenciosamente pra n floodar o chat atoa qnd for citada no meio da frase
           return;
         }
 
@@ -643,10 +641,10 @@ export default {
         }
 
         await webhook.send({
-          content: `<@${message.author.id}> ${response}`, // Tbm pinga a pessoa aqui
+          content: response,
           username: SUKI_WEBHOOK_NAME,
           ...(SUKI_WEBHOOK_AVATAR ? { avatarURL: SUKI_WEBHOOK_AVATAR } : {}),
-          allowedMentions: { users: [message.author.id] },
+          allowedMentions: { parse: [] },
         }).catch(async err => {
           console.error('[Suki Webhook] Erro ao enviar:', err);
           await message.reply('Deu erro pra eu aparecer como Suki 😭').catch(() => null);
@@ -868,7 +866,7 @@ export default {
       const {
         ensureDailyMissions,
         ensureWeeklyMissions,
-      } = await import('../commands/utility/missoes');
+      } = await import('../../commands/utility/missoes');
 
       await Promise.all([
         ensureDailyMissions(authorId, guildId),
@@ -1029,7 +1027,7 @@ export default {
       if (!channel) return;
 
       const { applyTemplate: applyLevelUpTemplate } =
-        await import('../utils/embedTemplates');
+        await import('../../utils/embedTemplates');
 
       const embed =
         new EmbedBuilder()

@@ -586,8 +586,8 @@ export async function handleRpgSelect(i: StringSelectMenuInteraction, action: st
         ]);
 
         const feedbackEmbed = result.success
-          ? (await import('../../utils/embeds')).successEmbed('🎁 Recompensa Coletada!', `${result.message}\n+**${result.xp}** XP | +**${result.coins}** 🪙`)
-          : (await import('../../utils/embeds')).errorEmbed('Erro', result.message);
+          ? successEmbed('🎁 Recompensa Coletada!', `${result.message}\n+**${result.xp}** XP | +**${result.coins}** 🪙`)
+          : errorEmbed('Erro', result.message);
 
         const missaoRows: any[] = claimSelect ? [claimSelect, buildMissoesButtons()] : [buildMissoesButtons()];
         await i.editReply({ embeds: [feedbackEmbed, missoesEmbed], components: missaoRows });
@@ -605,8 +605,8 @@ export async function handleRpgSelect(i: StringSelectMenuInteraction, action: st
         const onCd = !!(lastTrain && (Date.now() - lastTrain.getTime()) < 20 * 60 * 1000);
         const embed = await buildTreinarEmbed(updatedChar);
         const fb = result.success
-          ? (await import('../../utils/embeds')).successEmbed('🥊 Treino!', result.message)
-          : (await import('../../utils/embeds')).errorEmbed('Treino', result.message);
+          ? successEmbed('🥊 Treino!', result.message)
+          : errorEmbed('Treino', result.message);
         await i.editReply({ embeds: [fb, embed], components: [buildTreinarSelect(onCd), buildTreinarButtons()] });
         break;
       }
@@ -619,8 +619,8 @@ export async function handleRpgSelect(i: StringSelectMenuInteraction, action: st
         const result = await buyTavernaItem(char, i.values[0]);
         const updatedChar = await getOrCreateCharacter(discordId, username);
         const fb = result.success
-          ? (await import('../../utils/embeds')).successEmbed('🍺 Taverna!', result.message)
-          : (await import('../../utils/embeds')).errorEmbed('Taverna', result.message);
+          ? successEmbed('🍺 Taverna!', result.message)
+          : errorEmbed('Taverna', result.message);
         await i.editReply({ embeds: [fb, await buildTavernaEmbed(updatedChar)], components: [buildTavernaMenuSelect(), buildTavernaButtons()] });
         break;
       }
@@ -648,8 +648,8 @@ export async function handleRpgSelect(i: StringSelectMenuInteraction, action: st
         const claimSel = await buildClassMissionsClaimSelect(discordId);
         const rows: any[] = claimSel ? [claimSel, buildClassMissionsButtons()] : [buildClassMissionsButtons()];
         const fb = result.success
-          ? (await import('../../utils/embeds')).successEmbed('🎁 Missão!', `${result.message}\n+**${result.xp}** XP | +**${result.gold}** 🪙 | +**${result.energy}** ⚡`)
-          : (await import('../../utils/embeds')).errorEmbed('Missão', result.message);
+          ? successEmbed('🎁 Missão!', `${result.message}\n+**${result.xp}** XP | +**${result.gold}** 🪙 | +**${result.energy}** ⚡`)
+          : errorEmbed('Missão', result.message);
         await i.editReply({ embeds: [fb, embed], components: rows });
         break;
       }
@@ -666,22 +666,18 @@ export async function handleRpgSelect(i: StringSelectMenuInteraction, action: st
         const embed = await buildWorldEventsEmbed(guildId);
         const btns = buildWorldEventsButtons(guildId, true, !!active, active?.eventType);
         const fb = result.success
-          ? (await import('../../utils/embeds')).successEmbed('🌎 Evento!', result.message)
-          : (await import('../../utils/embeds')).errorEmbed('Evento', result.message);
+          ? successEmbed('🌎 Evento!', result.message)
+          : errorEmbed('Evento', result.message);
         await i.editReply({ embeds: [fb, embed], components: btns });
         break;
       }
 
       default:
-        if (i.deferred || i.replied) {
-          await i.editReply({ embeds: [errorEmbed('Acesso', `Ação \`${baseAction}\` não encontrada.`)], files: [] });
-        } else {
-          await i.reply({ embeds: [errorEmbed('Acesso', `Ação \`${baseAction}\` não encontrada.`)], ephemeral: true });
-        }
+        await i.editReply({ embeds: [errorEmbed('Ação desconhecida', `Select RPG \`${action}\` não encontrado.`)] });
     }
   } catch (err) {
-    console.error(`[RPG Button Error] action=${currentAction}`, err);
-    const errMsg = { embeds: [errorEmbed('Erro RPG', 'Ocorreu um erro ao processar o botão.')], files: [] };
+    console.error(`[RPG Select Error] action=${action}`, err);
+    const errMsg = { embeds: [errorEmbed('Erro RPG', 'Ocorreu um erro. Tente novamente.')] };
     if (i.replied) await i.followUp({ ...errMsg, ephemeral: true }).catch(() => null);
     else if (i.deferred) await i.editReply(errMsg).catch(() => null);
     else await i.reply({ ...errMsg, ephemeral: true }).catch(() => null);

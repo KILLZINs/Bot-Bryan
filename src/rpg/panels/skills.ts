@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════
-// PAINEL DE Habilidades & ÁRVORE DE PASSIVAS
+// PAINEL DE HABILIDADES & ÁRVORE DE PASSIVAS
 // ═══════════════════════════════════════════════════════════════════════
 
 import {
@@ -15,23 +15,31 @@ export async function buildHabilidadesEmbed(char: FullCharacter, viewMode: 'clas
   const cls = getClass(char.class);
   const availableSkills = cls?.divineSkills.map(id => DIVINE_SKILLS[id]).filter(Boolean) ?? [];
 
-  // Garante que cada habilidade da classe possui seu registro individual de XP no banco
-  for (const s of availableSkills) {
-    await prisma.rpgLearnedSkill.upsert({
-      where: { characterId_skillId: { characterId: char.discordId, skillId: s.id } },
-      update: {},
-      create: { characterId: char.discordId, skillId: s.id, rank: 'F', exp: 0 }
-    }).catch(() => null);
-  }
-
-  const learnedSkillsList = await prisma.rpgLearnedSkill.findMany({
+  // Puxa as habilidades registradas.
+  let learnedSkillsList = await prisma.rpgLearnedSkill.findMany({
     where: { characterId: char.discordId }
   });
-  const learnedMap = new Map(learnedSkillsList.map(s => [s.skillId, s]));
+  let learnedMap = new Map(learnedSkillsList.map(s => [s.skillId, s]));
+
+  // Garante que cada habilidade tenha seu XP ISOLADO no banco. Se não existir, cria agora com segurança.
+  const toCreate = availableSkills.filter(s => !learnedMap.has(s.id));
+  if (toCreate.length > 0) {
+    await Promise.all(toCreate.map(s => 
+      prisma.rpgLearnedSkill.create({
+        data: { characterId: char.discordId, skillId: s.id, rank: 'F', exp: 0 }
+      }).catch(() => null) // catch para evitar falhas se duplicar
+    ));
+    learnedSkillsList = await prisma.rpgLearnedSkill.findMany({
+      where: { characterId: char.discordId }
+    });
+    learnedMap = new Map(learnedSkillsList.map(s => [s.skillId, s]));
+  }
 
   const equippedIds: string[] = Array.isArray(char.equippedSkills) 
     ? (char.equippedSkills as string[]) 
     : (char.divineSkillId ? [char.divineSkillId] : []);
+
+  const ranksList = ['F', 'E', 'D', 'C', 'B', 'A', 'S', 'SS', 'SSS'];
 
   if (viewMode === 'classe') {
     let equippedText = '*Nenhuma habilidade equipada.*';
@@ -43,7 +51,8 @@ export async function buildHabilidadesEmbed(char: FullCharacter, viewMode: 'clas
         const learned = learnedMap.get(id);
         const rank = learned?.rank ?? 'F';
         const exp = learned?.exp ?? 0;
-        const nextExp = Math.round(ds.rankUpExpRequired * Math.pow(1.5, ['F', 'E', 'D', 'C', 'B', 'A', 'S', 'SS', 'SSS'].indexOf(rank)));
+        const rankIndex = Math.max(0, ranksList.indexOf(rank));
+        const nextExp = Math.round((ds.rankUpExpRequired || 150) * Math.pow(1.5, rankIndex));
 
         return `${ds.emoji} **${ds.name}** [Rank **${rank}**]\n> 📈 XP: \`${exp} / ${nextExp}\` | Custo: \`${ds.energyCost} Energia\`\n> ${ds.description}`;
       }).filter(Boolean).join('\n\n');
@@ -55,7 +64,8 @@ export async function buildHabilidadesEmbed(char: FullCharacter, viewMode: 'clas
           const learned = learnedMap.get(s.id);
           const rank = learned?.rank ?? 'F';
           const exp = learned?.exp ?? 0;
-          const nextExp = Math.round(s.rankUpExpRequired * Math.pow(1.5, ['F', 'E', 'D', 'C', 'B', 'A', 'S', 'SS', 'SSS'].indexOf(rank)));
+          const rankIndex = Math.max(0, ranksList.indexOf(rank));
+          const nextExp = Math.round((s.rankUpExpRequired || 150) * Math.pow(1.5, rankIndex));
 
           return `${isEquipped ? '✅' : '○'} ${s.emoji} **${s.name}** — Lv.${s.unlockLevel}+\n> Rank: \`${rank}\` | XP: \`${exp} / ${nextExp}\`\n> ${s.description}`;
         }).join('\n\n')
@@ -80,7 +90,7 @@ export async function buildHabilidadesEmbed(char: FullCharacter, viewMode: 'clas
     const select = unlocked.length > 0
       ? new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(
           new StringSelectMenuBuilder()
-            .setCustomId('rpg:equipar_multiplas_skills') // Adicionado o prefixo rpg:
+            .setCustomId('rpg:equipar_multiplas_skills')
             .setPlaceholder('Selecione para alternar (Equipar/Desequipar)...')
             .setMinValues(1)
             .setMaxValues(Math.min(unlocked.length, 3))
@@ -133,13 +143,13 @@ export async function buildHabilidadesEmbed(char: FullCharacter, viewMode: 'clas
         .setLabel(`${t.name} (Nv.${lvl}/${t.maxLevel})`)
         .setValue(`talent:${t.id}`)
         .setEmoji(t.emoji.trim())
-        .setDescription(canBuy ? `Evoluir • Custo: ${t.costPerLevel} pts` : `[Nível Máximo Atingido ou Sem Pontos]`);
+        .setDescription(canBuy ? `Evoluir • Custo: ${t.costPerLevel} pts` : `[Nível Máximo ou Sem Pontos]`);
     });
 
     const select = talentOptions.length > 0
       ? new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(
           new StringSelectMenuBuilder()
-            .setCustomId('rpg:evoluir_talento') // Adicionado o prefixo rpg:
+            .setCustomId('rpg:evoluir_talento')
             .setPlaceholder('🧬 Escolha um talento passivo para evoluir...')
             .addOptions(talentOptions)
         )

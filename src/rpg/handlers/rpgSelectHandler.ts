@@ -83,12 +83,12 @@ export async function handleRpgSelect(i: StringSelectMenuInteraction, action: st
       return;
     }
 
-    // Extrai o nome da ação ignorando qualquer prefixo para blindar contra falhas
+    // Extrai o nome da ação base ignorando prefixos adicionais
     const baseAction = rawId.replace(/^rpg_select:/, '').replace(/^rpg:/, '').split(':')[0];
 
     if (baseAction === 'worldboss_level') {
       await i.deferUpdate();
-      const templateIndex = parseInt(rawId.split(':')[1] ?? '0', 10);
+      const templateIndex = parseInt(rawId.split(':').pop() ?? '0', 10);
       const level = parseInt(i.values[0], 10);
       const { spawnWorldBoss } = await import('../services/worldBoss');
       const result = await spawnWorldBoss(i.guildId ?? '', templateIndex, level);
@@ -214,6 +214,7 @@ export async function handleRpgSelect(i: StringSelectMenuInteraction, action: st
           return;
         }
 
+        // Default: Re-renderiza o Perfil em Canvas
         let attachment: AttachmentBuilder | null = null;
         try {
           const avatarUrl = i.user.displayAvatarURL({ extension: 'png', size: 256 });

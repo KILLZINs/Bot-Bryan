@@ -18,7 +18,7 @@ import { generateProfileCard } from '../rpg/utils/profileCanvas';
 export function buildProfileSelectMenu(): ActionRowBuilder<StringSelectMenuBuilder> {
   return new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(
     new StringSelectMenuBuilder()
-      .setCustomId('rpg_select:menu_perfil')
+      .setCustomId('rpg:menu_perfil') // Atualizado para evitar Timeout
       .setPlaceholder('📍 Navegar pelo Hub do Aventureiro...')
       .addOptions(
         new StringSelectMenuOptionBuilder().setLabel('⚔️ Entrar na Dungeon').setValue('dungeon').setDescription('Explorar dungeons e batalhar contra monstros'),
@@ -38,7 +38,7 @@ export function buildProfileSelectMenu(): ActionRowBuilder<StringSelectMenuBuild
 export function buildAtividadesSelectMenu(): ActionRowBuilder<StringSelectMenuBuilder> {
   return new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(
     new StringSelectMenuBuilder()
-      .setCustomId('rpg_select:menu_atividades')
+      .setCustomId('rpg:menu_atividades') // Atualizado para evitar Timeout
       .setPlaceholder('🎯 Escolha uma atividade para realizar...')
       .addOptions(
         new StringSelectMenuOptionBuilder().setLabel('🎯 Caçada').setValue('cacar').setDescription('Batalhar contra monstros selvagens da região'),
@@ -137,7 +137,7 @@ export default {
 
       const select = new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(
         new StringSelectMenuBuilder()
-          .setCustomId('rpg_select:escolher_classe')
+          .setCustomId('rpg:escolher_classe') // Atualizado para evitar Timeout
           .setPlaceholder('Selecione sua classe inicial...')
           .addOptions(
             TIER1_CLASSES.map(c =>

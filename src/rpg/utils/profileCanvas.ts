@@ -13,15 +13,15 @@ try {
   console.error('Erro ao carregar fonte Inter-Bold:', e);
 }
 
-// Remove emojis de strings para evitar glifos/quadrados pretos no Canvas Linux
+// Remove emojis para evitar quadrados pretos no Canvas Linux
 function stripEmojis(text: string): string {
   return text.replace(/[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F700}-\u{1F77F}\u{1F780}-\u{1F7FF}\u{1F800}-\u{1F8FF}\u{1F900}-\u{1F9FF}\u{1FA00}-\u{1FA6F}\u{1FA70}-\u{1FAFF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]/gu, '').trim();
 }
 
 function formatCooldown(date: Date | null | undefined, minutes: number): string {
-  if (!date) return 'Pronto';
+  if (!date) return 'PRONTO';
   const remaining = minutes * 60_000 - (Date.now() - date.getTime());
-  if (remaining <= 0) return 'Pronto';
+  if (remaining <= 0) return 'PRONTO';
   const totalSeconds = Math.ceil(remaining / 1000);
   const mins = Math.floor(totalSeconds / 60);
   const secs = totalSeconds % 60;
@@ -71,7 +71,7 @@ export async function generateProfileCard(char: any, stats: any, avatarUrlInput?
     const marriage = await getMarriage(char.discordId);
     if (marriage) {
       const daysTogether = Math.floor((Date.now() - marriage.marriedAt.getTime()) / 86400000);
-      marriageText = `Casado(a) (${daysTogether}d)`;
+      marriageText = `Casado(a) [${daysTogether}d]`;
     }
   } catch { /* Ignora erro */ }
 
@@ -111,120 +111,139 @@ export async function generateProfileCard(char: any, stats: any, avatarUrlInput?
   const avatarUrl = avatarUrlInput || char.avatarUrl || '';
 
   // ==========================================
-  // RENDERIZAÇÃO & DESIGN PREMIUM
+  // RENDERIZAÇÃO DE UI RPG PREMIUM
   // ==========================================
 
-  // Fundo Principal com leve gradiente de profundidade
+  // 1. Fundo com Gradiente Sutil de Profundidade
   const bgGrad = ctx.createLinearGradient(0, 0, width, height);
-  bgGrad.addColorStop(0, '#0a0807');
-  bgGrad.addColorStop(1, '#140f0c');
+  bgGrad.addColorStop(0, '#0c0a09');
+  bgGrad.addColorStop(0.5, '#120f0d');
+  bgGrad.addColorStop(1, '#080706');
   ctx.fillStyle = bgGrad;
   ctx.fillRect(0, 0, width, height);
 
-  // Painel de Fundo Geral com Borda Estilizada
-  ctx.fillStyle = '#14100c';
-  ctx.strokeStyle = '#523f2b';
-  ctx.lineWidth = 2.5;
-  ctx.beginPath();
-  ctx.roundRect(12, 12, width - 24, height - 24, 14);
-  ctx.fill();
-  ctx.stroke();
+  // Moldura Externa de Metal/Bronze
+  ctx.strokeStyle = '#3d2f23';
+  ctx.lineWidth = 3;
+  ctx.strokeRect(8, 8, width - 16, height - 16);
+
+  ctx.strokeStyle = '#d4af37'; // Fio de ouro interno
+  ctx.lineWidth = 1;
+  ctx.strokeRect(12, 12, width - 24, height - 24);
+
+  // Função auxiliar para criar painéis de UI (caixas estilo RPG)
+  function drawUIPanel(x: number, y: number, w: number, h: number) {
+    ctx.fillStyle = '#100d0b';
+    ctx.strokeStyle = '#3a2d21';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.roundRect(x, y, w, h, 8);
+    ctx.fill();
+    ctx.stroke();
+  }
+
+  // Desenhar os 3 Painéis Principais (Esquerdo, Central, Direito)
+  drawUIPanel(22, 22, 240, 456); // Esquerdo
+  drawUIPanel(274, 22, 302, 456); // Central
+  drawUIPanel(588, 22, 240, 456); // Direito
 
   // ------------------------------------------
-  // PAINEL ESQUERDO (Status & Atributos)
+  // PAINEL ESQUERDO: STATUS & ATRIBUTOS
   // ------------------------------------------
-  ctx.fillStyle = '#ffffff';
-  ctx.font = 'bold 24px "InterFont", sans-serif';
-  ctx.fillText(`${name.toUpperCase()}`, 28, 48);
+  ctx.fillStyle = '#f39c12';
+  ctx.font = 'bold 18px "InterFont", sans-serif';
+  ctx.fillText(name.toUpperCase(), 38, 52);
 
-  ctx.fillStyle = '#f1c40f';
-  ctx.font = 'bold 13px "InterFont", sans-serif';
-  ctx.fillText(`Nv.${level} ${className}  •  Karma: ${karma}  •  GEN.${gen}`, 28, 70);
+  ctx.fillStyle = '#e6caa3';
+  ctx.font = 'bold 11px "InterFont", sans-serif';
+  ctx.fillText(`NV.${level} | ${className.toUpperCase()}`, 38, 70);
+  ctx.fillStyle = '#9c8b7c';
+  ctx.fillText(`KARMA: ${karma}  •  GEN: ${gen}`, 38, 86);
+  ctx.fillText(`LOCAL: ${locationName}`, 38, 102);
 
-  ctx.fillStyle = '#c8b6a6';
-  ctx.font = '13px "InterFont", sans-serif';
-  ctx.fillText(`Local: ${locationName}`, 28, 90);
-
-  function drawBar(y: number, label: string, current: number, max: number, color: string) {
+  // Barras Estilizadas (XP, HP, ENERGIA)
+  function drawRpgBar(y: number, label: string, current: number, max: number, barColor: string) {
     const pct = Math.min(Math.round((current / (max || 1)) * 100), 100);
-    ctx.fillStyle = '#e6caa3';
-    ctx.font = 'bold 12px "InterFont", sans-serif';
-    ctx.fillText(`${label}: ${current} / ${max} (${pct}%)`, 28, y);
+    ctx.fillStyle = '#d4af37';
+    ctx.font = 'bold 10px "InterFont", sans-serif';
+    ctx.fillText(`${label}: ${current} / ${max} (${pct}%)`, 38, y);
 
     // Fundo da barra
-    ctx.fillStyle = '#080605';
+    ctx.fillStyle = '#050403';
+    ctx.strokeStyle = '#261c14';
+    ctx.lineWidth = 1;
     ctx.beginPath();
-    ctx.roundRect(28, y + 5, 210, 9, 4);
+    ctx.roundRect(38, y + 4, 210, 8, 3);
     ctx.fill();
+    ctx.stroke();
 
-    // Preenchimento da barra
+    // Preenchimento
     const fillWidth = Math.min(((current || 0) / (max || 1)) * 210, 210);
     if (fillWidth > 0) {
-      ctx.fillStyle = color;
+      ctx.fillStyle = barColor;
       ctx.beginPath();
-      ctx.roundRect(28, y + 5, fillWidth, 9, 4);
+      ctx.roundRect(38, y + 4, fillWidth, 8, 3);
       ctx.fill();
     }
   }
 
-  drawBar(116, 'XP', currentXp, maxXp, '#95a5a6');
-  drawBar(148, 'HP', currentHp, maxHp, '#e74c3c');
-  drawBar(180, 'ENERGIA', currentEnergy, maxEnergy, '#f39c12');
+  drawRpgBar(122, 'XP', currentXp, maxXp, '#bdc3c7');
+  drawRpgBar(156, 'HP', currentHp, maxHp, '#c0392b');
+  drawRpgBar(190, 'ENERGIA', currentEnergy, maxEnergy, '#d35400');
 
-  // Linha divisória esquerda
-  ctx.strokeStyle = '#382a1d';
-  ctx.lineWidth = 1.5;
+  // Separador interno
+  ctx.strokeStyle = '#261c14';
+  ctx.lineWidth = 1;
   ctx.beginPath();
-  ctx.moveTo(28, 208);
-  ctx.lineTo(238, 208);
+  ctx.moveTo(38, 215);
+  ctx.lineTo(248, 215);
   ctx.stroke();
 
-  ctx.fillStyle = '#f39c12';
-  ctx.font = 'bold 13px "InterFont", sans-serif';
-  ctx.fillText('ATRIBUTOS DE COMBATE', 28, 230);
+  ctx.fillStyle = '#d4af37';
+  ctx.font = 'bold 11px "InterFont", sans-serif';
+  ctx.fillText('ATRIBUTOS DE COMBATE', 38, 238);
 
   ctx.fillStyle = '#ffffff';
-  ctx.font = 'bold 13px "InterFont", sans-serif';
-  ctx.fillText(`FOR: ${str}    AGI: ${agi}    INT: ${intVal}`, 28, 254);
-  ctx.fillText(`VIT: ${vit}    SOR: ${lck}`, 28, 274);
+  ctx.font = 'bold 12px "InterFont", sans-serif';
+  ctx.fillText(`FOR: ${str}    AGI: ${agi}    INT: ${intVal}`, 38, 262);
+  ctx.fillText(`VIT: ${vit}    SOR: ${lck}`, 38, 282);
 
-  ctx.fillStyle = '#dfd3c3';
-  ctx.font = '12px "InterFont", sans-serif';
-  ctx.fillText(`Ataque: ${atk}   Defesa: ${def}`, 28, 304);
-  ctx.fillText(`Crit: ${crit.toFixed(1)}%   Esq: ${dodge.toFixed(1)}%`, 28, 324);
+  ctx.fillStyle = '#c8b6a6';
+  ctx.font = '11px "InterFont", sans-serif';
+  ctx.fillText(`Ataque: ${atk}   Defesa: ${def}`, 38, 312);
+  ctx.fillText(`Critico: ${crit.toFixed(1)}%   Esquiva: ${dodge.toFixed(1)}%`, 38, 332);
 
   // ------------------------------------------
-  // PAINEL CENTRAL (Avatar & Conexões dos Slots)
+  // PAINEL CENTRAL: AVATAR & EQUIPAMENTOS
   // ------------------------------------------
   const centerX = 425;
   const centerY = 240;
-  const avatarRadius = 46;
+  const avatarRadius = 45;
 
   const slotsCoords = [
-    { key: 'helmet', label: 'Elmo', x: centerX - 160, y: centerY - 135 },
-    { key: 'chest', label: 'Peito', x: centerX - 160, y: centerY - 75 },
-    { key: 'gloves', label: 'Luva', x: centerX - 160, y: centerY - 15 },
-    { key: 'pants', label: 'Calça', x: centerX - 160, y: centerY + 45 },
-    { key: 'boots', label: 'Bota', x: centerX - 160, y: centerY + 105 },
+    { key: 'helmet', label: 'Elmo', x: centerX - 135, y: centerY - 130 },
+    { key: 'chest', label: 'Peito', x: centerX - 135, y: centerY - 72 },
+    { key: 'gloves', label: 'Luva', x: centerX - 135, y: centerY - 14 },
+    { key: 'pants', label: 'Calça', x: centerX - 135, y: centerY + 44 },
+    { key: 'boots', label: 'Bota', x: centerX - 135, y: centerY + 102 },
 
-    { key: 'weapon', label: 'Arma', x: centerX + 75, y: centerY - 135 },
-    { key: 'shield', label: 'Escudo', x: centerX + 75, y: centerY - 75 },
-    { key: 'ring', label: 'Anel', x: centerX + 75, y: centerY - 15 },
-    { key: 'backpack', label: 'Mochila', x: centerX + 75, y: centerY + 45 },
-    { key: 'pet', label: 'Pet', x: centerX + 75, y: centerY + 105 }
+    { key: 'weapon', label: 'Arma', x: centerX + 45, y: centerY - 130 },
+    { key: 'shield', label: 'Escudo', x: centerX + 45, y: centerY - 72 },
+    { key: 'ring', label: 'Anel', x: centerX + 45, y: centerY - 14 },
+    { key: 'backpack', label: 'Mochila', x: centerX + 45, y: centerY + 44 },
+    { key: 'pet', label: 'Pet', x: centerX + 45, y: centerY + 102 }
   ];
 
-  // Desenhar as linhas de conexão saindo da BORDAS DO AVATAR (evita cortar o rosto!)
-  ctx.strokeStyle = '#423223';
+  // Linhas de conexão refinadas (parando perfeitamente na borda do avatar)
+  ctx.strokeStyle = '#3a2d21';
   ctx.lineWidth = 1.5;
   for (const s of slotsCoords) {
     const slotCenterX = s.x + 45;
     const slotCenterY = s.y + 24;
 
-    // Calcular angulo para a linha parar perfeitamente na borda do circulo do avatar
     const angle = Math.atan2(slotCenterY - centerY, slotCenterX - centerX);
-    const startX = centerX + Math.cos(angle) * (avatarRadius + 4);
-    const startY = centerY + Math.sin(angle) * (avatarRadius + 4);
+    const startX = centerX + Math.cos(angle) * (avatarRadius + 3);
+    const startY = centerY + Math.sin(angle) * (avatarRadius + 3);
 
     ctx.beginPath();
     ctx.moveTo(startX, startY);
@@ -232,7 +251,7 @@ export async function generateProfileCard(char: any, stats: any, avatarUrlInput?
     ctx.stroke();
   }
 
-  // Desenhar Avatar do Jogador com Borda Elegante
+  // Avatar com Anel Mágico / Dourado Duplo
   if (avatarUrl) {
     try {
       const avatar = await loadImage(avatarUrl);
@@ -244,8 +263,8 @@ export async function generateProfileCard(char: any, stats: any, avatarUrlInput?
       ctx.drawImage(avatar, centerX - avatarRadius, centerY - avatarRadius, avatarRadius * 2, avatarRadius * 2);
       ctx.restore();
 
-      // Anel dourado ao redor do avatar
-      ctx.strokeStyle = '#f1c40f';
+      // Borda Externa Dourada
+      ctx.strokeStyle = '#d4af37';
       ctx.lineWidth = 3;
       ctx.beginPath();
       ctx.arc(centerX, centerY, avatarRadius, 0, Math.PI * 2);
@@ -255,89 +274,89 @@ export async function generateProfileCard(char: any, stats: any, avatarUrlInput?
     }
   }
 
-  // Renderizar Caixas de Itens (Slots)
+  // Renderizar Slots de Equipamentos (Estilo RPG HUD)
   for (const slot of slotsCoords) {
     const itemName = slotItems[slot.key as keyof typeof slotItems] || '—';
 
-    ctx.fillStyle = '#0a0806';
-    ctx.strokeStyle = '#4a3826';
-    ctx.lineWidth = 2;
+    ctx.fillStyle = '#080605';
+    ctx.strokeStyle = '#3a2d21';
+    ctx.lineWidth = 1.5;
     ctx.beginPath();
-    ctx.roundRect(slot.x, slot.y, 90, 48, 6);
+    ctx.roundRect(slot.x, slot.y, 90, 48, 5);
     ctx.fill();
     ctx.stroke();
 
-    ctx.fillStyle = '#f39c12';
-    ctx.font = 'bold 10px "InterFont", sans-serif';
-    ctx.fillText(slot.label.toUpperCase(), slot.x + 8, slot.y + 14);
+    ctx.fillStyle = '#d4af37';
+    ctx.font = 'bold 9px "InterFont", sans-serif';
+    ctx.fillText(`[ ${slot.label.toUpperCase()} ]`, slot.x + 6, slot.y + 13);
 
-    ctx.fillStyle = itemName !== '—' ? '#ffffff' : '#4a3826';
+    ctx.fillStyle = itemName !== '—' ? '#ffffff' : '#524334';
     ctx.font = 'bold 11px "InterFont", sans-serif';
 
     if (itemName.length > 13) {
       const parts = itemName.split(' ');
       if (parts.length > 1) {
-        ctx.fillText(parts[0], slot.x + 8, slot.y + 28);
-        ctx.fillText(parts.slice(1).join(' ').substring(0, 12), slot.x + 8, slot.y + 40);
+        ctx.fillText(parts[0], slot.x + 6, slot.y + 27);
+        ctx.fillText(parts.slice(1).join(' ').substring(0, 12), slot.x + 6, slot.y + 39);
       } else {
-        ctx.fillText(itemName.substring(0, 13) + '..', slot.x + 8, slot.y + 32);
+        ctx.fillText(itemName.substring(0, 13) + '..', slot.x + 6, slot.y + 32);
       }
     } else {
-      ctx.fillText(itemName, slot.x + 8, slot.y + 32);
+      ctx.fillText(itemName, slot.x + 6, slot.y + 31);
     }
   }
 
   // ------------------------------------------
-  // PAINEL DIREITO (Economia, Divindade & Stats)
+  // PAINEL DIREITO: ECONOMIA, DIVINDADE & CD
   // ------------------------------------------
-  const rightX = 615;
+  const rightX = 604;
 
   ctx.fillStyle = '#ffffff';
-  ctx.font = 'bold 15px "InterFont", sans-serif';
-  ctx.fillText(`Poder: #${power.toLocaleString('pt-BR')}`, rightX, 48);
+  ctx.font = 'bold 14px "InterFont", sans-serif';
+  ctx.fillText(`PODER: #${power.toLocaleString('pt-BR')}`, rightX, 52);
 
   ctx.fillStyle = '#f1c40f';
-  ctx.font = 'bold 14px "InterFont", sans-serif';
-  ctx.fillText(`Ouro: ${gold.toLocaleString('pt-BR')} G`, rightX, 70);
+  ctx.font = 'bold 13px "InterFont", sans-serif';
+  ctx.fillText(`OURO: ${gold.toLocaleString('pt-BR')} G`, rightX, 72);
 
-  ctx.fillStyle = '#dcdcdc';
-  ctx.font = '12px "InterFont", sans-serif';
+  ctx.fillStyle = '#bfa58a';
+  ctx.font = '11px "InterFont", sans-serif';
   ctx.fillText(marriageText, rightX, 90);
 
-  ctx.strokeStyle = '#382a1d';
-  ctx.lineWidth = 1.5;
+  ctx.strokeStyle = '#261c14';
+  ctx.lineWidth = 1;
   ctx.beginPath();
   ctx.moveTo(rightX, 102);
-  ctx.lineTo(width - 28, 102);
+  ctx.lineTo(rightX + 208, 102);
   ctx.stroke();
 
   // Habilidade Divina
-  ctx.fillStyle = '#f39c12';
-  ctx.font = 'bold 13px "InterFont", sans-serif';
-  ctx.fillText('HABILIDADE DIVINA', rightX, 124);
+  ctx.fillStyle = '#d4af37';
+  ctx.font = 'bold 11px "InterFont", sans-serif';
+  ctx.fillText('HABILIDADE DIVINA', rightX, 122);
 
   ctx.fillStyle = '#ffffff';
   ctx.font = 'bold 12px "InterFont", sans-serif';
-  ctx.fillText(`${divineName} [Rank ${divineRank}]`, rightX, 142);
+  ctx.fillText(`${divineName} [Rank ${divineRank}]`, rightX, 140);
 
-  // Histórico de Batalhas
-  ctx.fillStyle = '#f39c12';
-  ctx.font = 'bold 13px "InterFont", sans-serif';
-  ctx.fillText('HISTÓRICO', rightX, 175);
+  // Histórico
+  ctx.fillStyle = '#d4af37';
+  ctx.font = 'bold 11px "InterFont", sans-serif';
+  ctx.fillText('HISTÓRICO DE BATALHA', rightX, 172);
 
   ctx.fillStyle = '#ffffff';
-  ctx.font = '12px "InterFont", sans-serif';
-  ctx.fillText(`Vitórias: ${wins}    Mortes: ${deaths}`, rightX, 194);
-  ctx.fillText(`PvP: ${pvpWins}W / ${pvpLosses}L    Bosses: ${bosses}`, rightX, 212);
+  ctx.font = '11px "InterFont", sans-serif';
+  ctx.fillText(`Vitórias: ${wins}   Mortes: ${deaths}`, rightX, 192);
+  ctx.fillText(`PvP: ${pvpWins}W / ${pvpLosses}L   Boss: ${bosses}`, rightX, 210);
 
   // Cooldowns
-  ctx.fillStyle = '#f39c12';
-  ctx.font = 'bold 13px "InterFont", sans-serif';
-  ctx.fillText('COOLDOWNS RPG', rightX, 245);
+  ctx.fillStyle = '#d4af37';
+  ctx.font = 'bold 11px "InterFont", sans-serif';
+  ctx.fillText('COOLDOWNS DE ATIVIDADES', rightX, 242);
 
   const cdList = [
     { label: 'Dungeon', val: formatCooldown(char.lastDungeon, 5) },
-    { label: 'Caçada', val: 'Pronto' },
+    { label: 'Caçada', val: 'PRONTO' },
     { label: 'Viagem', val: formatCooldown(char.lastTravel, loc.travelCooldownMin) },
     { label: 'Explorar', val: formatCooldown(char.lastExplore, 3) },
     { label: 'Treino', val: formatCooldown(char.lastTrain, 20) },
@@ -346,16 +365,16 @@ export async function generateProfileCard(char: any, stats: any, avatarUrlInput?
     { label: 'PvP', val: formatCooldown(char.lastPvp, 10) }
   ];
 
-  ctx.font = '11px "InterFont", sans-serif';
-  let cdY = 265;
+  ctx.font = '10px "InterFont", sans-serif';
+  let cdY = 262;
   for (const cd of cdList) {
-    ctx.fillStyle = '#c8b6a6';
+    ctx.fillStyle = '#9c8b7c';
     ctx.fillText(`${cd.label}:`, rightX, cdY);
 
-    ctx.fillStyle = cd.val === 'Pronto' ? '#2ecc71' : '#e74c3c';
-    ctx.fillText(cd.val, rightX + 65, cdY);
+    ctx.fillStyle = cd.val === 'PRONTO' ? '#2ecc71' : '#e74c3c';
+    ctx.fillText(cd.val, rightX + 68, cdY);
 
-    cdY += 18;
+    cdY += 17;
   }
 
   return canvas.toBuffer('image/png');

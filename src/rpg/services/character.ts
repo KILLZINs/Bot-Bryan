@@ -76,11 +76,11 @@ export function computeStats(char: FullCharacter): ComputedStats {
       eqInt    += s.int    ?? 0;
       eqVit    += s.vit    ?? 0;
       eqLck    += s.lck    ?? 0;
-      eqHp     += s.hp     ?? 0;
+      eqHp       += s.hp      ?? 0;
       eqEnergy += s.energy ?? 0;
       eqDefense += s.defense ?? 0;
       eqAttack  += s.attack  ?? 0;
-      eqCrit   += s.critBonus  ?? 0;
+      eqCrit    += s.critBonus  ?? 0;
       eqDodge  += s.dodgeBonus ?? 0;
       eqGold   += s.goldBonus  ?? 0;
     }
@@ -186,6 +186,50 @@ export async function addRpgXp(
     },
     include: { equipment: true },
   });
+
+  // 🔮 DISTRIBUIÇÃO DE XP PARA HABILIDADES DE CLASSE MÚLTIPLAS
+  if (xpGained > 0) {
+    const equippedIds: string[] = Array.isArray(char.equippedSkills)
+      ? (char.equippedSkills as string[])
+      : (char.divineSkillId ? [char.divineSkillId] : []);
+
+    if (equippedIds.length > 0) {
+      const ranksList = ['F', 'E', 'D', 'C', 'B', 'A', 'S', 'SS', 'SSS'];
+
+      for (const skillId of equippedIds) {
+        const skillData = DIVINE_SKILLS[skillId];
+        if (!skillData) continue;
+
+        let learned = await prisma.rpgLearnedSkill.findFirst({
+          where: { characterId: char.discordId, skillId }
+        });
+
+        if (!learned) {
+          learned = await prisma.rpgLearnedSkill.create({
+            data: { characterId: char.discordId, skillId, rank: 'F', exp: 0 }
+          });
+        }
+
+        const currentRankIdx = Math.max(0, ranksList.indexOf(learned.rank));
+        const requiredExp = Math.round((skillData.rankUpExpRequired || 150) * Math.pow(1.5, currentRankIdx));
+
+        // 15% do XP total da batalha vai pra evolução das habilidades!
+        let newExp = learned.exp + Math.max(5, Math.floor(xpGained * 0.15)); 
+        let newRank = learned.rank;
+
+        // Se bater o XP necessário, sobe de Rank
+        if (newExp >= requiredExp && currentRankIdx < ranksList.length - 1) {
+          newExp -= requiredExp;
+          newRank = ranksList[currentRankIdx + 1];
+        }
+
+        await prisma.rpgLearnedSkill.update({
+          where: { id: learned.id },
+          data: { exp: newExp, rank: newRank }
+        });
+      }
+    }
+  }
 
   return { char: updated, leveledUp, newLevel: level };
 }

@@ -44,55 +44,55 @@ export async function handleRpgSelect(i: StringSelectMenuInteraction, action: st
       return;
     }
 
-    // ── Equipar Múltiplas Habilidades de Classe ──────────────────────────
-    if (action === 'equipar_multiplas_skills') {
-      await i.deferUpdate();
-      await prisma.rpgCharacter.update({
-        where: { discordId },
-        data: { equippedSkills: i.values }
-      });
-      const char = await getOrCreateCharacter(discordId, username);
-      const { embed, components } = await buildHabilidadesEmbed(char, 'classe');
-      await i.editReply({ embeds: [embed], components });
-      return;
-    }
-
-    // ── Evoluir Talentos Passivos ──────────────────────────────────────────
-    if (action === 'evoluir_talento') {
-      await i.deferUpdate();
-      const talentId = i.values[0].replace('talent:', '');
-      const talent = PASSIVE_TALENTS[talentId];
-      if (!talent) return;
-
-      let char = await getOrCreateCharacter(discordId, username);
-      const currentTalents = (char.talentLevels as Record<string, number> | null) ?? {};
-      const currentLvl = currentTalents[talentId] ?? 0;
-
-      if (currentLvl >= talent.maxLevel) {
-        await i.editReply({ embeds: [errorEmbed('Erro', 'Talento já está no nível máximo!')] });
-        return;
-      }
-      if (char.skillPoints < talent.costPerLevel) {
-        await i.editReply({ embeds: [errorEmbed('Erro', 'Pontos de Skill insuficientes!')] });
-        return;
-      }
-
-      currentTalents[talentId] = currentLvl + 1;
-      await prisma.rpgCharacter.update({
-        where: { discordId },
-        data: {
-          skillPoints: { decrement: talent.costPerLevel },
-          talentLevels: currentTalents
-        }
-      });
-
-      const updatedChar = await getOrCreateCharacter(discordId, username);
-      const { embed, components } = await buildHabilidadesEmbed(updatedChar, 'passivas');
-      await i.editReply({ embeds: [successEmbed('Talento Evoluído', `${talent.name} agora está no nível ${currentLvl + 1}`), embed], components });
-      return;
-    }
-
     switch (action) {
+
+      // ── Equipar Múltiplas Habilidades de Classe ──────────────────────────
+      case 'equipar_multiplas_skills': {
+        await i.deferUpdate();
+        await prisma.rpgCharacter.update({
+          where: { discordId },
+          data: { equippedSkills: i.values }
+        });
+        const char = await getOrCreateCharacter(discordId, username);
+        const { embed, components } = await buildHabilidadesEmbed(char, 'classe');
+        await i.editReply({ embeds: [embed], components });
+        break;
+      }
+
+      // ── Evoluir Talentos Passivos ──────────────────────────────────────────
+      case 'evoluir_talento': {
+        await i.deferUpdate();
+        const talentId = i.values[0].replace('talent:', '');
+        const talent = PASSIVE_TALENTS[talentId];
+        if (!talent) return;
+
+        let char = await getOrCreateCharacter(discordId, username);
+        const currentTalents = (char.talentLevels as Record<string, number> | null) ?? {};
+        const currentLvl = currentTalents[talentId] ?? 0;
+
+        if (currentLvl >= talent.maxLevel) {
+          await i.editReply({ embeds: [errorEmbed('Erro', 'Talento já está no nível máximo!')] });
+          return;
+        }
+        if (char.skillPoints < talent.costPerLevel) {
+          await i.editReply({ embeds: [errorEmbed('Erro', 'Pontos de Skill insuficientes!')] });
+          return;
+        }
+
+        currentTalents[talentId] = currentLvl + 1;
+        await prisma.rpgCharacter.update({
+          where: { discordId },
+          data: {
+            skillPoints: { decrement: talent.costPerLevel },
+            talentLevels: currentTalents
+          }
+        });
+
+        const updatedChar = await getOrCreateCharacter(discordId, username);
+        const { embed, components } = await buildHabilidadesEmbed(updatedChar, 'passivas');
+        await i.editReply({ embeds: [successEmbed('Talento Evoluído', `${talent.name} agora está no nível ${currentLvl + 1}`), embed], components });
+        break;
+      }
 
       // ── Seletor do Perfil RPG (Hub Principal) ───────────────────────────
       case 'menu_perfil': {

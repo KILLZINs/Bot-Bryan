@@ -129,10 +129,20 @@ async function fetchChannelMemory(
 
     for (const msg of sorted) {
       const isAI = msg.author.bot || msg.webhookId !== null;
-      memory.push({
-        role: isAI ? 'assistant' : 'user',
-        content: `${msg.author.username}: ${msg.content}`,
-      });
+      
+      // A MÁGICA ESTÁ AQUI: Formatando o histórico corretamente!
+      if (isAI) {
+        memory.push({
+          role: 'assistant',
+          content: msg.cleanContent || msg.content, // Removemos o prefixo de nome para a IA não imitar
+        });
+      } else {
+        const userName = msg.member?.displayName ?? msg.author.username;
+        memory.push({
+          role: 'user',
+          content: `[Mensagem de ${userName}]: ${msg.cleanContent || msg.content}`, // Etiqueta o usuário para a IA não confundir os nomes
+        });
+      }
     }
 
     return memory;

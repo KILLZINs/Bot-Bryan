@@ -415,14 +415,29 @@ export async function handleRpgSelect(i: StringSelectMenuInteraction, action: st
       case 'escolher_classe': {
         await i.deferUpdate();
         const classId = i.values[0].replace('start_class:', '');
-        const { setClass } = await import('../services/character');
+        const { setClass, getOrCreateCharacter } = await import('../services/character');
+        
+        // 🔮 O GATILHO MÁGICO AQUI: Cria o personagem no banco ANTES de aplicar a classe
+        await getOrCreateCharacter(discordId, username);
+
         const result = await setClass(discordId, classId);
-        if (!result.success) { await i.editReply({ embeds: [errorEmbed('Erro', result.message)] }); return; }
+        
+        // Se der erro mesmo assim, limpa o menu da tela (components: []) para evitar repetição
+        if (!result.success) { 
+          await i.editReply({ embeds: [errorEmbed('Erro', result.message)], components: [] }); 
+          return; 
+        }
+        
         const updated = await getOrCreateCharacter(discordId, username);
         const stats   = computeStats(updated);
         const { getClass } = await import('../constants/classes');
         const cls = getClass(classId);
-        await i.editReply({ content: `${cls?.emoji ?? '⚔️'} **Personagem criado!** Bem-vindo à aventura, **${username}**!`, embeds: [buildProfileEmbed(updated, stats)], components: [buildProfileSelectMenu()] });
+        
+        await i.editReply({ 
+          content: `${cls?.emoji ?? '⚔️'} **Personagem criado!** Bem-vindo à aventura, **${username}**!`, 
+          embeds: [buildProfileEmbed(updated, stats)], 
+          components: [buildProfileSelectMenu()] 
+        });
         break;
       }
 

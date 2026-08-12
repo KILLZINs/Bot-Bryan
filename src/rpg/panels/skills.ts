@@ -15,7 +15,15 @@ export async function buildHabilidadesEmbed(char: FullCharacter, viewMode: 'clas
   const cls = getClass(char.class);
   const availableSkills = cls?.divineSkills.map(id => DIVINE_SKILLS[id]).filter(Boolean) ?? [];
 
-  // Busca todas as skills aprendidas individualmente por este personagem
+  // Garante que cada habilidade da classe possui seu registro individual de XP no banco
+  for (const s of availableSkills) {
+    await prisma.rpgLearnedSkill.upsert({
+      where: { characterId_skillId: { characterId: char.discordId, skillId: s.id } },
+      update: {},
+      create: { characterId: char.discordId, skillId: s.id, rank: 'F', exp: 0 }
+    }).catch(() => null);
+  }
+
   const learnedSkillsList = await prisma.rpgLearnedSkill.findMany({
     where: { characterId: char.discordId }
   });
@@ -32,13 +40,12 @@ export async function buildHabilidadesEmbed(char: FullCharacter, viewMode: 'clas
         const ds = DIVINE_SKILLS[id];
         if (!ds) return null;
         
-        // Puxa o XP/Rank estritamente isolado daquela habilidade específica
         const learned = learnedMap.get(id);
         const rank = learned?.rank ?? 'F';
         const exp = learned?.exp ?? 0;
-        const nextExp = 100 * Math.pow(1.5, ['F', 'E', 'D', 'C', 'B', 'A', 'S'].indexOf(rank) + 1);
+        const nextExp = Math.round(ds.rankUpExpRequired * Math.pow(1.5, ['F', 'E', 'D', 'C', 'B', 'A', 'S', 'SS', 'SSS'].indexOf(rank)));
 
-        return `${ds.emoji} **${ds.name}** [Rank **${rank}**]\n> 📈 XP: \`${exp} / ${Math.round(nextExp)}\` | Custo: \`${ds.energyCost} Energia\`\n> ${ds.description}`;
+        return `${ds.emoji} **${ds.name}** [Rank **${rank}**]\n> 📈 XP: \`${exp} / ${nextExp}\` | Custo: \`${ds.energyCost} Energia\`\n> ${ds.description}`;
       }).filter(Boolean).join('\n\n');
     }
 
@@ -48,9 +55,9 @@ export async function buildHabilidadesEmbed(char: FullCharacter, viewMode: 'clas
           const learned = learnedMap.get(s.id);
           const rank = learned?.rank ?? 'F';
           const exp = learned?.exp ?? 0;
-          const nextExp = 100 * Math.pow(1.5, ['F', 'E', 'D', 'C', 'B', 'A', 'S'].indexOf(rank) + 1);
+          const nextExp = Math.round(s.rankUpExpRequired * Math.pow(1.5, ['F', 'E', 'D', 'C', 'B', 'A', 'S', 'SS', 'SSS'].indexOf(rank)));
 
-          return `${isEquipped ? '✅' : '○'} ${s.emoji} **${s.name}** — Lv.${s.unlockLevel}+\n> Rank: \`${rank}\` | XP: \`${exp}/${Math.round(nextExp)}\`\n> ${s.description}`;
+          return `${isEquipped ? '✅' : '○'} ${s.emoji} **${s.name}** — Lv.${s.unlockLevel}+\n> Rank: \`${rank}\` | XP: \`${exp} / ${nextExp}\`\n> ${s.description}`;
         }).join('\n\n')
       : '*Nenhuma habilidade disponível para sua classe.*';
 

@@ -28,7 +28,7 @@ function formatCooldown(date: Date | null | undefined, minutes: number): string 
 }
 
 // ==========================================
-// ÍCONES VETORIAIS DE ALTA PRECISÃO
+// ÍCONES VETORIAIS
 // ==========================================
 function drawCoinIcon(ctx: any, x: number, y: number) {
   ctx.save();
@@ -155,85 +155,70 @@ export async function generateProfileCard(char: any, stats: any, avatarUrlInput?
   const avatarUrl = avatarUrlInput || char.avatarUrl || '';
 
   // ==========================================
-  // AMBIENTE DE FUNDO MEDIEVAL DE OUTRO MUNDO
+  // CENÁRIO MEDIEVAL VÍVIDO (FUNDO APARECENDO BEM)
   // ==========================================
 
-  // 1. Céu Místico Profundo (Atmosphere)
-  const bgGrad = ctx.createLinearGradient(0, 0, width, height);
-  bgGrad.addColorStop(0, '#090612'); // Noite arcana profunda
-  bgGrad.addColorStop(0.4, '#1b1128'); // Roxo neblina de masmorra/reino sombrio
-  bgGrad.addColorStop(1, '#2c120c'); // Toque de fogo/magia de masmorra no chão
-  ctx.fillStyle = bgGrad;
+  // 1. Céu Estilizado de Fantasia Medieval (Tons de Crepúsculo Vibrantes)
+  const skyGrad = ctx.createLinearGradient(0, 0, 0, height);
+  skyGrad.addColorStop(0, '#1a102f'); // Índex místico
+  skyGrad.addColorStop(0.5, '#4a2838'); // Tom avermelhado/pôr do sol de fantasia
+  skyGrad.addColorStop(1, '#6b301c'); // Terra queimada no horizonte
+  ctx.fillStyle = skyGrad;
   ctx.fillRect(0, 0, width, height);
 
-  // 2. Textura Procedural de Pedras de Masmorra / Castelo Antigo ao Fundo
-  ctx.fillStyle = 'rgba(255, 255, 255, 0.015)';
-  for (let i = 0; i < width; i += 40) {
-    ctx.fillRect(i, 0, 1, height);
-  }
-  for (let j = 0; j < height; j += 40) {
-    ctx.fillRect(0, j, width, 1);
-  }
-
-  // 3. Montanhas / Ruínas Medievais Distantes na Linha do Horizonte
-  ctx.fillStyle = '#0f0a0e';
+  // 2. Cadeia de Montanhas e Colinas Ao Fundo (Camada 1 - Longe)
+  ctx.fillStyle = '#261726';
   ctx.beginPath();
   ctx.moveTo(0, height);
-  ctx.lineTo(0, 310);
-  ctx.bezierCurveTo(120, 260, 280, 330, 420, 290);
-  ctx.bezierCurveTo(580, 250, 700, 320, width, 280);
+  ctx.lineTo(0, 280);
+  ctx.bezierCurveTo(180, 220, 320, 310, 500, 260);
+  ctx.bezierCurveTo(650, 220, 750, 290, width, 250);
   ctx.lineTo(width, height);
   ctx.closePath();
   ctx.fill();
 
-  // Torres / Muralhas Estilizadas de Castelo ao Fundo
-  ctx.fillStyle = '#140c11';
-  ctx.fillRect(180, 240, 45, 80);
-  ctx.fillRect(195, 215, 15, 25); // Torre central
-  ctx.fillRect(620, 220, 60, 100);
+  // 3. Colinas Próximas e Ruínas/Muralhas (Camada 2 - Perto)
+  ctx.fillStyle = '#180d17';
+  ctx.beginPath();
+  ctx.moveTo(0, height);
+  ctx.lineTo(0, 360);
+  ctx.bezierCurveTo(150, 320, 350, 400, 550, 350);
+  ctx.bezierCurveTo(700, 310, 780, 370, width, 340);
+  ctx.lineTo(width, height);
+  ctx.closePath();
+  ctx.fill();
 
-  // 4. Efeito de Iluminação Mágica / Névoa Arcana (Glow centralizado atrás do avatar)
-  const lightGlow = ctx.createRadialGradient(425, 240, 20, 425, 240, 320);
-  lightGlow.addColorStop(0, 'rgba(142, 68, 173, 0.22)'); // Brilho roxo místico
-  lightGlow.addColorStop(0.5, 'rgba(41, 128, 185, 0.1)'); // Azul frio
-  lightGlow.addColorStop(1, 'rgba(0, 0, 0, 0)');
-  ctx.fillStyle = lightGlow;
+  // 4. Luz Central Mágica (Brilho que destaca o centro e escurece as bordas)
+  const centerGlow = ctx.createRadialGradient(425, 250, 50, 425, 250, 400);
+  centerGlow.addColorStop(0, 'rgba(241, 196, 15, 0.18)'); // Luz dourada central
+  centerGlow.addColorStop(0.6, 'rgba(142, 68, 173, 0.08)'); // Tom arcano
+  centerGlow.addColorStop(1, 'rgba(0, 0, 0, 0.45)'); // Sombreamento nas bordas (vinheta)
+  ctx.fillStyle = centerGlow;
   ctx.fillRect(0, 0, width, height);
 
-  // 5. Camada Escura Semi-Transparente para Contraste Perfeito dos Textos
-  ctx.fillStyle = 'rgba(8, 6, 10, 0.65)';
-  ctx.fillRect(0, 0, width, height);
-
-  // Moldura Externa de Aço Antigo / Cobre
-  ctx.strokeStyle = '#2c221e';
+  // Borda Externa Rústica Dourada
+  ctx.strokeStyle = '#2b2118';
   ctx.lineWidth = 4;
   ctx.strokeRect(6, 6, width - 12, height - 12);
 
-  ctx.strokeStyle = '#d4af37'; // Fio de Ouro Real
+  ctx.strokeStyle = '#f1c40f';
   ctx.lineWidth = 1.5;
   ctx.strokeRect(10, 10, width - 20, height - 20);
 
-  // Função para criar Painéis de UI Estilo "Vidro Esfumaçado de Pedra" (Permite ver o fundo)
+  // Função para Painéis Glassmorphism (Vidro Escuro Translúcido para ver o fundo)
   function drawGlassPanel(x: number, y: number, w: number, h: number) {
-    ctx.fillStyle = 'rgba(14, 11, 16, 0.82)'; // Semi-transparente para ver o background
-    ctx.strokeStyle = '#5a4533'; // Borda bronzeada medieval
-    ctx.lineWidth = 2;
+    ctx.fillStyle = 'rgba(10, 8, 12, 0.65)'; // Muito mais transparente para o fundo aparecer bem
+    ctx.strokeStyle = '#d4af37'; // Borda dourada brilhante nos painéis
+    ctx.lineWidth = 1.8;
     ctx.beginPath();
     ctx.roundRect(x, y, w, h, 8);
     ctx.fill();
     ctx.stroke();
-
-    // Brilho superior interno (Efeito de relevo UI)
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.04)';
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.roundRect(x + 2, y + 2, w - 4, h - 4, 6);
-    ctx.stroke();
   }
 
-  drawGlassPanel(22, 22, 240, 456); // Painel Esquerdo
-  drawGlassPanel(274, 22, 302, 456); // Painel Central
-  drawGlassPanel(588, 22, 240, 456); // Painel Direito
+  drawGlassPanel(22, 22, 240, 456); // Esquerdo
+  drawGlassPanel(274, 22, 302, 456); // Central
+  drawGlassPanel(588, 22, 240, 456); // Direito
 
   // ------------------------------------------
   // PAINEL ESQUERDO: STATUS & ATRIBUTOS
@@ -245,21 +230,22 @@ export async function generateProfileCard(char: any, stats: any, avatarUrlInput?
   ctx.fillStyle = '#f1c40f';
   ctx.font = 'bold 11px "InterFont", sans-serif';
   ctx.fillText(`NV.${level} | ${className.toUpperCase()}`, 38, 70);
-  ctx.fillStyle = '#bfa58a';
+  ctx.fillStyle = '#dcdcdc';
+  ctx.font = '11px "InterFont", sans-serif';
   ctx.fillText(`KARMA: ${karma}  •  GEN: ${gen}`, 38, 86);
   ctx.fillText(`LOCAL: ${locationName}`, 38, 102);
 
-  // Barras de Status Estilizadas
+  // Barras de Status
   function drawRpgBar(y: number, label: string, current: number, max: number, barColor: string, iconDrawFn?: Function) {
     const pct = Math.min(Math.round((current / (max || 1)) * 100), 100);
     
     if (iconDrawFn) {
       iconDrawFn(ctx, 45, y - 1);
-      ctx.fillStyle = '#e6caa3';
+      ctx.fillStyle = '#ffffff';
       ctx.font = 'bold 10px "InterFont", sans-serif';
       ctx.fillText(`${label}: ${current} / ${max} (${pct}%)`, 58, y);
     } else {
-      ctx.fillStyle = '#e6caa3';
+      ctx.fillStyle = '#ffffff';
       ctx.font = 'bold 10px "InterFont", sans-serif';
       ctx.fillText(`${label}: ${current} / ${max} (${pct}%)`, 38, y);
     }
@@ -267,16 +253,14 @@ export async function generateProfileCard(char: any, stats: any, avatarUrlInput?
     const startX = 38;
     const barWidth = 210;
 
-    // Fundo da barra
     ctx.fillStyle = '#050403';
-    ctx.strokeStyle = '#2d2119';
+    ctx.strokeStyle = '#4a3828';
     ctx.lineWidth = 1;
     ctx.beginPath();
     ctx.roundRect(startX, y + 4, barWidth, 8, 3);
     ctx.fill();
     ctx.stroke();
 
-    // Preenchimento
     const fillWidth = Math.min(((current || 0) / (max || 1)) * barWidth, barWidth);
     if (fillWidth > 0) {
       ctx.fillStyle = barColor;
@@ -290,15 +274,14 @@ export async function generateProfileCard(char: any, stats: any, avatarUrlInput?
   drawRpgBar(156, 'HP', currentHp, maxHp, '#e74c3c', drawHeartIcon);
   drawRpgBar(190, 'ENERGIA', currentEnergy, maxEnergy, '#f39c12', drawEnergyIcon);
 
-  // Separador
-  ctx.strokeStyle = '#3a2d21';
+  ctx.strokeStyle = '#5a4533';
   ctx.lineWidth = 1;
   ctx.beginPath();
   ctx.moveTo(38, 215);
   ctx.lineTo(248, 215);
   ctx.stroke();
 
-  ctx.fillStyle = '#d4af37';
+  ctx.fillStyle = '#f1c40f';
   ctx.font = 'bold 11px "InterFont", sans-serif';
   ctx.fillText('ATRIBUTOS DE COMBATE', 38, 238);
 
@@ -307,7 +290,7 @@ export async function generateProfileCard(char: any, stats: any, avatarUrlInput?
   ctx.fillText(`FOR: ${str}    AGI: ${agi}    INT: ${intVal}`, 38, 262);
   ctx.fillText(`VIT: ${vit}    SOR: ${lck}`, 38, 282);
 
-  ctx.fillStyle = '#dfd3c3';
+  ctx.fillStyle = '#e6caa3';
   ctx.font = '11px "InterFont", sans-serif';
   ctx.fillText(`Ataque: ${atk}   Defesa: ${def}`, 38, 312);
   ctx.fillText(`Critico: ${crit.toFixed(1)}%   Esquiva: ${dodge.toFixed(1)}%`, 38, 332);
@@ -333,8 +316,7 @@ export async function generateProfileCard(char: any, stats: any, avatarUrlInput?
     { key: 'pet', label: 'Pet', x: centerX + 45, y: centerY + 102 }
   ];
 
-  // Linhas de conexão das runas de inventário
-  ctx.strokeStyle = '#5a4533';
+  ctx.strokeStyle = '#d4af37';
   ctx.lineWidth = 1.5;
   for (const s of slotsCoords) {
     const slotCenterX = s.x + 45;
@@ -350,7 +332,6 @@ export async function generateProfileCard(char: any, stats: any, avatarUrlInput?
     ctx.stroke();
   }
 
-  // Avatar com Borda Real Dourada
   if (avatarUrl) {
     try {
       const avatar = await loadImage(avatarUrl);
@@ -362,7 +343,7 @@ export async function generateProfileCard(char: any, stats: any, avatarUrlInput?
       ctx.drawImage(avatar, centerX - avatarRadius, centerY - avatarRadius, avatarRadius * 2, avatarRadius * 2);
       ctx.restore();
 
-      ctx.strokeStyle = '#d4af37';
+      ctx.strokeStyle = '#f1c40f';
       ctx.lineWidth = 3;
       ctx.beginPath();
       ctx.arc(centerX, centerY, avatarRadius, 0, Math.PI * 2);
@@ -372,11 +353,10 @@ export async function generateProfileCard(char: any, stats: any, avatarUrlInput?
     }
   }
 
-  // Renderizar Slots de Equipamento
   for (const slot of slotsCoords) {
     const itemName = slotItems[slot.key as keyof typeof slotItems] || '—';
 
-    ctx.fillStyle = 'rgba(8, 6, 5, 0.88)';
+    ctx.fillStyle = 'rgba(10, 8, 12, 0.85)';
     ctx.strokeStyle = '#5a4533';
     ctx.lineWidth = 1.5;
     ctx.beginPath();
@@ -384,11 +364,11 @@ export async function generateProfileCard(char: any, stats: any, avatarUrlInput?
     ctx.fill();
     ctx.stroke();
 
-    ctx.fillStyle = '#d4af37';
+    ctx.fillStyle = '#f1c40f';
     ctx.font = 'bold 9px "InterFont", sans-serif';
     ctx.fillText(`[ ${slot.label.toUpperCase()} ]`, slot.x + 6, slot.y + 13);
 
-    ctx.fillStyle = itemName !== '—' ? '#ffffff' : '#6c5844';
+    ctx.fillStyle = itemName !== '—' ? '#ffffff' : '#7a6450';
     ctx.font = 'bold 11px "InterFont", sans-serif';
 
     if (itemName.length > 13) {
@@ -413,25 +393,23 @@ export async function generateProfileCard(char: any, stats: any, avatarUrlInput?
   ctx.font = 'bold 14px "InterFont", sans-serif';
   ctx.fillText(`PODER: #${power.toLocaleString('pt-BR')}`, rightX, 52);
 
-  // Ouro com ícone desenhado
   drawCoinIcon(ctx, rightX + 8, 70);
   ctx.fillStyle = '#f1c40f';
   ctx.font = 'bold 13px "InterFont", sans-serif';
   ctx.fillText(`OURO: ${gold.toLocaleString('pt-BR')} G`, rightX + 22, 73);
 
-  ctx.fillStyle = '#bfa58a';
+  ctx.fillStyle = '#e6caa3';
   ctx.font = '11px "InterFont", sans-serif';
   ctx.fillText(marriageText, rightX, 90);
 
-  ctx.strokeStyle = '#3a2d21';
+  ctx.strokeStyle = '#5a4533';
   ctx.lineWidth = 1;
   ctx.beginPath();
   ctx.moveTo(rightX, 102);
   ctx.lineTo(rightX + 208, 102);
   ctx.stroke();
 
-  // Habilidade Divina
-  ctx.fillStyle = '#d4af37';
+  ctx.fillStyle = '#f1c40f';
   ctx.font = 'bold 11px "InterFont", sans-serif';
   ctx.fillText('HABILIDADE DIVINA', rightX, 122);
 
@@ -439,8 +417,7 @@ export async function generateProfileCard(char: any, stats: any, avatarUrlInput?
   ctx.font = 'bold 12px "InterFont", sans-serif';
   ctx.fillText(`${divineName} [Rank ${divineRank}]`, rightX, 140);
 
-  // Histórico
-  ctx.fillStyle = '#d4af37';
+  ctx.fillStyle = '#f1c40f';
   ctx.font = 'bold 11px "InterFont", sans-serif';
   ctx.fillText('HISTÓRICO DE BATALHA', rightX, 172);
 
@@ -449,8 +426,7 @@ export async function generateProfileCard(char: any, stats: any, avatarUrlInput?
   ctx.fillText(`Vitórias: ${wins}   Mortes: ${deaths}`, rightX, 192);
   ctx.fillText(`PvP: ${pvpWins}W / ${pvpLosses}L   Boss: ${bosses}`, rightX, 210);
 
-  // Cooldowns
-  ctx.fillStyle = '#d4af37';
+  ctx.fillStyle = '#f1c40f';
   ctx.font = 'bold 11px "InterFont", sans-serif';
   ctx.fillText('COOLDOWNS DE ATIVIDADES', rightX, 242);
 
@@ -468,7 +444,7 @@ export async function generateProfileCard(char: any, stats: any, avatarUrlInput?
   ctx.font = '10px "InterFont", sans-serif';
   let cdY = 262;
   for (const cd of cdList) {
-    ctx.fillStyle = '#9c8b7c';
+    ctx.fillStyle = '#dcdcdc';
     ctx.fillText(`${cd.label}:`, rightX, cdY);
 
     ctx.fillStyle = cd.val === 'PRONTO' ? '#2ecc71' : '#e74c3c';

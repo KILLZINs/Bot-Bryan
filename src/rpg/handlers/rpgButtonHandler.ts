@@ -25,10 +25,12 @@ export async function handleRpgButton(i: ButtonInteraction, action: string): Pro
   let currentAction = action;
 
   try {
-    // ── Tratamento corrigido e unificado para as abas de Habilidades ───────
-    if (action.startsWith('rpg_skills_tab:')) {
+    // ── Tratamento infalível para as abas de Habilidades (Classe / Passivas) ──
+    const rawId = i.customId;
+    if (action.startsWith('rpg_skills_tab:') || rawId.includes('rpg_skills_tab:') || rawId.includes('skills_tab:')) {
       await i.deferUpdate();
-      const tab = action.split(':')[1] as 'classe' | 'passivas';
+      const targetAction = action.startsWith('rpg_skills_tab:') ? action : rawId;
+      const tab = targetAction.includes('passivas') ? 'passivas' : 'classe';
       const char = await getOrCreateCharacter(discordId, username);
       const { embed, components } = await buildHabilidadesEmbed(char, tab);
       await i.editReply({ embeds: [embed], files: [], components });

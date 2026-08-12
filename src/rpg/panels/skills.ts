@@ -11,10 +11,11 @@ import { DIVINE_SKILLS, PASSIVE_TALENTS } from '../constants/skills';
 import { getClass } from '../constants/classes';
 import { prisma } from '../../database/client';
 
-export async function buildHabilidadesEmbed(char: FullCharacter, viewMode: 'ativas' | 'passivas' = 'ativas'): Promise<{ embed: EmbedBuilder; components: ActionRowBuilder<any>[] }> {
+export async function buildHabilidadesEmbed(char: FullCharacter, viewMode: 'classe' | 'passivas' = 'classe'): Promise<{ embed: EmbedBuilder; components: ActionRowBuilder<any>[] }> {
   const cls = getClass(char.class);
   const availableSkills = cls?.divineSkills.map(id => DIVINE_SKILLS[id]).filter(Boolean) ?? [];
 
+  // Busca todas as skills aprendidas individualmente por este personagem
   const learnedSkillsList = await prisma.rpgLearnedSkill.findMany({
     where: { characterId: char.discordId }
   });
@@ -24,15 +25,17 @@ export async function buildHabilidadesEmbed(char: FullCharacter, viewMode: 'ativ
     ? (char.equippedSkills as string[]) 
     : (char.divineSkillId ? [char.divineSkillId] : []);
 
-  if (viewMode === 'ativas') {
+  if (viewMode === 'classe') {
     let equippedText = '*Nenhuma habilidade equipada.*';
     if (equippedIds.length > 0) {
       equippedText = equippedIds.map(id => {
         const ds = DIVINE_SKILLS[id];
         if (!ds) return null;
+        
+        // Puxa o XP/Rank estritamente isolado daquela habilidade específica
         const learned = learnedMap.get(id);
-        const rank = learned?.rank ?? char.divineSkillRank ?? 'F';
-        const exp = learned?.exp ?? char.divineSkillExp ?? 0;
+        const rank = learned?.rank ?? 'F';
+        const exp = learned?.exp ?? 0;
         const nextExp = 100 * Math.pow(1.5, ['F', 'E', 'D', 'C', 'B', 'A', 'S'].indexOf(rank) + 1);
 
         return `${ds.emoji} **${ds.name}** [Rank **${rank}**]\n> 📈 XP: \`${exp} / ${Math.round(nextExp)}\` | Custo: \`${ds.energyCost} Energia\`\n> ${ds.description}`;
@@ -53,9 +56,9 @@ export async function buildHabilidadesEmbed(char: FullCharacter, viewMode: 'ativ
 
     const embed = new EmbedBuilder()
       .setColor(0xF1C40F)
-      .setTitle('✨ Gerenciador de Habilidades Divinas')
+      .setTitle('✨ Gerenciador de Habilidades de Classe')
       .setDescription(
-        `Gerencie suas habilidades ativas. Você pode equipar **múltiplas habilidades** para usar em combate!\n` +
+        `Gerencie suas habilidades de classe. Você pode equipar **múltiplas habilidades** para usar em combate!\n` +
         `Sua classe: **${cls?.name ?? char.class}** ${cls?.emoji ?? ''}`
       )
       .addFields(
@@ -88,7 +91,7 @@ export async function buildHabilidadesEmbed(char: FullCharacter, viewMode: 'ativ
       : null;
 
     const navRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
-      new ButtonBuilder().setCustomId('rpg_skills_tab:ativas').setLabel('⚔️ Habilidades Ativas').setStyle(ButtonStyle.Primary),
+      new ButtonBuilder().setCustomId('rpg_skills_tab:classe').setLabel('⚔️ Habilidades de Classe').setStyle(ButtonStyle.Primary),
       new ButtonBuilder().setCustomId('rpg_skills_tab:passivas').setLabel('🧬 Talentos Passivos').setStyle(ButtonStyle.Secondary),
     );
 
@@ -97,6 +100,7 @@ export async function buildHabilidadesEmbed(char: FullCharacter, viewMode: 'ativ
 
     return { embed, components };
   } else {
+    // Modo Passivas (Árvore de Talentos)
     const talentLevels = (char.talentLevels as Record<string, number> | null) ?? {};
     const talentsText = Object.values(PASSIVE_TALENTS).map(t => {
       const lvl = talentLevels[t.id] ?? 0;
@@ -135,7 +139,7 @@ export async function buildHabilidadesEmbed(char: FullCharacter, viewMode: 'ativ
       : null;
 
     const navRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
-      new ButtonBuilder().setCustomId('rpg_skills_tab:ativas').setLabel('⚔️ Habilidades Ativas').setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId('rpg_skills_tab:classe').setLabel('⚔️ Habilidades de Classe').setStyle(ButtonStyle.Secondary),
       new ButtonBuilder().setCustomId('rpg_skills_tab:passivas').setLabel('🧬 Talentos Passivos').setStyle(ButtonStyle.Primary),
     );
 

@@ -7,14 +7,21 @@ import {
   StringSelectMenuBuilder, StringSelectMenuOptionBuilder,
 } from 'discord.js';
 import { FullCharacter } from '../services/character';
-import { DIVINE_SKILLS, PASSIVE_TALENTS, skillEffectValue, nextSkillRank } from '../constants/skills';
+import { DIVINE_SKILLS, PASSIVE_TALENTS } from '../constants/skills';
 import { getClass } from '../constants/classes';
+import { prisma } from '../../database/client';
 
-export function buildHabilidadesEmbed(char: FullCharacter, viewMode: 'ativas' | 'passivas' = 'ativas'): { embed: EmbedBuilder; components: ActionRowBuilder<any>[] } {
+export async function buildHabilidadesEmbed(char: FullCharacter, viewMode: 'ativas' | 'passivas' = 'ativas'): Promise<{ embed: EmbedBuilder; components: ActionRowBuilder<any>[] }> {
   const cls = getClass(char.class);
   const availableSkills = cls?.divineSkills.map(id => DIVINE_SKILLS[id]).filter(Boolean) ?? [];
 
-  // Lista de habilidades ativas equipadas (suporta múltiplas salvas em char.equippedSkills como array JSON ou string[])
+  // Busca as habilidades aprendidas/registradas no banco para extrair o Rank e o XP de cada uma
+  const learnedSkillsList = await prisma.rpgLearnedSkill.findMany({
+    where: { characterId: char.discordId }
+  });
+  const learnedMap = new Map(learnedSkillsList.map(s => [s.skillId, s]));
+
+  // Habilidades ativas equipadas (suporta array JSON ou string única antiga)
   const equippedIds: string[] = Array.isArray(char.equippedSkills) 
     ? (char.equippedSkills as string[]) 
     : (char.divineSkillId ? [char.divineSkillId] : []);
@@ -25,14 +32,24 @@ export function buildHabilidadesEmbed(char: FullCharacter, viewMode: 'ativas' | 
       equippedText = equippedIds.map(id => {
         const ds = DIVINE_SKILLS[id];
         if (!ds) return null;
-        return `${ds.emoji} **${ds.name}** [Rank **${char.divineSkillRank}**]\n> Tipo: \`${ds.type}\` | Custo: \`${ds.energyCost} Energia\`\n> ${ds.description}`;
+        const learned = learnedMap.get(id);
+        const rank = learned?.rank ?? char.divineSkillRank ?? 'F';
+        const exp = learned?.exp ?? char.divineSkillExp ?? 0;
+        const nextExp = 100 * Math.pow(1.5, ['F', 'E', 'D', 'C', 'B', 'A', 'S'].indexOf(rank) + 1); // Exemplo de calculo de XP para proximo rank
+
+        return `${ds.emoji} **${ds.name}** [Rank **${rank}**]\n> 📈 XP: \`${exp} / ${Math.round(nextExp)}\` | Custo: \`${ds.energyCost} Energia\`\n> ${ds.description}`;
       }).filter(Boolean).join('\n\n');
     }
 
     const skillListText = availableSkills.length > 0
       ? availableSkills.map(s => {
           const isEquipped = equippedIds.includes(s.id);
-          return `${isEquipped ? '✅' : '○'} ${s.emoji} **${s.name}** — Lv.${s.unlockLevel}+\n> ${s.description}`;
+          const learned = learnedMap.get(s.id);
+          const rank = learned?.rank ?? 'F';
+          const exp = learned?.exp ?? 0;
+          const nextExp = 100 * Math.pow(1.5, ['F', 'E', 'D', 'C', 'B', 'A', 'S'].indexOf(rank) + 1);
+
+          return `${isEquipped ? '✅' : '○'} ${s.emoji} **${s.name}** — Lv.${s.unlockLevel}+\n> Rank: \`${rank}\` | XP: \`${exp}/${Math.round(nextExp)}\`\n> ${s.description}`;
         }).join('\n\n')
       : '*Nenhuma habilidade disponível para sua classe.*';
 
@@ -58,7 +75,7 @@ export function buildHabilidadesEmbed(char: FullCharacter, viewMode: 'ativas' | 
             .setCustomId('rpg_select:equipar_multiplas_skills')
             .setPlaceholder('Selecione para alternar (Equipar/Desequipar)...')
             .setMinValues(1)
-            .setMaxValues(Math.min(unlocked.length, 3)) // Permite até 3 habilidades ativas simultâneas
+            .setMaxValues(Math.min(unlocked.length, 3))
             .addOptions(
               unlocked.map(s =>
                 new StringSelectMenuOptionBuilder()
@@ -77,7 +94,7 @@ export function buildHabilidadesEmbed(char: FullCharacter, viewMode: 'ativas' | 
       new ButtonBuilder().setCustomId('rpg_skills_tab:passivas').setLabel('🧬 Talentos Passivos').setStyle(ButtonStyle.Secondary),
     );
 
-    const btnRow = buildHabilidadesButtons(char);
+    const btnRow = buildHabilidadesButtons();
     const components = select ? [select, navRow, btnRow] : [navRow, btnRow];
 
     return { embed, components };
@@ -125,15 +142,15 @@ export function buildHabilidadesEmbed(char: FullCharacter, viewMode: 'ativas' | 
       new ButtonBuilder().setCustomId('rpg_skills_tab:passivas').setLabel('🧬 Talentos Passivos').setStyle(ButtonStyle.Primary),
     );
 
-    const btnRow = buildHabilidadesButtons(char);
+    const btnRow = buildHabilidadesButtons();
     const components = select ? [select, navRow, btnRow] : [navRow, btnRow];
 
     return { embed, components };
   }
 }
 
-export function buildHabilidadesButtons(char: FullCharacter): ActionRowBuilder<ButtonBuilder> {
-  return new ActionRowBuilder<ButtonBuilder>().addComponents(
+export function buildHabilidadesButtons(): ActionRowBuilder<ButtonBuilder> {
+  return newActionRowBuilder<ButtonBuilder>().addComponents(
     new ButtonBuilder().setCustomId('rpg:habilidades').setLabel('🔄 Atualizar').setStyle(ButtonStyle.Secondary),
     new ButtonBuilder().setCustomId('rpg:perfil').setLabel('◀ Perfil').setStyle(ButtonStyle.Secondary),
     new ButtonBuilder().setCustomId('rpg:cidade').setLabel('🏰 Cidade').setStyle(ButtonStyle.Primary),

@@ -173,6 +173,7 @@ export async function runCombat(
   let xpGained = 0;
   let goldGained = 0;
   const itemsDropped: string[] = [];
+  const itemsGainedMap = new Map<string, number>();
 
   if (state.playerHp <= 0 && state.enemyHp <= 0) {
     result = 'empate';
@@ -188,24 +189,30 @@ export async function runCombat(
     const combatBuffs = getCombatBuffMultipliers(await getActiveBuffs(char.discordId));
     const goldBonus = (1 + (stats.goldBonus / 100)) * worldMults.gold * combatBuffs.gold;
     const xpBonus   = (1 + ((stats.xpBonus) / 100)) * worldMults.xp * combatBuffs.xp;
+    
     xpGained   = Math.floor(scaledEnemy.xpReward * xpBonus);
-    goldGained = Math.floor((scaledEnemy.goldMin + Math.random() * (scaledEnemy.goldMax - scaledEnemy.goldMin)) * goldBonus);
+    goldGained = Math.floor((scaledEnemy.goldReward.min + Math.random() * (scaledEnemy.goldReward.max - scaledEnemy.goldReward.min)) * goldBonus);
 
     if (worldMults.xp > 1) state.log.push(`⭐ Bônus de evento: **×${worldMults.xp} XP**!`);
     if (worldMults.gold > 1) state.log.push(`💰 Bônus de evento: **×${worldMults.gold} Ouro**!`);
     if (combatBuffs.xp > 1) state.log.push(`💜 Buff ativo: **×${combatBuffs.xp} XP**!`);
     if (combatBuffs.gold > 1) state.log.push(`💰 Buff ativo: **×${combatBuffs.gold} Ouro**!`);
 
-    // drop de itens (com bônus de meteor)
-    for (const drop of enemy.dropTable) {
-      const roll = Math.random() * 100;
-      if (roll < drop.chance + (worldMults.dropBonus * 100)) {
-        itemsDropped.push(drop.itemId);
+    // novo sistema de drop de itens (com quantidade variada e chance)
+    for (const drop of enemy.drops) {
+      const roll = Math.random();
+      if (roll <= drop.chance + worldMults.dropBonus) {
+        const qty = Math.floor(Math.random() * (drop.maxQty - drop.minQty + 1)) + drop.minQty;
+        itemsGainedMap.set(drop.itemId, (itemsGainedMap.get(drop.itemId) || 0) + qty);
       }
     }
 
-    if (itemsDropped.length > 0) {
-      const names = itemsDropped.map(id => getItem(id)?.name ?? id).join(', ');
+    for (const [id, qty] of itemsGainedMap.entries()) {
+      for (let i = 0; i < qty; i++) itemsDropped.push(id);
+    }
+
+    if (itemsGainedMap.size > 0) {
+      const names = Array.from(itemsGainedMap.entries()).map(([id, qty]) => `**${qty}x** ${getItem(id)?.name ?? id}`).join(', ');
       state.log.push(`🎁 **Drops:** ${names}`);
     }
     state.log.push(`⭐ **+${xpGained} XP** | 💰 **+${goldGained} Ouro**`);
@@ -218,8 +225,6 @@ export async function runCombat(
 
   // ── Salvar no banco ────────────────────────────────────────────────────────
   const newHp = result === 'derrota' ? Math.floor(stats.maxHp * 0.1) : state.playerHp;
-  // Custo de energia por combate — base maior + crescimento mais rápido por rodada
-  // blessing event: energia não é consumida
   const { getEventMultipliers: getMults } = await import('../panels/world-events');
   const blessingCheck = guildId ? await getMults(guildId) : { noEnergy: false };
   const energyCost = blessingCheck.noEnergy ? 0 : Math.min(state.playerEnergy, 25 + state.round * 3);
@@ -247,19 +252,16 @@ export async function runCombat(
     },
   });
 
-  // ── XP de habilidade divina (toda batalha com XP ganho) ─────────────────────
-  // XP maior se habilidade foi ativada; menor se batalhou sem ela
+  // ── XP de habilidade divina ─────────────────────
   if (xpGained > 0 && char.divineSkillId) {
     const skill = DIVINE_SKILLS[char.divineSkillId];
     if (skill) {
       const SKILL_RANKS = ['F', 'E', 'D', 'C', 'B', 'A', 'S', 'SS', 'SSS'] as const;
-      // Habilidade usada: 40% do XP (min 25); não usada: 10% (min 5)
       const skillXpGain = state.usedSkillThisRound
         ? Math.max(25, Math.floor(xpGained * 0.4))
         : Math.max(5,  Math.floor(xpGained * 0.1));
       const newSkillExp  = char.divineSkillExp + skillXpGain;
       const rankIdx      = SKILL_RANKS.indexOf(char.divineSkillRank as typeof SKILL_RANKS[number]);
-      // Multiplicador exponencial por rank — rank S exige 64× o valor base
       const RANK_MULT    = [1, 2, 4, 8, 16, 32, 64, 128] as const;
       const requiredXp   = skill.rankUpExpRequired * (RANK_MULT[rankIdx] ?? 1);
       const canRankUp    = rankIdx >= 0 && rankIdx < SKILL_RANKS.length - 1 && newSkillExp >= requiredXp;
@@ -282,8 +284,8 @@ export async function runCombat(
   }
 
   // salvar drops no inventário
-  for (const itemId of itemsDropped) {
-    await giveItem(char.discordId, itemId, 1);
+  for (const [itemId, qty] of itemsGainedMap.entries()) {
+    await giveItem(char.discordId, itemId, qty);
   }
 
   // salvar log
@@ -300,7 +302,6 @@ export async function runCombat(
     },
   });
 
-  // Missões só avançam quando a batalha realmente termina em vitória.
   if (result === 'vitoria' && guildId) {
     try {
       const { trackRpgMission } = await import('../../commands/utility/missoes');
@@ -309,7 +310,7 @@ export async function runCombat(
       if (enemy.type === 'boss') await trackRpgMission(char.discordId, guildId, 'matar_boss_rpg', 1);
       await trackRpgMission(char.discordId, guildId, 'ganhar_ouro_rpg', goldGained);
     } catch {
-      // O combate não deve falhar se uma missão estiver indisponível.
+      // Ignora erro se missões falharem
     }
   }
 
@@ -390,8 +391,6 @@ export async function takeCombatAction(discordId: string, action: CombatAction):
   const { char, enemy, scaledEnemy, stats, state } = session;
   const skill = char.divineSkillId ? DIVINE_SKILLS[char.divineSkillId] : undefined;
 
-  // Validações acontecem antes de avançar a rodada. Um clique inválido não
-  // pode consumir o turno do jogador nem dar uma resposta grátis ao inimigo.
   if (action === 'skill') {
     if (!skill || skill.type === 'passiva') {
       return rejectCombatAction(session, 'Você não possui uma habilidade ativa para usar neste combate.');
@@ -448,7 +447,6 @@ export async function takeCombatAction(discordId: string, action: CombatAction):
     return buildCombatTurn(session, result);
   }
 
-  // O inimigo sempre responde depois da ação do jogador.
   if (state.stubbedRounds > 0) {
     state.log.push(`😵 ${enemy.name} está atordoado e perdeu o turno!`);
     state.stubbedRounds--;
@@ -484,10 +482,7 @@ export async function takeCombatAction(discordId: string, action: CombatAction):
   return buildCombatTurn(session);
 }
 
-function useInteractiveSkill(
-  session: InteractiveCombatSession,
-  skill: typeof DIVINE_SKILLS[string],
-): void {
+function useInteractiveSkill(session: InteractiveCombatSession, skill: typeof DIVINE_SKILLS[string]): void {
   const { char, stats, scaledEnemy, state } = session;
   if (skill.type === 'ataque' || skill.type === 'ultimate') {
     if (state.frozenRounds > 0) {
@@ -573,15 +568,11 @@ async function consumeCombatPotion(
   if (!item) return null;
   const heal = item.id === 'pocao_de_vida_g'
     ? maxHp - currentHp
-    : Math.min(item.stats.hp ?? 0, maxHp - currentHp);
+    : Math.min(item.stats?.maxHp ?? 0, maxHp - currentHp);
 
   const consumed = await prisma.$transaction(async tx => {
     const locked = await tx.rpgInventoryItem.updateMany({
-      where: {
-        characterId: discordId,
-        itemId: inventory.itemId,
-        quantity: { gt: 0 },
-      },
+      where: { characterId: discordId, itemId: inventory.itemId, quantity: { gt: 0 } },
       data: { quantity: { decrement: 1 } },
     });
     return locked.count > 0;
@@ -604,6 +595,7 @@ async function finalizeInteractiveCombat(
   let xpGained = 0;
   let goldGained = 0;
   const itemsDropped: string[] = [];
+  const itemsGainedMap = new Map<string, number>();
 
   if (result === 'vitoria') {
     const { getEventMultipliers } = await import('../panels/world-events');
@@ -612,12 +604,28 @@ async function finalizeInteractiveCombat(
       : { xp: 1, gold: 1, dropBonus: 0, noEnergy: false, enemyMult: 1 };
     const combatBuffs = getCombatBuffMultipliers(await getActiveBuffs(char.discordId));
     xpGained = Math.floor(scaledEnemy.xpReward * (1 + stats.xpBonus / 100) * worldMults.xp * combatBuffs.xp);
+    
+    // Ouro Dinâmico
     goldGained = Math.floor(
-      (scaledEnemy.goldMin + Math.random() * (scaledEnemy.goldMax - scaledEnemy.goldMin))
-      * (1 + stats.goldBonus / 100) * worldMults.gold * combatBuffs.gold,
+      (scaledEnemy.goldReward.min + Math.random() * (scaledEnemy.goldReward.max - scaledEnemy.goldReward.min))
+      * (1 + stats.goldBonus / 100) * worldMults.gold * combatBuffs.gold
     );
-    for (const drop of enemy.dropTable) {
-      if (Math.random() * 100 < drop.chance + worldMults.dropBonus * 100) itemsDropped.push(drop.itemId);
+    
+    // Sistema de Drops Dinâmicos
+    for (const drop of enemy.drops) {
+      if (Math.random() <= drop.chance + worldMults.dropBonus) {
+        const qty = Math.floor(Math.random() * (drop.maxQty - drop.minQty + 1)) + drop.minQty;
+        itemsGainedMap.set(drop.itemId, (itemsGainedMap.get(drop.itemId) || 0) + qty);
+      }
+    }
+
+    for (const [id, qty] of itemsGainedMap.entries()) {
+      for (let i = 0; i < qty; i++) itemsDropped.push(id);
+    }
+
+    if (itemsGainedMap.size > 0) {
+      const names = Array.from(itemsGainedMap.entries()).map(([id, qty]) => `**${qty}x** ${getItem(id)?.name ?? id}`).join(', ');
+      state.log.push(`🎁 **Drops:** ${names}`);
     }
     state.log.push(`⭐ **+${xpGained} XP** | 💰 **+${goldGained} Ouro**`);
   }
@@ -661,16 +669,17 @@ async function finalizeInteractiveCombat(
 
       await prisma.rpgCharacter.update({
         where: { discordId: char.discordId },
-        data: {
-          divineSkillExp: canRankUp ? 0 : nextExp,
-          divineSkillRank: nextRank,
-        },
+        data: { divineSkillExp: canRankUp ? 0 : nextExp, divineSkillRank: nextRank },
       });
       state.log.push(`✨ **${skill.name}** +**${skillXp} XP** de habilidade${session.skillUsedInCombat ? ' ✨' : ''}`);
       if (canRankUp) state.log.push(`🌟 **RANK UP!** ${skill.emoji} **${skill.name}** → Rank **${nextRank}**!`);
     }
   }
-  for (const itemId of itemsDropped) await giveItem(char.discordId, itemId, 1);
+
+  // Otimização: Gravar drops no inventário 
+  for (const [itemId, qty] of itemsGainedMap.entries()) {
+    await giveItem(char.discordId, itemId, qty);
+  }
 
   await prisma.rpgCombatLog.create({
     data: {
@@ -693,16 +702,12 @@ async function finalizeInteractiveCombat(
       if (mode === 'dungeon') await trackRpgMission(char.discordId, guildId, 'vencer_dungeon', 1);
       if (enemy.type === 'boss') await trackRpgMission(char.discordId, guildId, 'matar_boss_rpg', 1);
       await trackRpgMission(char.discordId, guildId, 'ganhar_ouro_rpg', goldGained);
-    } catch { /* missões não podem interromper o fim do combate */ }
+    } catch { /* ignorar erro */ }
   }
 
   return {
-    result,
-    rounds: state.round,
-    log: state.log,
-    xpGained,
-    goldGained,
-    itemsDropped,
+    result, rounds: state.round, log: state.log,
+    xpGained, goldGained, itemsDropped,
     playerHpLeft: Math.max(1, newHp),
     playerEnergyLeft: finalEnergy,
     bossKill: enemy.type === 'boss' && result === 'vitoria',
@@ -726,7 +731,6 @@ export async function runPvp(attacker: FullCharacter, defender: FullCharacter): 
 
   while (round < 15 && atkHp > 0 && defHp > 0) {
     round++;
-    // atacante ataca
     const rawDmg = Math.max(1, atkStats.attack - defStats.defense * 0.5);
     const crit = Math.random() * 100 < atkStats.critChance;
     const dmg = Math.floor(crit ? rawDmg * 2 : rawDmg);
@@ -734,7 +738,6 @@ export async function runPvp(attacker: FullCharacter, defender: FullCharacter): 
     log.push(`Rd ${round}: ${attacker.username} causa **${dmg}**${crit ? ' 💥 CRÍTICO' : ''} | HP ${defender.username}: **${Math.max(0, defHp)}**`);
     if (defHp <= 0) break;
 
-    // defensor contra-ataca
     const rawDmg2 = Math.max(1, defStats.attack - atkStats.defense * 0.5);
     const crit2 = Math.random() * 100 < defStats.critChance;
     const dmg2 = Math.floor(crit2 ? rawDmg2 * 2 : rawDmg2);
@@ -747,7 +750,7 @@ export async function runPvp(attacker: FullCharacter, defender: FullCharacter): 
   const loser  = attackerWon ? defender : attacker;
 
   const xpGained   = Math.floor(loser.level * 15);
-  const goldStolen  = Math.floor(loser.gold * 0.05);
+  const goldStolen = Math.floor(loser.gold * 0.05);
 
   log.push(`\n🏆 **${winner.username} venceu o PvP!** +${xpGained} XP | 💰 +${goldStolen} ouro`);
 
@@ -771,26 +774,22 @@ function calcPlayerDamage(
   let dmg = Math.max(1, stats.attack - Math.floor(enemy.baseDefense * state.enemyDefenseMultiplier * 0.4));
   let msg = '';
 
-  // skill divina no primeiro turno
   if (useSkill && char.divineSkillId && state.playerEnergy >= (DIVINE_SKILLS[char.divineSkillId]?.energyCost ?? 999)) {
     const skill = DIVINE_SKILLS[char.divineSkillId];
     if (skill && skill.type === 'ataque') {
       const eff = skillEffectValue(skill, char.divineSkillRank as SkillRank);
       dmg = Math.floor(dmg * eff);
       state.playerEnergy -= skill.energyCost;
-      state.usedSkillThisRound = true; // ← rastrear uso para conceder XP de habilidade
+      state.usedSkillThisRound = true;
       msg = `✨ **${skill.name}** ${skill.emoji} — `;
     }
   }
 
-  // bônus berserk
   if (state.berserkActive > 0) { dmg = Math.floor(dmg * 1.8); state.berserkActive--; }
 
-  // crítico
   const isCrit = Math.random() * 100 < stats.critChance;
   if (isCrit) { dmg = Math.floor(dmg * 2.0); }
 
-  // double hit passivo
   if (state.doubleDmgNextHit) { dmg *= 2; state.doubleDmgNextHit = false; }
 
   msg += `⚔️ Você causa **${dmg}** de dano${isCrit ? ' 💥 CRÍTICO!' : '.'}`;
@@ -802,10 +801,8 @@ function calcEnemyDamage(
 ): { damage: number; msg: string } {
   let dmg = Math.max(1, Math.floor(enemy.baseAttack * state.enemyAttackMultiplier) - Math.floor(stats.defense * 0.5));
 
-  // escudo ativo reduz dano
   if (state.shieldActive > 0) { dmg = Math.floor(dmg * 0.5); state.shieldActive--; }
 
-  // esquiva
   if (Math.random() * 100 < stats.dodgeChance) {
     return { damage: 0, msg: `💨 Você esquivou do ataque de ${enemy.name}!` };
   }
@@ -885,8 +882,6 @@ export async function claimDungeonSlot(
   }
   return { success: true, startedAt };
 }
-
-// ─── Verificar cooldown ────────────────────────────────────────────────────
 
 export function isDungeonOnCooldown(char: FullCharacter, cooldownMin: number): { onCooldown: boolean; remaining: string } {
   if (!char.lastDungeon) return { onCooldown: false, remaining: '' };

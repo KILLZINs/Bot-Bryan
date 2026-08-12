@@ -129,18 +129,16 @@ async function fetchChannelMemory(
 
     for (const msg of sorted) {
       const isAI = msg.author.bot || msg.webhookId !== null;
-      
-      // A MÁGICA ESTÁ AQUI: Formatando o histórico corretamente!
       if (isAI) {
         memory.push({
           role: 'assistant',
-          content: msg.cleanContent || msg.content, // Removemos o prefixo de nome para a IA não imitar
+          content: msg.cleanContent || msg.content,
         });
       } else {
         const userName = msg.member?.displayName ?? msg.author.username;
         memory.push({
           role: 'user',
-          content: `[Mensagem de ${userName}]: ${msg.cleanContent || msg.content}`, // Etiqueta o usuário para a IA não confundir os nomes
+          content: `[Mensagem de ${userName}]: ${msg.cleanContent || msg.content}`,
         });
       }
     }
@@ -497,7 +495,10 @@ export default {
       const sukiKey = `${guildId}:${authorId}`;
       const now = Date.now();
 
+      // MÁGICA 1: Aviso de Cooldown pra ngm achar q ela quebrou
       if (now - (sukiCooldowns.get(sukiKey) ?? 0) < 8000) {
+        const warn = await message.reply('⏳ Segura a emoção! Espera eu respirar (8s) pra responder de novo!').catch(() => null);
+        if (warn) setTimeout(() => warn.delete().catch(() => null), 4000);
         return;
       }
 
@@ -533,11 +534,12 @@ export default {
         return;
       }
 
+      // MÁGICA 2: Pingando o usuário que chamou ela (Simulando Reply visual)
       await webhook.send({
-        content: response,
+        content: `<@${message.author.id}> ${response}`,
         username: SUKI_WEBHOOK_NAME,
         ...(SUKI_WEBHOOK_AVATAR ? { avatarURL: SUKI_WEBHOOK_AVATAR } : {}),
-        allowedMentions: { parse: [] },
+        allowedMentions: { users: [message.author.id] }, // Libera a marcação pra notificar ele
       }).catch(async err => {
         console.error('[Suki Webhook] Erro ao enviar:', err);
         await message.reply('Deu erro pra eu aparecer como Suki 😭').catch(() => null);
@@ -604,6 +606,7 @@ export default {
         const now = Date.now();
 
         if (now - (sukiCooldowns.get(sukiKey) ?? 0) < 8000) {
+          // Aqui ela só ignora silenciosamente pra n floodar o chat atoa qnd for citada no meio da frase
           return;
         }
 
@@ -640,10 +643,10 @@ export default {
         }
 
         await webhook.send({
-          content: response,
+          content: `<@${message.author.id}> ${response}`, // Tbm pinga a pessoa aqui
           username: SUKI_WEBHOOK_NAME,
           ...(SUKI_WEBHOOK_AVATAR ? { avatarURL: SUKI_WEBHOOK_AVATAR } : {}),
-          allowedMentions: { parse: [] },
+          allowedMentions: { users: [message.author.id] },
         }).catch(async err => {
           console.error('[Suki Webhook] Erro ao enviar:', err);
           await message.reply('Deu erro pra eu aparecer como Suki 😭').catch(() => null);

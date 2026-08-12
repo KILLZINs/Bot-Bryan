@@ -148,7 +148,8 @@ export async function buildHabilidadesEmbed(char: FullCharacter, viewMode: 'clas
     const select = talentOptions.length > 0
       ? new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(
           new StringSelectMenuBuilder()
-            .setCustomId('rpg_select:evoluir_talento') // 👈 CORREÇÃO DO PREFIXO AQUI
+            // 👇 CORREÇÃO DO PREFIXO AQUI 👇
+            .setCustomId('rpg_select:evoluir_talento') 
             .setPlaceholder('🧬 Escolha um talento passivo para evoluir...')
             .addOptions(talentOptions)
         )

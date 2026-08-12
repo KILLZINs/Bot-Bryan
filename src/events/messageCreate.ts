@@ -1027,7 +1027,7 @@ export default {
       if (!channel) return;
 
       const { applyTemplate: applyLevelUpTemplate } =
-        await import('../../utils/embedTemplates');
+        await import('../utils/embedTemplates');
 
       const embed =
         new EmbedBuilder()

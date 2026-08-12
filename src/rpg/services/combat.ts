@@ -11,7 +11,7 @@ import type { SkillRank } from '../constants/skills';
 import { getActiveBuffs, getCombatBuffMultipliers } from './temp-buffs';
 
 export const DUNGEON_COOLDOWN_MS = 5 * 60 * 1000;
-export type CombatMode = 'dungeon' | 'hunt' | 'expedition'; // MODO VIP ADICIONADO!
+export type CombatMode = 'dungeon' | 'hunt' | 'expedition';
 
 export class CombatBlockedError extends Error {
   constructor(message: string) {
@@ -104,7 +104,6 @@ export async function runCombat(
   
   if (char.currentHp <= 0) throw new CombatBlockedError('Você está sem HP. Vá à cidade e se cure antes de batalhar.');
   
-  // A EXPEDIÇÃO É VIP E NÃO COBRA ENERGIA PARA INICIAR A SALA
   if (mode !== 'expedition' && char.currentEnergy < 10) {
     throw new CombatBlockedError('Você precisa de pelo menos **10⚡** para iniciar uma batalha.');
   }
@@ -211,7 +210,6 @@ export async function runCombat(
   const { getEventMultipliers: getMults } = await import('../panels/world-events');
   const blessingCheck = guildId ? await getMults(guildId) : { noEnergy: false };
   
-  // A EXPEDIÇÃO É VIP E NÃO CONSOME ENERGIA DURANTE O COMBATE
   const energyCost = (blessingCheck.noEnergy || mode === 'expedition') ? 0 : Math.min(state.playerEnergy, 25 + state.round * 3);
   const finalEnergy = Math.max(0, state.playerEnergy - energyCost);
 
@@ -292,7 +290,6 @@ export async function startInteractiveCombat(
 
   if (char.currentHp <= 0) throw new CombatBlockedError('Você está sem HP. Vá à cidade e se cure antes de batalhar.');
   
-  // A EXPEDIÇÃO É VIP E NÃO COBRA ENERGIA PARA INICIAR
   if (mode !== 'expedition' && char.currentEnergy < 10) {
       throw new CombatBlockedError('Você precisa de pelo menos **10⚡** para iniciar uma batalha.');
   }
@@ -404,7 +401,7 @@ export async function takeCombatAction(discordId: string, action: CombatAction):
     return buildCombatTurn(session, result);
   }
 
-  state.log.push(`> ❤️ Seu HP: **${state.playerHp}** | HP inimigo: **${state.enemyHp}**`);
+  state.log.push(`> ❤️ Seu HP: **${Math.min(state.playerHp, stats.maxHp)}** | HP inimigo: **${state.enemyHp}**`);
   state.log.push('🎯 **Seu turno!** Escolha sua próxima ação.');
   return buildCombatTurn(session);
 }
@@ -502,7 +499,6 @@ async function finalizeInteractiveCombat(session: InteractiveCombatSession, resu
   const { getEventMultipliers: getMults } = await import('../panels/world-events');
   const blessing = guildId ? await getMults(guildId) : { noEnergy: false };
   
-  // A EXPEDIÇÃO É VIP E NÃO CONSOME ENERGIA DURANTE O COMBATE
   const energyCost = (blessing.noEnergy || mode === 'expedition') ? 0 : Math.min(state.playerEnergy, 25 + state.round * 3);
   const finalEnergy = Math.max(0, state.playerEnergy - energyCost);
   const newHp = result === 'derrota' ? Math.floor(stats.maxHp * 0.1) : state.playerHp;
@@ -564,13 +560,18 @@ export async function runPvp(attacker: FullCharacter, defender: FullCharacter): 
 function calcPlayerDamage(char: FullCharacter, stats: ComputedStats, state: CombatState, enemy: Enemy, useSkill: boolean): { damage: number; msg: string } {
   let dmg = Math.max(1, stats.attack - Math.floor(enemy.baseDefense * state.enemyDefenseMultiplier * 0.4));
   let msg = '';
+  
   if (useSkill && char.divineSkillId && state.playerEnergy >= (DIVINE_SKILLS[char.divineSkillId]?.energyCost ?? 999)) {
     const skill = DIVINE_SKILLS[char.divineSkillId];
-    if (skill && skill.type === 'ataque') {
+    // CORREÇÃO: Habilidades Ultimate agora gastam energia normalmente!
+    if (skill && (skill.type === 'ataque' || skill.type === 'ultimate')) {
       dmg = Math.floor(dmg * skillEffectValue(skill, char.divineSkillRank as SkillRank));
-      state.playerEnergy -= skill.energyCost; state.usedSkillThisRound = true; msg = `✨ **${skill.name}** ${skill.emoji} — `;
+      state.playerEnergy -= skill.energyCost; 
+      state.usedSkillThisRound = true; 
+      msg = `✨ **${skill.name}** ${skill.emoji} — `;
     }
   }
+  
   if (state.berserkActive > 0) { dmg = Math.floor(dmg * 1.8); state.berserkActive--; }
   const isCrit = Math.random() * 100 < stats.critChance;
   if (isCrit) dmg = Math.floor(dmg * 2.0);

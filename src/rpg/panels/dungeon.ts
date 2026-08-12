@@ -30,24 +30,25 @@ export const activeExpeditions = new Map<string, DungeonRun>();
 
 export async function startExpedition(char: FullCharacter, locationId: string, dungeonTypeId?: string) {
   if (char.currentHp <= 0) return { success: false, error: 'Você precisa curar seu HP antes de uma expedição!' };
-  if (char.currentEnergy < 10) return { success: false, error: 'Uma expedição exige pelo menos 10⚡ de Energia para iniciar.' };
+  
+  // O pedágio da Expedição VIP é de 20 de Energia na porta. Lá dentro tudo é grátis.
+  if (char.currentEnergy < 20) return { success: false, error: 'Uma expedição exige pelo menos **20⚡** de Energia para iniciar.' };
 
   const run: DungeonRun = {
     discordId: char.discordId,
     locationId,
     dungeonTypeId,
     currentFloor: 1,
-    maxFloors: 5, // 4 Salas + 1 Boss Final
+    maxFloors: 5,
     logs: ['🗺️ **Expedição Iniciada!** Os pesados portões se fecham atrás de você...']
   };
 
   activeExpeditions.set(char.discordId, run);
   
-  // ⏳ O PULO DO GATO: Aplica o Cooldown logo na entrada da Expedição
   await prisma.rpgCharacter.update({
     where: { discordId: char.discordId },
     data: { 
-        currentEnergy: { decrement: 10 },
+        currentEnergy: { decrement: 20 }, // Pedágio pago
         lastDungeon: new Date() // Trava a porta por 5 minutos caso ele fuja/morra!
     }
   });
@@ -90,7 +91,7 @@ export function buildDungeonEmbed(char: FullCharacter): EmbedBuilder {
     { name: '💀 Guardiões', value: bossList, inline: true },
     { name: '🔮 Tipos Especiais', value: '> Use o **menu abaixo** para escolher um tipo de dungeon (Fogo, Gelo, Sombra, etc) para receber multiplicadores absurdos de Ouro/XP no final!', inline: false },
     { name: '❤️ HP', value: `${hpBar(char.currentHp, stats.maxHp)} **${char.currentHp}/${stats.maxHp}**`, inline: true },
-    { name: '⚡ Energia', value: `**${char.currentEnergy}/${stats.maxEnergy}**`, inline: true },
+    { name: '⚡ Energia', value: `**${char.currentEnergy}/${stats.maxEnergy}** (Custo da Expedição: 20⚡)`, inline: true },
     { name: '⏱️ Cooldown', value: cd.onCooldown ? `🔴 ${cd.remaining}` : '🟢 Pronto!', inline: true },
   );
 
@@ -262,10 +263,9 @@ export async function doBattleRandom(char: FullCharacter, guildId?: string, mode
   if (enemies.length === 0) return { embed: new EmbedBuilder().setColor(0xE74C3C).setTitle('Sem Inimigos').setDescription('Nenhum inimigo encontrado.'), rows: [mode === 'hunt' ? buildHuntButtons(false, char) : buildDungeonButtons(char)] };
   const enemy = enemies[Math.floor(Math.random() * enemies.length)];
   
-  // 🔮 O PASSE LIVRE DA EXPEDIÇÃO! 
-  // Se o cara está na expedição, disfarçamos o mode de 'hunt' para o combat.ts não barrar o cooldown.
+  // O PASSE LIVRE DA EXPEDIÇÃO! 🎟️
   const isExped = activeExpeditions.has(char.discordId);
-  const internalMode = isExped ? 'hunt' : mode;
+  const internalMode = isExped ? 'expedition' : mode;
 
   let turn;
   try { turn = await startInteractiveCombat(char, enemy, guildId, internalMode); } catch (error) {
@@ -279,9 +279,9 @@ export async function doBattleEnemy(char: FullCharacter, enemyId: string, guildI
   const enemy = getEnemy(enemyId);
   if (!enemy) return { embed: new EmbedBuilder().setColor(0xE74C3C).setTitle('Erro').setDescription('Inimigo não encontrado.'), rows: [] };
   
-  // 🔮 O PASSE LIVRE DA EXPEDIÇÃO!
+  // O PASSE LIVRE DA EXPEDIÇÃO! 🎟️
   const isExped = activeExpeditions.has(char.discordId);
-  const internalMode = isExped ? 'hunt' : mode;
+  const internalMode = isExped ? 'expedition' : mode;
 
   let turn;
   try { turn = await startInteractiveCombat(char, enemy, guildId, internalMode); } catch (error) {

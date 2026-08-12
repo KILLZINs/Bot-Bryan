@@ -4,7 +4,7 @@ import { getClass, karmaLabel, rpgXpForLevel } from '../constants/classes';
 import { getItem } from '../constants/items';
 import { getLocation } from '../constants/locations';
 import { DIVINE_SKILLS } from '../constants/skills';
-import { getMarriage, getPartner } from '../services/marriage';
+import { getMarriage } from '../services/marriage';
 
 try {
   const fontPath = path.join(process.cwd(), 'src', 'rpg', 'fonts', 'Inter-Bold.ttf');
@@ -110,97 +110,95 @@ export async function generateProfileCard(char: any, stats: any, avatarUrlInput?
 
   const avatarUrl = avatarUrlInput || char.avatarUrl || '';
 
-  // RENDERIZAÇÃO
-  ctx.fillStyle = '#0f0c0a';
+  // ==========================================
+  // RENDERIZAÇÃO & DESIGN PREMIUM
+  // ==========================================
+
+  // Fundo Principal com leve gradiente de profundidade
+  const bgGrad = ctx.createLinearGradient(0, 0, width, height);
+  bgGrad.addColorStop(0, '#0a0807');
+  bgGrad.addColorStop(1, '#140f0c');
+  ctx.fillStyle = bgGrad;
   ctx.fillRect(0, 0, width, height);
 
-  ctx.fillStyle = '#17120e';
-  ctx.strokeStyle = '#634b35';
-  ctx.lineWidth = 3;
+  // Painel de Fundo Geral com Borda Estilizada
+  ctx.fillStyle = '#14100c';
+  ctx.strokeStyle = '#523f2b';
+  ctx.lineWidth = 2.5;
   ctx.beginPath();
-  ctx.roundRect(10, 10, width - 20, height - 20, 12);
+  ctx.roundRect(12, 12, width - 24, height - 24, 14);
   ctx.fill();
   ctx.stroke();
 
-  // PAINEL ESQUERDO
+  // ------------------------------------------
+  // PAINEL ESQUERDO (Status & Atributos)
+  // ------------------------------------------
   ctx.fillStyle = '#ffffff';
-  ctx.font = 'bold 26px "InterFont", sans-serif';
-  ctx.fillText(`${name.toUpperCase()}`, 25, 45);
+  ctx.font = 'bold 24px "InterFont", sans-serif';
+  ctx.fillText(`${name.toUpperCase()}`, 28, 48);
 
   ctx.fillStyle = '#f1c40f';
-  ctx.font = 'bold 14px "InterFont", sans-serif';
-  ctx.fillText(`Nv.${level} ${className} • Karma: ${karma} • GEN.${gen}`, 25, 68);
+  ctx.font = 'bold 13px "InterFont", sans-serif';
+  ctx.fillText(`Nv.${level} ${className}  •  Karma: ${karma}  •  GEN.${gen}`, 28, 70);
 
-  ctx.fillStyle = '#dcdcdc';
-  ctx.font = '14px "InterFont", sans-serif';
-  ctx.fillText(`Local: ${locationName}`, 25, 88);
+  ctx.fillStyle = '#c8b6a6';
+  ctx.font = '13px "InterFont", sans-serif';
+  ctx.fillText(`Local: ${locationName}`, 28, 90);
 
   function drawBar(y: number, label: string, current: number, max: number, color: string) {
     const pct = Math.min(Math.round((current / (max || 1)) * 100), 100);
-    ctx.fillStyle = '#ffffff';
-    ctx.font = 'bold 13px "InterFont", sans-serif';
-    ctx.fillText(`${label}: ${current}/${max} (${pct}%)`, 25, y);
+    ctx.fillStyle = '#e6caa3';
+    ctx.font = 'bold 12px "InterFont", sans-serif';
+    ctx.fillText(`${label}: ${current} / ${max} (${pct}%)`, 28, y);
 
-    ctx.fillStyle = '#050403';
+    // Fundo da barra
+    ctx.fillStyle = '#080605';
     ctx.beginPath();
-    ctx.roundRect(25, y + 5, 210, 10, 3);
+    ctx.roundRect(28, y + 5, 210, 9, 4);
     ctx.fill();
 
+    // Preenchimento da barra
     const fillWidth = Math.min(((current || 0) / (max || 1)) * 210, 210);
-    ctx.fillStyle = color;
-    ctx.beginPath();
-    ctx.roundRect(25, y + 5, fillWidth, 10, 3);
-    ctx.fill();
+    if (fillWidth > 0) {
+      ctx.fillStyle = color;
+      ctx.beginPath();
+      ctx.roundRect(28, y + 5, fillWidth, 9, 4);
+      ctx.fill();
+    }
   }
 
-  drawBar(118, 'XP', currentXp, maxXp, '#bdc3c7');
-  drawBar(150, 'HP', currentHp, maxHp, '#e74c3c');
-  drawBar(182, 'ENERGIA', currentEnergy, maxEnergy, '#f39c12');
+  drawBar(116, 'XP', currentXp, maxXp, '#95a5a6');
+  drawBar(148, 'HP', currentHp, maxHp, '#e74c3c');
+  drawBar(180, 'ENERGIA', currentEnergy, maxEnergy, '#f39c12');
 
-  ctx.strokeStyle = '#423223';
+  // Linha divisória esquerda
+  ctx.strokeStyle = '#382a1d';
   ctx.lineWidth = 1.5;
   ctx.beginPath();
-  ctx.moveTo(25, 212);
-  ctx.lineTo(235, 212);
+  ctx.moveTo(28, 208);
+  ctx.lineTo(238, 208);
   ctx.stroke();
 
   ctx.fillStyle = '#f39c12';
-  ctx.font = 'bold 15px "InterFont", sans-serif';
-  ctx.fillText('ATRIBUTOS DE COMBATE', 25, 235);
+  ctx.font = 'bold 13px "InterFont", sans-serif';
+  ctx.fillText('ATRIBUTOS DE COMBATE', 28, 230);
 
   ctx.fillStyle = '#ffffff';
-  ctx.font = 'bold 14px "InterFont", sans-serif';
-  ctx.fillText(`FOR: ${str}  AGI: ${agi}  INT: ${intVal}`, 25, 260);
-  ctx.fillText(`VIT: ${vit}  SOR: ${lck}`, 25, 280);
+  ctx.font = 'bold 13px "InterFont", sans-serif';
+  ctx.fillText(`FOR: ${str}    AGI: ${agi}    INT: ${intVal}`, 28, 254);
+  ctx.fillText(`VIT: ${vit}    SOR: ${lck}`, 28, 274);
 
-  ctx.fillStyle = '#f0e3ce';
-  ctx.fillText(`Ataque: ${atk}  Defesa: ${def}`, 25, 310);
-  ctx.fillText(`Crit: ${crit.toFixed(1)}%  Esq: ${dodge.toFixed(1)}%`, 25, 332);
+  ctx.fillStyle = '#dfd3c3';
+  ctx.font = '12px "InterFont", sans-serif';
+  ctx.fillText(`Ataque: ${atk}   Defesa: ${def}`, 28, 304);
+  ctx.fillText(`Crit: ${crit.toFixed(1)}%   Esq: ${dodge.toFixed(1)}%`, 28, 324);
 
-  // PAINEL CENTRAL (Slots Expansíveis com Largura Aumentada)
+  // ------------------------------------------
+  // PAINEL CENTRAL (Avatar & Conexões dos Slots)
+  // ------------------------------------------
   const centerX = 425;
   const centerY = 240;
-
-  if (avatarUrl) {
-    try {
-      const avatar = await loadImage(avatarUrl);
-      ctx.save();
-      ctx.beginPath();
-      ctx.arc(centerX, centerY, 46, 0, Math.PI * 2);
-      ctx.closePath();
-      ctx.clip();
-      ctx.drawImage(avatar, centerX - 46, centerY - 46, 92, 92);
-      ctx.restore();
-
-      ctx.strokeStyle = '#f1c40f';
-      ctx.lineWidth = 3;
-      ctx.beginPath();
-      ctx.arc(centerX, centerY, 46, 0, Math.PI * 2);
-      ctx.stroke();
-    } catch (err) {
-      console.error('Erro avatar Canvas:', err);
-    }
-  }
+  const avatarRadius = 46;
 
   const slotsCoords = [
     { key: 'helmet', label: 'Elmo', x: centerX - 160, y: centerY - 135 },
@@ -216,103 +214,149 @@ export async function generateProfileCard(char: any, stats: any, avatarUrlInput?
     { key: 'pet', label: 'Pet', x: centerX + 75, y: centerY + 105 }
   ];
 
+  // Desenhar as linhas de conexão saindo da BORDAS DO AVATAR (evita cortar o rosto!)
   ctx.strokeStyle = '#423223';
   ctx.lineWidth = 1.5;
   for (const s of slotsCoords) {
+    const slotCenterX = s.x + 45;
+    const slotCenterY = s.y + 24;
+
+    // Calcular angulo para a linha parar perfeitamente na borda do circulo do avatar
+    const angle = Math.atan2(slotCenterY - centerY, slotCenterX - centerX);
+    const startX = centerX + Math.cos(angle) * (avatarRadius + 4);
+    const startY = centerY + Math.sin(angle) * (avatarRadius + 4);
+
     ctx.beginPath();
-    ctx.moveTo(centerX, centerY);
-    ctx.lineTo(s.x + 42, s.y + 24);
+    ctx.moveTo(startX, startY);
+    ctx.lineTo(slotCenterX, slotCenterY);
     ctx.stroke();
   }
 
+  // Desenhar Avatar do Jogador com Borda Elegante
+  if (avatarUrl) {
+    try {
+      const avatar = await loadImage(avatarUrl);
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(centerX, centerY, avatarRadius, 0, Math.PI * 2);
+      ctx.closePath();
+      ctx.clip();
+      ctx.drawImage(avatar, centerX - avatarRadius, centerY - avatarRadius, avatarRadius * 2, avatarRadius * 2);
+      ctx.restore();
+
+      // Anel dourado ao redor do avatar
+      ctx.strokeStyle = '#f1c40f';
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.arc(centerX, centerY, avatarRadius, 0, Math.PI * 2);
+      ctx.stroke();
+    } catch (err) {
+      console.error('Erro avatar Canvas:', err);
+    }
+  }
+
+  // Renderizar Caixas de Itens (Slots)
   for (const slot of slotsCoords) {
     const itemName = slotItems[slot.key as keyof typeof slotItems] || '—';
 
-    ctx.fillStyle = '#0d0a08';
-    ctx.strokeStyle = '#523f2b';
+    ctx.fillStyle = '#0a0806';
+    ctx.strokeStyle = '#4a3826';
     ctx.lineWidth = 2;
     ctx.beginPath();
-    ctx.roundRect(slot.x, slot.y, 90, 48, 5);
+    ctx.roundRect(slot.x, slot.y, 90, 48, 6);
     ctx.fill();
     ctx.stroke();
 
     ctx.fillStyle = '#f39c12';
     ctx.font = 'bold 10px "InterFont", sans-serif';
-    ctx.fillText(slot.label.toUpperCase(), slot.x + 6, slot.y + 14);
+    ctx.fillText(slot.label.toUpperCase(), slot.x + 8, slot.y + 14);
 
-    ctx.fillStyle = itemName !== '—' ? '#ffffff' : '#523f2b';
+    ctx.fillStyle = itemName !== '—' ? '#ffffff' : '#4a3826';
     ctx.font = 'bold 11px "InterFont", sans-serif';
 
-    // Suporte para duas linhas no nome do item se for longo
     if (itemName.length > 13) {
       const parts = itemName.split(' ');
       if (parts.length > 1) {
-        ctx.fillText(parts[0], slot.x + 6, slot.y + 28);
-        ctx.fillText(parts.slice(1).join(' ').substring(0, 12), slot.x + 6, slot.y + 40);
+        ctx.fillText(parts[0], slot.x + 8, slot.y + 28);
+        ctx.fillText(parts.slice(1).join(' ').substring(0, 12), slot.x + 8, slot.y + 40);
       } else {
-        ctx.fillText(itemName.substring(0, 13) + '..', slot.x + 6, slot.y + 32);
+        ctx.fillText(itemName.substring(0, 13) + '..', slot.x + 8, slot.y + 32);
       }
     } else {
-      ctx.fillText(itemName, slot.x + 6, slot.y + 32);
+      ctx.fillText(itemName, slot.x + 8, slot.y + 32);
     }
   }
 
-  // PAINEL DIREITO
-  const rightX = 620;
+  // ------------------------------------------
+  // PAINEL DIREITO (Economia, Divindade & Stats)
+  // ------------------------------------------
+  const rightX = 615;
 
   ctx.fillStyle = '#ffffff';
-  ctx.font = 'bold 16px "InterFont", sans-serif';
-  ctx.fillText(`Poder: #${power.toLocaleString('pt-BR')}`, rightX, 45);
+  ctx.font = 'bold 15px "InterFont", sans-serif';
+  ctx.fillText(`Poder: #${power.toLocaleString('pt-BR')}`, rightX, 48);
 
   ctx.fillStyle = '#f1c40f';
-  ctx.font = 'bold 15px "InterFont", sans-serif';
-  ctx.fillText(`Ouro: ${gold.toLocaleString('pt-BR')} G`, rightX, 68);
+  ctx.font = 'bold 14px "InterFont", sans-serif';
+  ctx.fillText(`Ouro: ${gold.toLocaleString('pt-BR')} G`, rightX, 70);
 
-  ctx.fillStyle = '#e6caa3';
-  ctx.font = '13px "InterFont", sans-serif';
-  ctx.fillText(marriageText, rightX, 88);
+  ctx.fillStyle = '#dcdcdc';
+  ctx.font = '12px "InterFont", sans-serif';
+  ctx.fillText(marriageText, rightX, 90);
 
-  ctx.strokeStyle = '#423223';
+  ctx.strokeStyle = '#382a1d';
   ctx.lineWidth = 1.5;
   ctx.beginPath();
-  ctx.moveTo(rightX, 98);
-  ctx.lineTo(width - 25, 98);
+  ctx.moveTo(rightX, 102);
+  ctx.lineTo(width - 28, 102);
   ctx.stroke();
 
-  // Habilidade
+  // Habilidade Divina
   ctx.fillStyle = '#f39c12';
-  ctx.font = 'bold 14px "InterFont", sans-serif';
-  ctx.fillText('HABILIDADE DIVINA', rightX, 118);
-
-  ctx.fillStyle = '#ffffff';
   ctx.font = 'bold 13px "InterFont", sans-serif';
-  ctx.fillText(`${divineName} [Rank ${divineRank}]`, rightX, 138);
-
-  // Histórico
-  ctx.fillStyle = '#f39c12';
-  ctx.font = 'bold 14px "InterFont", sans-serif';
-  ctx.fillText('HISTORICO', rightX, 172);
+  ctx.fillText('HABILIDADE DIVINA', rightX, 124);
 
   ctx.fillStyle = '#ffffff';
-  ctx.font = '13px "InterFont", sans-serif';
-  ctx.fillText(`Vitorias: ${wins}   Mortes: ${deaths}`, rightX, 192);
-  ctx.fillText(`PvP: ${pvpWins}W/${pvpLosses}L   Bosses: ${bosses}`, rightX, 210);
+  ctx.font = 'bold 12px "InterFont", sans-serif';
+  ctx.fillText(`${divineName} [Rank ${divineRank}]`, rightX, 142);
+
+  // Histórico de Batalhas
+  ctx.fillStyle = '#f39c12';
+  ctx.font = 'bold 13px "InterFont", sans-serif';
+  ctx.fillText('HISTÓRICO', rightX, 175);
+
+  ctx.fillStyle = '#ffffff';
+  ctx.font = '12px "InterFont", sans-serif';
+  ctx.fillText(`Vitórias: ${wins}    Mortes: ${deaths}`, rightX, 194);
+  ctx.fillText(`PvP: ${pvpWins}W / ${pvpLosses}L    Bosses: ${bosses}`, rightX, 212);
 
   // Cooldowns
   ctx.fillStyle = '#f39c12';
-  ctx.font = 'bold 14px "InterFont", sans-serif';
+  ctx.font = 'bold 13px "InterFont", sans-serif';
   ctx.fillText('COOLDOWNS RPG', rightX, 245);
 
-  ctx.fillStyle = '#ffffff';
-  ctx.font = '13px "InterFont", sans-serif';
-  ctx.fillText(`Dungeon: ${formatCooldown(char.lastDungeon, 5)}`, rightX, 268);
-  ctx.fillText(`Cacada: Sem cd`, rightX, 288);
-  ctx.fillText(`Viagem: ${formatCooldown(char.lastTravel, loc.travelCooldownMin)}`, rightX, 308);
-  ctx.fillText(`Explorar: ${formatCooldown(char.lastExplore, 3)}`, rightX, 328);
-  ctx.fillText(`Treino: ${formatCooldown(char.lastTrain, 20)}`, rightX, 348);
-  ctx.fillText(`Pesca: ${formatCooldown(char.lastFishing, 10)}`, rightX, 368);
-  ctx.fillText(`Meditar: ${formatCooldown(char.lastRest, 30)}`, rightX, 388);
-  ctx.fillText(`PvP: ${formatCooldown(char.lastPvp, 10)}`, rightX, 408);
+  const cdList = [
+    { label: 'Dungeon', val: formatCooldown(char.lastDungeon, 5) },
+    { label: 'Caçada', val: 'Pronto' },
+    { label: 'Viagem', val: formatCooldown(char.lastTravel, loc.travelCooldownMin) },
+    { label: 'Explorar', val: formatCooldown(char.lastExplore, 3) },
+    { label: 'Treino', val: formatCooldown(char.lastTrain, 20) },
+    { label: 'Pesca', val: formatCooldown(char.lastFishing, 10) },
+    { label: 'Meditar', val: formatCooldown(char.lastRest, 30) },
+    { label: 'PvP', val: formatCooldown(char.lastPvp, 10) }
+  ];
+
+  ctx.font = '11px "InterFont", sans-serif';
+  let cdY = 265;
+  for (const cd of cdList) {
+    ctx.fillStyle = '#c8b6a6';
+    ctx.fillText(`${cd.label}:`, rightX, cdY);
+
+    ctx.fillStyle = cd.val === 'Pronto' ? '#2ecc71' : '#e74c3c';
+    ctx.fillText(cd.val, rightX + 65, cdY);
+
+    cdY += 18;
+  }
 
   return canvas.toBuffer('image/png');
 }

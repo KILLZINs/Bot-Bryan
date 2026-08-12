@@ -43,7 +43,10 @@ export const ENEMIES: Enemy[] = [
     location: 'floresta_inicial', type: 'normal',
     hp: 120, baseHp: 120, attack: 22, baseAttack: 22, defense: 8, baseDefense: 8,
     xpReward: 45, goldMin: 25, goldMax: 50, goldReward: { min: 25, max: 50 },
-    drops: [{ itemId: 'adaga_ferro', chance: 0.10, minQty: 1, maxQty: 1 }, { itemId: 'pocao_hp_pequena', chance: 0.30, minQty: 1, maxQty: 1 }],
+    drops: [
+      { itemId: 'adaga_ferro', chance: 0.10, minQty: 1, maxQty: 1 }, 
+      { itemId: 'pocao_hp_pequena', chance: 0.30, minQty: 1, maxQty: 1 }
+    ],
     dropTable: [{ itemId: 'pocao_hp_pequena', chance: 30 }],
   },
   {
@@ -63,7 +66,6 @@ export function getEnemy(id: string): Enemy | undefined {
 
 // ─── FUNÇÕES DE AMBIENTE ───
 
-// Parâmetro opcional `playerLevel` resolve o erro de 1 vs 2 argumentos da dungeon.ts!
 export function scaleEnemy(enemy: Enemy, playerLevel?: number): Enemy {
   if (!playerLevel) return enemy;
   const levelDiff = Math.max(0, playerLevel - enemy.level);
@@ -77,10 +79,24 @@ export function scaleEnemy(enemy: Enemy, playerLevel?: number): Enemy {
   };
 }
 
-export function getEnemiesForLocation(locationId: string): Enemy[] {
-  return ENEMIES.filter(e => e.location === locationId && e.type !== 'boss');
+export function getEnemiesForLocation(locationId: string, playerLevel?: number): Enemy[] {
+  let list = ENEMIES.filter(e => e.location === locationId && e.type !== 'boss');
+  
+  // Se o arquivo da dungeon enviar o level, a gente filtra pela propriedade minLevel
+  if (playerLevel !== undefined) {
+    list = list.filter(e => playerLevel >= e.minLevel);
+  }
+  
+  return list;
 }
 
-export function getBossesForLocation(locationId: string): Enemy[] {
-  return ENEMIES.filter(e => e.location === locationId && e.type === 'boss');
+export function getBossesForLocation(locationId: string, playerLevel?: number): Enemy[] {
+  let list = ENEMIES.filter(e => e.location === locationId && e.type === 'boss');
+  
+  // Mesma coisa para os chefões
+  if (playerLevel !== undefined) {
+    list = list.filter(e => playerLevel >= e.minLevel);
+  }
+  
+  return list;
 }

@@ -23,11 +23,72 @@ import { buildHabilidadesEmbed } from '../panels/skills';
 export async function handleRpgSelect(i: StringSelectMenuInteraction, action: string): Promise<void> {
   const discordId = i.user.id;
   const username  = i.user.username;
+  const rawId = i.customId;
 
   try {
-    if (action.startsWith('worldboss_level')) {
+    // ── Equipar Múltiplas Habilidades de Classe ──────────────────────────
+    if (rawId.includes('equipar_multiplas_skills')) {
       await i.deferUpdate();
-      const templateIndex = parseInt(action.split(':')[1] ?? '0', 10);
+      await prisma.rpgCharacter.update({
+        where: { discordId },
+        data: { equippedSkills: i.values }
+      });
+      const char = await getOrCreateCharacter(discordId, username);
+      const { embed, components } = await buildHabilidadesEmbed(char, 'classe');
+      await i.editReply({ embeds: [embed], components });
+      await i.followUp({ embeds: [successEmbed('Habilidades Atualizadas', 'Suas habilidades foram equipadas para combate com sucesso!')], ephemeral: true });
+      return;
+    }
+
+    // ── Evoluir Talentos Passivos ──────────────────────────────────────────
+    if (rawId.includes('evoluir_talento')) {
+      await i.deferUpdate();
+      const talentId = i.values[0].replace('talent:', '');
+      const talent = PASSIVE_TALENTS[talentId];
+      if (!talent) return;
+
+      let char = await getOrCreateCharacter(discordId, username);
+      
+      let currentTalents: Record<string, number> = {};
+      if (char.talentLevels) {
+        try {
+          currentTalents = typeof char.talentLevels === 'string' ? JSON.parse(char.talentLevels) : char.talentLevels;
+        } catch { currentTalents = {}; }
+      }
+      const currentLvl = currentTalents[talentId] ?? 0;
+
+      if (currentLvl >= talent.maxLevel) {
+        await i.followUp({ embeds: [errorEmbed('Nível Máximo', 'Este talento já está no nível máximo!')], ephemeral: true });
+        return;
+      }
+      if (char.skillPoints < talent.costPerLevel) {
+        await i.followUp({ embeds: [errorEmbed('Pontos Insuficientes', `Você precisa de **${talent.costPerLevel} pts** para evoluir este talento!`)], ephemeral: true });
+        return;
+      }
+
+      currentTalents[talentId] = currentLvl + 1;
+      await prisma.rpgCharacter.update({
+        where: { discordId },
+        data: {
+          skillPoints: { decrement: talent.costPerLevel },
+          talentLevels: currentTalents
+        }
+      });
+
+      const updatedChar = await getOrCreateCharacter(discordId, username);
+      const { embed, components } = await buildHabilidadesEmbed(updatedChar, 'passivas');
+      
+      await i.editReply({ embeds: [embed], components });
+      await i.followUp({ embeds: [successEmbed('Talento Evoluído!', `**${talent.name}** subiu para o Nível **${currentLvl + 1}**!`)], ephemeral: true });
+      return;
+    }
+
+    // Extrai o nome da ação ignorando qualquer prefixo para blindar contra falhas
+    const baseAction = rawId.replace(/^rpg_select:/, '').replace(/^rpg:/, '').split(':')[0];
+
+    if (baseAction === 'worldboss_level') {
+      await i.deferUpdate();
+      const templateIndex = parseInt(rawId.split(':')[1] ?? '0', 10);
       const level = parseInt(i.values[0], 10);
       const { spawnWorldBoss } = await import('../services/worldBoss');
       const result = await spawnWorldBoss(i.guildId ?? '', templateIndex, level);
@@ -44,57 +105,7 @@ export async function handleRpgSelect(i: StringSelectMenuInteraction, action: st
       return;
     }
 
-    switch (action) {
-
-      // ── Equipar Múltiplas Habilidades de Classe ──────────────────────────
-      case 'equipar_multiplas_skills': {
-        await i.deferUpdate();
-        await prisma.rpgCharacter.update({
-          where: { discordId },
-          data: { equippedSkills: i.values }
-        });
-        const char = await getOrCreateCharacter(discordId, username);
-        const { embed, components } = await buildHabilidadesEmbed(char, 'classe');
-        await i.editReply({ embeds: [embed], components });
-        break;
-      }
-
-      // ── Evoluir Talentos Passivos ──────────────────────────────────────────
-      case 'evoluir_talento': {
-        await i.deferUpdate();
-        const talentId = i.values[0].replace('talent:', '');
-        const talent = PASSIVE_TALENTS[talentId];
-        if (!talent) return;
-
-        let char = await getOrCreateCharacter(discordId, username);
-        const currentTalents = (char.talentLevels as Record<string, number> | null) ?? {};
-        const currentLvl = currentTalents[talentId] ?? 0;
-
-        if (currentLvl >= talent.maxLevel) {
-          await i.editReply({ embeds: [errorEmbed('Erro', 'Talento já está no nível máximo!')] });
-          return;
-        }
-        if (char.skillPoints < talent.costPerLevel) {
-          await i.editReply({ embeds: [errorEmbed('Erro', 'Pontos de Skill insuficientes!')] });
-          return;
-        }
-
-        currentTalents[talentId] = currentLvl + 1;
-        await prisma.rpgCharacter.update({
-          where: { discordId },
-          data: {
-            skillPoints: { decrement: talent.costPerLevel },
-            talentLevels: currentTalents
-          }
-        });
-
-        const updatedChar = await getOrCreateCharacter(discordId, username);
-        const { embed, components } = await buildHabilidadesEmbed(updatedChar, 'passivas');
-        await i.editReply({ embeds: [successEmbed('Talento Evoluído', `${talent.name} agora está no nível ${currentLvl + 1}`), embed], components });
-        break;
-      }
-
-      // ── Seletor do Perfil RPG (Hub Principal) ───────────────────────────
+    switch (baseAction) {
       case 'menu_perfil': {
         await i.deferUpdate();
         const option = i.values[0];
@@ -110,11 +121,7 @@ export async function handleRpgSelect(i: StringSelectMenuInteraction, action: st
           if (select) dungeonRows.push(select);
           if (typeSelect) dungeonRows.push(typeSelect);
           dungeonRows.push(buildDungeonButtons(char));
-          await i.editReply({
-            embeds: [buildDungeonEmbed(char)],
-            files: [],
-            components: dungeonRows,
-          });
+          await i.editReply({ embeds: [buildDungeonEmbed(char)], files: [], components: dungeonRows });
           return;
         }
 
@@ -137,21 +144,13 @@ export async function handleRpgSelect(i: StringSelectMenuInteraction, action: st
             new ButtonBuilder().setCustomId('rpg:perfil').setLabel('◀ Voltar ao Perfil').setStyle(ButtonStyle.Secondary)
           );
 
-          await i.editReply({
-            embeds: [embedAtividades],
-            files: [],
-            components: [buildAtividadesSelectMenu(), backButton],
-          });
+          await i.editReply({ embeds: [embedAtividades], files: [], components: [buildAtividadesSelectMenu(), backButton] });
           return;
         }
 
         if (option === 'viajar') {
           const select = buildTravelSelect(char);
-          await i.editReply({
-            embeds: [buildTravelEmbed(char)],
-            files: [],
-            components: select ? [select, buildTravelBackButton()] : [buildTravelBackButton()],
-          });
+          await i.editReply({ embeds: [buildTravelEmbed(char)], files: [], components: select ? [select, buildTravelBackButton()] : [buildTravelBackButton()] });
           return;
         }
 
@@ -166,31 +165,19 @@ export async function handleRpgSelect(i: StringSelectMenuInteraction, action: st
             new ButtonBuilder().setCustomId('rpg:perfil').setLabel('◀ Voltar ao Perfil').setStyle(ButtonStyle.Secondary)
           );
 
-          await i.editReply({
-            embeds: [embedPvp],
-            files: [],
-            components: [backButton],
-          });
+          await i.editReply({ embeds: [embedPvp], files: [], components: [backButton] });
           return;
         }
 
         if (option === 'inventario') {
           const { embed: invEmbed, select: invSelect } = await buildInventarioEmbed(char);
-          await i.editReply({
-            embeds: [invEmbed],
-            files: [],
-            components: invSelect ? [invSelect, buildInventarioButtons()] : [buildInventarioButtons()],
-          });
+          await i.editReply({ embeds: [invEmbed], files: [], components: invSelect ? [invSelect, buildInventarioButtons()] : [buildInventarioButtons()] });
           return;
         }
 
         if (option === 'cidade') {
           const { buildCidadeEmbed, buildCidadeButtons, buildCidadeButtons2 } = await import('../panels/profile');
-          await i.editReply({
-            embeds: [buildCidadeEmbed()],
-            files: [],
-            components: [buildCidadeButtons(), buildCidadeButtons2()],
-          });
+          await i.editReply({ embeds: [buildCidadeEmbed()], files: [], components: [buildCidadeButtons(), buildCidadeButtons2()] });
           return;
         }
 
@@ -203,11 +190,7 @@ export async function handleRpgSelect(i: StringSelectMenuInteraction, action: st
             buildMissoesEmbed(discordId, guildId),
             buildMissoesClaimSelect(discordId, guildId),
           ]);
-          await i.editReply({
-            embeds: [missoesEmbed],
-            files: [],
-            components: claimSelect ? [claimSelect, buildMissoesButtons()] : [buildMissoesButtons()],
-          });
+          await i.editReply({ embeds: [missoesEmbed], files: [], components: claimSelect ? [claimSelect, buildMissoesButtons()] : [buildMissoesButtons()] });
           return;
         }
 
@@ -215,55 +198,35 @@ export async function handleRpgSelect(i: StringSelectMenuInteraction, action: st
           const { buildClassMissionsEmbed, buildClassMissionsClaimSelect, buildClassMissionsButtons } = await import('../panels/class-missions');
           const classEmbed = await buildClassMissionsEmbed(char);
           const claimSelect = await buildClassMissionsClaimSelect(discordId);
-          await i.editReply({
-            embeds: [classEmbed],
-            files: [],
-            components: claimSelect ? [claimSelect, buildClassMissionsButtons()] : [buildClassMissionsButtons()],
-          });
+          await i.editReply({ embeds: [classEmbed], files: [], components: claimSelect ? [claimSelect, buildClassMissionsButtons()] : [buildClassMissionsButtons()] });
           return;
         }
 
         if (option === 'habilidades') {
           const { embed: habEmbed, components: habComponents } = await buildHabilidadesEmbed(char, 'classe');
-          await i.editReply({
-            embeds: [habEmbed],
-            files: [],
-            components: habComponents,
-          });
+          await i.editReply({ embeds: [habEmbed], files: [], components: habComponents });
           return;
         }
 
         if (option === 'stats') {
           const { buildPontosEmbed, buildPontosSelect } = await import('../panels/profile');
-          await i.editReply({
-            embeds: [buildPontosEmbed(char, stats)],
-            files: [],
-            components: [buildPontosSelect(char.statPoints)],
-          });
+          await i.editReply({ embeds: [buildPontosEmbed(char, stats)], files: [], components: [buildPontosSelect(char.statPoints)] });
           return;
         }
 
-        // Default: Re-renderiza o Perfil em Canvas
         let attachment: AttachmentBuilder | null = null;
         try {
           const avatarUrl = i.user.displayAvatarURL({ extension: 'png', size: 256 });
           const imageBuffer = await generateProfileCard(char, stats, avatarUrl);
           attachment = new AttachmentBuilder(imageBuffer, { name: 'perfil.png' });
-        } catch (e) {
-          console.error('Erro Canvas menu_perfil:', e);
-        }
+        } catch (e) { console.error('Erro Canvas menu_perfil:', e); }
 
         const components = [buildProfileSelectMenu()];
 
-        await i.editReply({
-          embeds: attachment ? [] : [buildProfileEmbed(char, stats)],
-          files: attachment ? [attachment] : [],
-          components,
-        });
+        await i.editReply({ embeds: attachment ? [] : [buildProfileEmbed(char, stats)], files: attachment ? [attachment] : [], components });
         break;
       }
 
-      // ── Submenu de Atividades ─────────────────────────────────────────────
       case 'menu_atividades': {
         await i.deferUpdate();
         const option = i.values[0];
@@ -294,11 +257,7 @@ export async function handleRpgSelect(i: StringSelectMenuInteraction, action: st
           const embed = expModule.buildExploracaoEmbed ? await expModule.buildExploracaoEmbed(char) : buildDungeonEmbed(char);
           const btns = expModule.buildExploracaoButtons ? expModule.buildExploracaoButtons(char) : [buildDungeonButtons(char)];
           const components = Array.isArray(btns) ? btns : [btns];
-          await i.editReply({
-            embeds: [embed],
-            files: [],
-            components: components.filter(Boolean),
-          });
+          await i.editReply({ embeds: [embed], files: [], components: components.filter(Boolean) });
           return;
         }
 
@@ -306,11 +265,7 @@ export async function handleRpgSelect(i: StringSelectMenuInteraction, action: st
           const { buildTreinarEmbed, buildTreinarSelect, buildTreinarButtons } = await import('../panels/treinar');
           const lastTrain = char.lastTrain;
           const onCd = !!(lastTrain && (Date.now() - lastTrain.getTime()) < 20 * 60 * 1000);
-          await i.editReply({
-            embeds: [await buildTreinarEmbed(char)],
-            files: [],
-            components: [buildTreinarSelect(onCd), buildTreinarButtons()],
-          });
+          await i.editReply({ embeds: [await buildTreinarEmbed(char)], files: [], components: [buildTreinarSelect(onCd), buildTreinarButtons()] });
           return;
         }
 
@@ -319,11 +274,7 @@ export async function handleRpgSelect(i: StringSelectMenuInteraction, action: st
           const embed = pescaModule.buildPescaEmbed ? await pescaModule.buildPescaEmbed(char) : buildProfileEmbed(char, computeStats(char));
           const btns = pescaModule.buildPescaButtons ? pescaModule.buildPescaButtons(char) : [];
           const components = Array.isArray(btns) ? btns : [btns];
-          await i.editReply({
-            embeds: [embed],
-            files: [],
-            components: components.filter(Boolean),
-          });
+          await i.editReply({ embeds: [embed], files: [], components: components.filter(Boolean) });
           return;
         }
 
@@ -332,27 +283,18 @@ export async function handleRpgSelect(i: StringSelectMenuInteraction, action: st
           const embed = meditarModule.buildMeditarEmbed ? await meditarModule.buildMeditarEmbed(char) : buildProfileEmbed(char, computeStats(char));
           const rawBtns = meditarModule.buildMeditarButtons ? meditarModule.buildMeditarButtons(char) : [];
           const btnComponents = Array.isArray(rawBtns) ? rawBtns : [rawBtns];
-          await i.editReply({
-            embeds: [embed],
-            files: [],
-            components: btnComponents.filter(Boolean),
-          });
+          await i.editReply({ embeds: [embed], files: [], components: btnComponents.filter(Boolean) });
           return;
         }
 
         if (option === 'taverna') {
           const { buildTavernaEmbed, buildTavernaMenuSelect, buildTavernaButtons } = await import('../panels/taverna');
-          await i.editReply({
-            embeds: [await buildTavernaEmbed(char)],
-            files: [],
-            components: [buildTavernaMenuSelect(), buildTavernaButtons()],
-          });
+          await i.editReply({ embeds: [await buildTavernaEmbed(char)], files: [], components: [buildTavernaMenuSelect(), buildTavernaButtons()] });
           return;
         }
         break;
       }
 
-      // ── Distribuir ponto de stat ─────────────────────────────────────────
       case 'distribuir_stat': {
         await i.deferUpdate();
         const stat = i.values[0] as any;
@@ -361,17 +303,13 @@ export async function handleRpgSelect(i: StringSelectMenuInteraction, action: st
         const stats  = computeStats(char);
         const { buildPontosEmbed, buildPontosSelect } = await import('../panels/profile');
         if (result.success) {
-          await i.editReply({
-            embeds: [buildPontosEmbed(char, stats)],
-            components: [buildPontosSelect(char.statPoints)],
-          });
+          await i.editReply({ embeds: [buildPontosEmbed(char, stats)], components: [buildPontosSelect(char.statPoints)] });
         } else {
           await i.editReply({ embeds: [errorEmbed('Erro', result.message)] });
         }
         break;
       }
 
-      // ── Viajar para destino ──────────────────────────────────────────────
       case 'viajar_destino': {
         await i.deferUpdate();
         let char = await getOrCreateCharacter(discordId, username);
@@ -382,25 +320,15 @@ export async function handleRpgSelect(i: StringSelectMenuInteraction, action: st
         }
         char = await getOrCreateCharacter(discordId, username);
         const select = buildTravelSelect(char);
-        await i.editReply({
-          embeds: [buildTravelEmbed(char)],
-          components: select ? [select, buildTravelBackButton()] : [buildTravelBackButton()],
-        });
+        await i.editReply({ embeds: [buildTravelEmbed(char)], components: select ? [select, buildTravelBackButton()] : [buildTravelBackButton()] });
         break;
       }
 
-      // ── Batalha dungeon com inimigo específico ───────────────────────────
       case 'dungeon_inimigo': {
         await i.deferUpdate();
         const char = await getOrCreateCharacter(discordId, username);
-        if (char.currentHp <= 0) {
-          await i.editReply({ embeds: [errorEmbed('Sem HP', 'Você está sem HP! Vá à cidade e se cure primeiro.')], components: [] });
-          return;
-        }
-        if (char.currentEnergy < 10) {
-          await i.editReply({ embeds: [errorEmbed('Sem Energia ⚡', `Você tem apenas **${char.currentEnergy}** de energia — mínimo para batalhar é **10**.\nVá à 🏰 Cidade → 🏥 Curar para restaurar energia.`)], components: [] });
-          return;
-        }
+        if (char.currentHp <= 0) { await i.editReply({ embeds: [errorEmbed('Sem HP', 'Você está sem HP! Vá à cidade e se cure primeiro.')], components: [] }); return; }
+        if (char.currentEnergy < 10) { await i.editReply({ embeds: [errorEmbed('Sem Energia ⚡', `Você tem apenas **${char.currentEnergy}** de energia — mínimo para batalhar é **10**.\nVá à 🏰 Cidade → 🏥 Curar para restaurar energia.`)], components: [] }); return; }
         const { embed, rows } = await doBattleEnemy(char, i.values[0], i.guildId ?? '');
         await i.editReply({ embeds: [embed], components: rows });
         break;
@@ -409,160 +337,105 @@ export async function handleRpgSelect(i: StringSelectMenuInteraction, action: st
       case 'caca_inimigo': {
         await i.deferUpdate();
         const char = await getOrCreateCharacter(discordId, username);
-        if (char.currentHp <= 0 || char.currentEnergy < 10) {
-          await i.editReply({ embeds: [errorEmbed('Caçada indisponível', 'Você precisa estar vivo e ter pelo menos **10⚡** para caçar.')], components: [] });
-          return;
-        }
+        if (char.currentHp <= 0 || char.currentEnergy < 10) { await i.editReply({ embeds: [errorEmbed('Caçada indisponível', 'Você precisa estar vivo e ter pelo menos **10⚡** para caçar.')], components: [] }); return; }
         const { embed, rows } = await doBattleEnemy(char, i.values[0], i.guildId ?? '', 'hunt');
         await i.editReply({ embeds: [embed], components: rows });
         break;
       }
 
-      // ── Categoria da loja ────────────────────────────────────────────────
       case 'loja_categoria': {
         await i.deferUpdate();
         const char = await getOrCreateCharacter(discordId, username);
         const category = i.values[0];
         const itemSelect = buildShopItemSelect(char, category);
-        await i.editReply({
-          embeds: [buildShopEmbed(char, category)],
-          components: itemSelect ? [itemSelect, buildShopButtons(category)] : [buildShopButtons(category)],
-        });
+        await i.editReply({ embeds: [buildShopEmbed(char, category)], components: itemSelect ? [itemSelect, buildShopButtons(category)] : [buildShopButtons(category)] });
         break;
       }
 
-      // ── Comprar item na loja ─────────────────────────────────────────────
       case 'loja_comprar': {
         await i.deferUpdate();
         const itemId = i.values[0];
         const result = await buyItem(discordId, itemId);
-        if (result.success) {
-          await i.editReply({ embeds: [successEmbed('Compra realizada!', result.message)] });
-        } else {
-          await i.editReply({ embeds: [errorEmbed('Erro na compra', result.message)] });
-        }
+        if (result.success) { await i.editReply({ embeds: [successEmbed('Compra realizada!', result.message)] }); } 
+        else { await i.editReply({ embeds: [errorEmbed('Erro na compra', result.message)] }); }
         break;
       }
 
-      // ── Ação com item do inventário ──────────────────────────────────────
       case 'inventario_acao': {
         await i.deferUpdate();
         const itemId = i.values[0];
         const select = buildItemActionSelect(itemId);
-        if (!select) {
-          await i.editReply({ embeds: [errorEmbed('Erro', 'Nenhuma ação disponível para este item.')] });
-          return;
-        }
+        if (!select) { await i.editReply({ embeds: [errorEmbed('Erro', 'Nenhuma ação disponível para este item.')] }); return; }
         const { getItem } = await import('../constants/items');
         const item = getItem(itemId);
         await i.editReply({
           embeds: [new EmbedBuilder().setColor(0x3498DB).setTitle(`${item?.emoji ?? '❓'} ${item?.name ?? itemId}`).setDescription(item?.description ?? '').addFields(
-            { name: '📊 Raridade', value: item?.rarity ?? '-', inline: true },
-            { name: '💰 Venda', value: `${item?.sellPrice ?? 0} ouro`, inline: true },
-            { name: '📌 Slot', value: item?.slot ?? '-', inline: true },
-          )],
-          components: [select],
+            { name: '📊 Raridade', value: item?.rarity ?? '-', inline: true }, { name: '💰 Venda', value: `${item?.sellPrice ?? 0} ouro`, inline: true }, { name: '📌 Slot', value: item?.slot ?? '-', inline: true }
+          )], components: [select]
         });
         break;
       }
 
-      // ── Executar ação com item (equip/usar/vender) ───────────────────────
       case 'item_acao': {
         await i.deferUpdate();
         const [actionType, itemId] = i.values[0].split(':');
         let result: { success: boolean; message: string };
 
-        if (actionType === 'equip') {
-          result = await equipItem(discordId, itemId);
-        } else if (actionType === 'usar') {
-          result = await useConsumable(discordId, itemId);
-        } else if (actionType === 'vender') {
-          result = await sellItem(discordId, itemId, 1);
-        } else {
-          result = { success: false, message: 'Ação desconhecida.' };
-        }
+        if (actionType === 'equip') { result = await equipItem(discordId, itemId); } 
+        else if (actionType === 'usar') { result = await useConsumable(discordId, itemId); } 
+        else if (actionType === 'vender') { result = await sellItem(discordId, itemId, 1); } 
+        else { result = { success: false, message: 'Ação desconhecida.' }; }
 
         const char = await getOrCreateCharacter(discordId, username);
         const { embed: invEmbed, select: invSelect } = await buildInventarioEmbed(char);
 
         if (result.success) {
           const { infoEmbed } = await import('../../utils/embeds');
-          await i.editReply({
-            embeds: [infoEmbed('✅ Concluído', result.message), invEmbed],
-            components: invSelect ? [invSelect, buildInventarioButtons()] : [buildInventarioButtons()],
-          });
-        } else {
-          await i.editReply({ embeds: [errorEmbed('Erro', result.message)] });
-        }
+          await i.editReply({ embeds: [infoEmbed('✅ Concluído', result.message), invEmbed], components: invSelect ? [invSelect, buildInventarioButtons()] : [buildInventarioButtons()] });
+        } else { await i.editReply({ embeds: [errorEmbed('Erro', result.message)] }); }
         break;
       }
 
-      // ── Guilda: entrar ────────────────────────────────────────────────────
       case 'guild_entrar': {
         await i.deferUpdate();
         const guildId = i.values[0];
         const result = await joinGuild(discordId, guildId);
-        await i.editReply({
-          embeds: [result.success ? successEmbed('Guilda', result.message) : errorEmbed('Erro', result.message)],
-        });
+        await i.editReply({ embeds: [result.success ? successEmbed('Guilda', result.message) : errorEmbed('Erro', result.message)] });
         break;
       }
 
-      // ── Forja: fabricar item ──────────────────────────────────────────────
       case 'forja_receita': {
         await i.deferUpdate();
         const result = await craftItem(discordId, i.values[0]);
-        await i.editReply({
-          embeds: [result.success ? successEmbed('Forja', result.message) : errorEmbed('Erro na Forja', result.message)],
-        });
+        await i.editReply({ embeds: [result.success ? successEmbed('Forja', result.message) : errorEmbed('Erro na Forja', result.message)] });
         break;
       }
 
-      // ── Escolher classe inicial (/rpg start) ──────────────────────────────
       case 'escolher_classe': {
         await i.deferUpdate();
-
         const classId = i.values[0].replace('start_class:', '');
         const { setClass } = await import('../services/character');
-
-        const char = await getOrCreateCharacter(discordId, username);
         const result = await setClass(discordId, classId);
-
-        if (!result.success) {
-          await i.editReply({ embeds: [errorEmbed('Erro', result.message)] });
-          return;
-        }
-
+        if (!result.success) { await i.editReply({ embeds: [errorEmbed('Erro', result.message)] }); return; }
         const updated = await getOrCreateCharacter(discordId, username);
         const stats   = computeStats(updated);
         const { getClass } = await import('../constants/classes');
         const cls = getClass(classId);
-
-        await i.editReply({
-          content: `${cls?.emoji ?? '⚔️'} **Personagem criado!** Bem-vindo à aventura, **${username}**!`,
-          embeds: [buildProfileEmbed(updated, stats)],
-          components: [buildProfileSelectMenu()],
-        });
+        await i.editReply({ content: `${cls?.emoji ?? '⚔️'} **Personagem criado!** Bem-vindo à aventura, **${username}**!`, embeds: [buildProfileEmbed(updated, stats)], components: [buildProfileSelectMenu()] });
         break;
       }
 
-      // ── Boss Mundial: escolher template ─────────────────────────────────
       case 'worldboss_template': {
         await i.deferUpdate();
         const templateIndex = parseInt(i.values[0], 10);
         const { buildWorldBossLevelSelect } = await import('../panels/worldBoss');
         const { WORLD_BOSS_TEMPLATES } = await import('../services/worldBoss');
         const template = WORLD_BOSS_TEMPLATES[templateIndex];
-        const step2Embed = new EmbedBuilder()
-          .setColor(0xE74C3C)
-          .setTitle(`🐉 Invocar Boss Mundial — Passo 2`)
-          .setDescription(`**${template?.emoji} ${template?.name}** selecionado!\n\nEscolha a dificuldade (nível):`)
-          .addFields({ name: '📋 Habilidades', value: template?.abilities.join('\n') ?? '-' });
+        const step2Embed = new EmbedBuilder().setColor(0xE74C3C).setTitle(`🐉 Invocar Boss Mundial — Passo 2`).setDescription(`**${template?.emoji} ${template?.name}** selecionado!\n\nEscolha a dificuldade (nível):`).addFields({ name: '📋 Habilidades', value: template?.abilities.join('\n') ?? '-' });
         await i.editReply({ embeds: [step2Embed], components: [buildWorldBossLevelSelect(templateIndex)] });
         break;
       }
 
-      // ── Missões: coletar recompensa ───────────────────────────────────────
       case 'missao_coletar': {
         await i.deferUpdate();
         const [missionType, missionId] = i.values[0].split(':');
@@ -585,16 +458,11 @@ export async function handleRpgSelect(i: StringSelectMenuInteraction, action: st
           buildMissoesClaimSelect(discordId, guildId),
         ]);
 
-        const feedbackEmbed = result.success
-          ? successEmbed('🎁 Recompensa Coletada!', `${result.message}\n+**${result.xp}** XP | +**${result.coins}** 🪙`)
-          : errorEmbed('Erro', result.message);
-
-        const missaoRows: any[] = claimSelect ? [claimSelect, buildMissoesButtons()] : [buildMissoesButtons()];
-        await i.editReply({ embeds: [feedbackEmbed, missoesEmbed], components: missaoRows });
+        const feedbackEmbed = result.success ? successEmbed('🎁 Recompensa Coletada!', `${result.message}\n+**${result.xp}** XP | +**${result.coins}** 🪙`) : errorEmbed('Erro', result.message);
+        await i.editReply({ embeds: [feedbackEmbed, missoesEmbed], components: claimSelect ? [claimSelect, buildMissoesButtons()] : [buildMissoesButtons()] });
         break;
       }
 
-      // ── 🥊 Treinar: escolher stat ─────────────────────────────────────────
       case 'treinar_stat': {
         await i.deferUpdate();
         const char = await getOrCreateCharacter(discordId, username);
@@ -604,28 +472,22 @@ export async function handleRpgSelect(i: StringSelectMenuInteraction, action: st
         const lastTrain = updatedChar.lastTrain;
         const onCd = !!(lastTrain && (Date.now() - lastTrain.getTime()) < 20 * 60 * 1000);
         const embed = await buildTreinarEmbed(updatedChar);
-        const fb = result.success
-          ? successEmbed('🥊 Treino!', result.message)
-          : errorEmbed('Treino', result.message);
+        const fb = result.success ? successEmbed('🥊 Treino!', result.message) : errorEmbed('Treino', result.message);
         await i.editReply({ embeds: [fb, embed], components: [buildTreinarSelect(onCd), buildTreinarButtons()] });
         break;
       }
 
-      // ── 🍺 Taverna: pedir item ────────────────────────────────────────────
       case 'taverna_pedir': {
         await i.deferUpdate();
         const char = await getOrCreateCharacter(discordId, username);
         const { buyTavernaItem, buildTavernaEmbed, buildTavernaMenuSelect, buildTavernaButtons } = await import('../panels/taverna');
         const result = await buyTavernaItem(char, i.values[0]);
         const updatedChar = await getOrCreateCharacter(discordId, username);
-        const fb = result.success
-          ? successEmbed('🍺 Taverna!', result.message)
-          : errorEmbed('Taverna', result.message);
+        const fb = result.success ? successEmbed('🍺 Taverna!', result.message) : errorEmbed('Taverna', result.message);
         await i.editReply({ embeds: [fb, await buildTavernaEmbed(updatedChar)], components: [buildTavernaMenuSelect(), buildTavernaButtons()] });
         break;
       }
 
-      // ── ⚔️ Dungeon tipo: escolher ─────────────────────────────────────────
       case 'dungeon_tipo_escolher': {
         await i.deferUpdate();
         const char = await getOrCreateCharacter(discordId, username);
@@ -637,7 +499,6 @@ export async function handleRpgSelect(i: StringSelectMenuInteraction, action: st
         break;
       }
 
-      // ── 📜 Missões de classe: coletar ─────────────────────────────────────
       case 'class_mission_claim': {
         await i.deferUpdate();
         const char = await getOrCreateCharacter(discordId, username);
@@ -646,15 +507,11 @@ export async function handleRpgSelect(i: StringSelectMenuInteraction, action: st
         const result = await claimClassMission(discordId, i.values[0]);
         const embed = await buildClassMissionsEmbed(char);
         const claimSel = await buildClassMissionsClaimSelect(discordId);
-        const rows: any[] = claimSel ? [claimSel, buildClassMissionsButtons()] : [buildClassMissionsButtons()];
-        const fb = result.success
-          ? successEmbed('🎁 Missão!', `${result.message}\n+**${result.xp}** XP | +**${result.gold}** 🪙 | +**${result.energy}** ⚡`)
-          : errorEmbed('Missão', result.message);
-        await i.editReply({ embeds: [fb, embed], components: rows });
+        const fb = result.success ? successEmbed('🎁 Missão!', `${result.message}\n+**${result.xp}** XP | +**${result.gold}** 🪙 | +**${result.energy}** ⚡`) : errorEmbed('Missão', result.message);
+        await i.editReply({ embeds: [fb, embed], components: claimSel ? [claimSel, buildClassMissionsButtons()] : [buildClassMissionsButtons()] });
         break;
       }
 
-      // ── 🌎 Evento mundial: iniciar ────────────────────────────────────────
       case 'evento_tipo': {
         await i.deferUpdate();
         const { isBotOwner } = await import('../../utils/allowlist');
@@ -665,19 +522,17 @@ export async function handleRpgSelect(i: StringSelectMenuInteraction, action: st
         const active = await getActiveWorldEvent(guildId);
         const embed = await buildWorldEventsEmbed(guildId);
         const btns = buildWorldEventsButtons(guildId, true, !!active, active?.eventType);
-        const fb = result.success
-          ? successEmbed('🌎 Evento!', result.message)
-          : errorEmbed('Evento', result.message);
+        const fb = result.success ? successEmbed('🌎 Evento!', result.message) : errorEmbed('Evento', result.message);
         await i.editReply({ embeds: [fb, embed], components: btns });
         break;
       }
 
       default:
-        await i.editReply({ embeds: [errorEmbed('Ação desconhecida', `Select RPG \`${action}\` não encontrado.`)] });
+        await i.editReply({ embeds: [errorEmbed('Ação desconhecida', `Select RPG \`${baseAction}\` não encontrado.`)] });
     }
   } catch (err) {
-    console.error(`[RPG Select Error] action=${action}`, err);
-    const errMsg = { embeds: [errorEmbed('Erro RPG', 'Ocorreu um erro. Tente novamente.')] };
+    console.error(`[RPG Select Error] ID=${rawId}`, err);
+    const errMsg = { embeds: [errorEmbed('Erro RPG', 'Ocorreu um erro ao processar a seleção.')] };
     if (i.replied) await i.followUp({ ...errMsg, ephemeral: true }).catch(() => null);
     else if (i.deferred) await i.editReply(errMsg).catch(() => null);
     else await i.reply({ ...errMsg, ephemeral: true }).catch(() => null);

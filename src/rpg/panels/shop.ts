@@ -3,7 +3,17 @@ import {
   StringSelectMenuBuilder, StringSelectMenuOptionBuilder,
 } from 'discord.js';
 import { FullCharacter } from '../services/character';
-import { ITEM_LIST, RpgItem, RARITY_EMOJI } from '../constants/items';
+import { ITEMS, Item } from '../constants/items';
+
+// Emojis dinâmicos para a raridade (caso não estejam exportados no items.ts)
+const RARITY_EMOJI: Record<string, string> = {
+  common: '⬜',
+  uncommon: '🟩',
+  rare: '🟦',
+  epic: '🟪',
+  legendary: '🟧',
+  mythic: '🟥'
+};
 
 const SHOP_CATEGORIES = [
   { id: 'weapon',     label: '⚔️ Armas',        emoji: '⚔️' },
@@ -23,26 +33,29 @@ export function buildShopEmbed(char: FullCharacter, category?: string): EmbedBui
   const embed = new EmbedBuilder()
     .setColor(0xF39C12)
     .setTitle('🛒 Loja da Aliança')
-    .setFooter({ text: `💰 Seu ouro: ${char.gold.toLocaleString('pt-BR')}` });
+    .setFooter({ text: `💰 Seu ouro: ${char.gold.toLocaleString('pt-BR')} G` });
 
   if (!category) {
-    embed.setDescription('Selecione uma categoria para ver os itens disponíveis.')
+    embed.setDescription('Selecione uma categoria no menu abaixo para ver os itens disponíveis no armazém.')
       .addFields(SHOP_CATEGORIES.map(c => ({ name: c.label, value: '`Selecione abaixo`', inline: true })));
     return embed;
   }
 
-  const items = ITEM_LIST.filter(i => i.slot === category && i.price > 0 && i.minLevel <= char.level);
+  // Puxa todos os itens da categoria escolhida que possuem um preço de compra (buyPrice)
+  const items = Object.values(ITEMS).filter(i => i.type === category && i.buyPrice !== undefined);
+  
   if (items.length === 0) {
-    embed.setDescription(`Nenhum item disponível em **${category}** para seu nível.`);
+    embed.setDescription(`Nenhum item disponível em **${category}** no momento.`);
     return embed;
   }
 
   const cat = SHOP_CATEGORIES.find(c => c.id === category);
   embed.setTitle(`🛒 Loja — ${cat?.label ?? category}`);
 
+  // Monta a vitrine (Limitado a 15 para não estourar o limite do Embed do Discord)
   const lines = items.slice(0, 15).map(i =>
-    `${RARITY_EMOJI[i.rarity]} ${i.emoji} **${i.name}** — 💰 **${i.price}** ouro\n` +
-    `> Nv.${i.minLevel}+ | ${i.description}`
+    `${RARITY_EMOJI[i.rarity] || '⬜'} ${i.emoji} **${i.name}** — 💰 **${i.buyPrice?.toLocaleString('pt-BR')} G**\n` +
+    `> *${i.description}*`
   ).join('\n\n');
 
   embed.setDescription(lines || '*Sem itens disponíveis.*');
@@ -63,7 +76,9 @@ export function buildShopCategorySelect(): ActionRowBuilder<StringSelectMenuBuil
 }
 
 export function buildShopItemSelect(char: FullCharacter, category: string): ActionRowBuilder<StringSelectMenuBuilder> | null {
-  const items = ITEM_LIST.filter(i => i.slot === category && i.price > 0 && i.minLevel <= char.level + 5);
+  // Puxa todos os itens da categoria escolhida que possuem um preço de compra (buyPrice)
+  const items = Object.values(ITEMS).filter(i => i.type === category && i.buyPrice !== undefined);
+  
   if (items.length === 0) return null;
 
   return new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(
@@ -71,12 +86,13 @@ export function buildShopItemSelect(char: FullCharacter, category: string): Acti
       .setCustomId('rpg_select:loja_comprar')
       .setPlaceholder('Selecione o item para comprar...')
       .addOptions(
+        // Discord limita Select Menus a 25 opções
         items.slice(0, 25).map(i =>
           new StringSelectMenuOptionBuilder()
-            .setLabel(`${i.name} — ${i.price} 💰`)
+            .setLabel(`${i.name} — ${i.buyPrice} 💰`)
             .setValue(i.id)
             .setEmoji(i.emoji.trim())
-            .setDescription(`${RARITY_EMOJI[i.rarity]} ${i.rarity} | Nv.${i.minLevel}+`)
+            .setDescription(`${i.rarity.toUpperCase()} | ${i.description.substring(0, 50)}...`)
         )
       )
   );

@@ -23,7 +23,7 @@ export async function buildHabilidadesEmbed(char: FullCharacter, viewMode: 'clas
 
   const toCreate = availableSkills.filter(s => !learnedMap.has(s.id));
   if (toCreate.length > 0) {
-    await Promise.all(toCreate.map(s => 
+    await Promise.all(toCreate.map(s =>  
       prisma.rpgLearnedSkill.create({
         data: { characterId: char.discordId, skillId: s.id, rank: 'F', exp: 0 }
       }).catch(() => null) 
@@ -148,7 +148,7 @@ export async function buildHabilidadesEmbed(char: FullCharacter, viewMode: 'clas
     const select = talentOptions.length > 0
       ? new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(
           new StringSelectMenuBuilder()
-            .setCustomId('rpg:evoluir_talento')
+            .setCustomId('rpg_select:evoluir_talento') // 👈 CORREÇÃO DO PREFIXO AQUI
             .setPlaceholder('🧬 Escolha um talento passivo para evoluir...')
             .addOptions(talentOptions)
         )

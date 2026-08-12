@@ -18,7 +18,7 @@ import { generateProfileCard } from '../rpg/utils/profileCanvas';
 export function buildProfileSelectMenu(): ActionRowBuilder<StringSelectMenuBuilder> {
   return new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(
     new StringSelectMenuBuilder()
-      .setCustomId('rpg_select:menu_perfil') // Voltando ao prefixo correto para menus
+      .setCustomId('rpg_select:menu_perfil')
       .setPlaceholder('📍 Navegar pelo Hub do Aventureiro...')
       .addOptions(
         new StringSelectMenuOptionBuilder().setLabel('⚔️ Entrar na Dungeon').setValue('dungeon').setDescription('Explorar dungeons e batalhar contra monstros'),
@@ -38,7 +38,7 @@ export function buildProfileSelectMenu(): ActionRowBuilder<StringSelectMenuBuild
 export function buildAtividadesSelectMenu(): ActionRowBuilder<StringSelectMenuBuilder> {
   return new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(
     new StringSelectMenuBuilder()
-      .setCustomId('rpg_select:menu_atividades') // Voltando ao prefixo correto para menus
+      .setCustomId('rpg_select:menu_atividades')
       .setPlaceholder('🎯 Escolha uma atividade para realizar...')
       .addOptions(
         new StringSelectMenuOptionBuilder().setLabel('🎯 Caçada').setValue('cacar').setDescription('Batalhar contra monstros selvagens da região'),
@@ -58,6 +58,7 @@ export default {
     .setDescription('Sistema RPG da Aliança Skyline')
     .addSubcommand(sub => sub.setName('perfil').setDescription('Ver seu perfil RPG'))
     .addSubcommand(sub => sub.setName('start').setDescription('Criar seu personagem RPG'))
+    .addSubcommand(sub => sub.setName('observar').setDescription('Ver o perfil RPG de outro jogador').addUserOption(o => o.setName('alvo').setDescription('Jogador para observar').setRequired(true)))
     .addSubcommand(sub => sub.setName('pvp').setDescription('Desafiar outro jogador').addUserOption(o => o.setName('alvo').setDescription('Jogador a desafiar').setRequired(true)))
     .addSubcommand(sub => sub.setName('rank').setDescription('Ranking de poder de combate'))
     .addSubcommand(sub => sub.setName('reencarnar').setDescription('Reencarnar (nível 50+)'))
@@ -108,6 +109,50 @@ export default {
       return;
     }
 
+    // ── /rpg observar ────────────────────────────────────────────────────────
+    if (sub === 'observar') {
+      await interaction.deferReply({ ephemeral: false });
+      const target = interaction.options.getUser('alvo', true);
+
+      if (target.bot) {
+        await interaction.editReply({ embeds: [errorEmbed('Observar', 'Bots não possuem personagens RPG!')] });
+        return;
+      }
+
+      const char = await getCharacter(target.id);
+      if (!char) {
+        await interaction.editReply({ embeds: [errorEmbed('Observar', `**${target.username}** ainda não criou um personagem RPG.`)] });
+        return;
+      }
+
+      const stats = computeStats(char);
+      let attachment: AttachmentBuilder | null = null;
+
+      try {
+        const avatarUrl = target.displayAvatarURL({ extension: 'png', size: 256 });
+        const imageBuffer = await generateProfileCard(char, stats, avatarUrl);
+        attachment = new AttachmentBuilder(imageBuffer, { name: 'perfil.png' });
+      } catch (err) {
+        console.error('Erro ao gerar perfil Canvas para outro usuário:', err);
+      }
+
+      if (!attachment) {
+        await interaction.editReply({
+          embeds: [buildProfileEmbed(char, stats)],
+          files: [],
+          components: [],
+        });
+        return;
+      }
+
+      await interaction.editReply({
+        embeds: [],
+        files: [attachment],
+        components: [],
+      });
+      return;
+    }
+
     // ── /rpg start ───────────────────────────────────────────────────────────
     if (sub === 'start') {
       await interaction.deferReply({ ephemeral: true });
@@ -137,7 +182,7 @@ export default {
 
       const select = new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(
         new StringSelectMenuBuilder()
-          .setCustomId('rpg_select:escolher_classe') // Voltando ao prefixo correto para menus
+          .setCustomId('rpg_select:escolher_classe')
           .setPlaceholder('Selecione sua classe inicial...')
           .addOptions(
             TIER1_CLASSES.map(c =>
@@ -259,7 +304,7 @@ export default {
 
       const embed = new EmbedBuilder()
         .setColor(cls.color)
-        .setTitle(`${cls.emoji} ${cls.name} — Tier ${cls.tier}`)
+        .setTitle(`${cls.emoji} cls.name — Tier ${cls.tier}`)
         .setDescription(`*${cls.lore}*`)
         .addFields(
           { name: '📊 Raridade', value: cls.rarity, inline: true },

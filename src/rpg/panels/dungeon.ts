@@ -31,7 +31,6 @@ export const activeExpeditions = new Map<string, DungeonRun>();
 export async function startExpedition(char: FullCharacter, locationId: string, dungeonTypeId?: string) {
   if (char.currentHp <= 0) return { success: false, error: 'Você precisa curar seu HP antes de uma expedição!' };
   
-  // O pedágio da Expedição VIP é de 20 de Energia na porta. Lá dentro tudo é grátis.
   if (char.currentEnergy < 20) return { success: false, error: 'Uma expedição exige pelo menos **20⚡** de Energia para iniciar.' };
 
   const run: DungeonRun = {
@@ -45,11 +44,14 @@ export async function startExpedition(char: FullCharacter, locationId: string, d
 
   activeExpeditions.set(char.discordId, run);
   
+  // ⚡ CORREÇÃO DO DESYNC VISUAL: Atualiza o objeto da memória instantaneamente
+  char.currentEnergy -= 20;
+
   await prisma.rpgCharacter.update({
     where: { discordId: char.discordId },
     data: { 
-        currentEnergy: { decrement: 20 }, // Pedágio pago
-        lastDungeon: new Date() // Trava a porta por 5 minutos caso ele fuja/morra!
+        currentEnergy: { decrement: 20 },
+        lastDungeon: new Date()
     }
   });
 
@@ -77,7 +79,10 @@ export function buildDungeonEmbed(char: FullCharacter): EmbedBuilder {
 
   const enemyList = enemies.slice(0, 5).map(e => `${e.emoji} **${e.name}**`).join('\n') || '*Nenhum inimigo conhecido no seu nível.*';
   const bossList  = bosses.length > 0 ? bosses.map(b => `${b.emoji} **${b.name}** [BOSS]`).join('\n') : '*Nenhum boss disponível*';
-  const hpPct = stats.maxHp > 0 ? char.currentHp / stats.maxHp : 1;
+  
+  // Impede o HP de estourar visualmente
+  const displayHp = Math.min(char.currentHp, stats.maxHp);
+  const hpPct = stats.maxHp > 0 ? displayHp / stats.maxHp : 1;
 
   const embed = new EmbedBuilder()
     .setColor(hpPct < 0.3 ? 0xFF6B35 : 0x8E44AD)
@@ -90,7 +95,7 @@ export function buildDungeonEmbed(char: FullCharacter): EmbedBuilder {
     { name: '👹 Ameaças', value: enemyList, inline: true },
     { name: '💀 Guardiões', value: bossList, inline: true },
     { name: '🔮 Tipos Especiais', value: '> Use o **menu abaixo** para escolher um tipo de dungeon (Fogo, Gelo, Sombra, etc) para receber multiplicadores absurdos de Ouro/XP no final!', inline: false },
-    { name: '❤️ HP', value: `${hpBar(char.currentHp, stats.maxHp)} **${char.currentHp}/${stats.maxHp}**`, inline: true },
+    { name: '❤️ HP', value: `${hpBar(displayHp, stats.maxHp)} **${displayHp}/${stats.maxHp}**`, inline: true },
     { name: '⚡ Energia', value: `**${char.currentEnergy}/${stats.maxEnergy}** (Custo da Expedição: 20⚡)`, inline: true },
     { name: '⏱️ Cooldown', value: cd.onCooldown ? `🔴 ${cd.remaining}` : '🟢 Pronto!', inline: true },
   );
@@ -121,6 +126,7 @@ export function buildDungeonButtons(char: FullCharacter): ActionRowBuilder<Butto
 export function buildDungeonCrawlerEmbed(char: FullCharacter, run: DungeonRun) {
   const loc = LOCATIONS[run.locationId];
   const stats = computeStats(char);
+  const displayHp = Math.min(char.currentHp, stats.maxHp);
   let title = `🗺️ Expedição: ${loc?.name} — Andar ${run.currentFloor}/${run.maxFloors}`;
   
   const embed = new EmbedBuilder().setColor(0x2C3E50);
@@ -135,7 +141,7 @@ export function buildDungeonCrawlerEmbed(char: FullCharacter, run: DungeonRun) {
 
   embed.setTitle(title).setDescription(run.logs.slice(-4).join('\n\n'))
     .addFields(
-      { name: '❤️ HP', value: `${char.currentHp}/${stats.maxHp}`, inline: true },
+      { name: '❤️ HP', value: `${displayHp}/${stats.maxHp}`, inline: true },
       { name: '⚡ Energia', value: `${char.currentEnergy}/${stats.maxEnergy}`, inline: true }
     );
 
@@ -222,13 +228,14 @@ export async function finishExpedition(char: FullCharacter, run: DungeonRun) {
 export function buildHuntEmbed(char: FullCharacter): EmbedBuilder {
   const loc = getLocation(char.currentLocation);
   const stats = computeStats(char);
+  const displayHp = Math.min(char.currentHp, stats.maxHp);
   const enemies = getEnemiesForLocation(loc.id, char.level);
   const enemyList = enemies.slice(0, 8).map(e => `${e.emoji} **${e.name}** — ${e.xpReward} XP | ${e.goldReward.min}~${e.goldReward.max} 💰`).join('\n') || '*Nenhum monstro encontrado.*';
 
   return new EmbedBuilder().setColor(0x2ECC71).setTitle(`🌲 Caçada Livre — ${loc.emoji} ${loc.name}`).setDescription('Explore a região e enfrente monstros livremente.')
     .addFields(
       { name: '👹 Monstros encontrados', value: enemyList, inline: false },
-      { name: '❤️ HP', value: `${hpBar(char.currentHp, stats.maxHp)} **${char.currentHp}/${stats.maxHp}**`, inline: true },
+      { name: '❤️ HP', value: `${hpBar(displayHp, stats.maxHp)} **${displayHp}/${stats.maxHp}**`, inline: true },
       { name: '⚡ Energia', value: `**${char.currentEnergy}/${stats.maxEnergy}**`, inline: true }
     );
 }
@@ -263,7 +270,6 @@ export async function doBattleRandom(char: FullCharacter, guildId?: string, mode
   if (enemies.length === 0) return { embed: new EmbedBuilder().setColor(0xE74C3C).setTitle('Sem Inimigos').setDescription('Nenhum inimigo encontrado.'), rows: [mode === 'hunt' ? buildHuntButtons(false, char) : buildDungeonButtons(char)] };
   const enemy = enemies[Math.floor(Math.random() * enemies.length)];
   
-  // O PASSE LIVRE DA EXPEDIÇÃO! 🎟️
   const isExped = activeExpeditions.has(char.discordId);
   const internalMode = isExped ? 'expedition' : mode;
 
@@ -279,7 +285,6 @@ export async function doBattleEnemy(char: FullCharacter, enemyId: string, guildI
   const enemy = getEnemy(enemyId);
   if (!enemy) return { embed: new EmbedBuilder().setColor(0xE74C3C).setTitle('Erro').setDescription('Inimigo não encontrado.'), rows: [] };
   
-  // O PASSE LIVRE DA EXPEDIÇÃO! 🎟️
   const isExped = activeExpeditions.has(char.discordId);
   const internalMode = isExped ? 'expedition' : mode;
 
@@ -301,7 +306,8 @@ function buildCombatTurnEmbed(turn: CombatTurn, char: FullCharacter): { embed: E
 
   if (!turn.finished) {
     const stats = computeStats(char);
-    const hpPct = stats.maxHp > 0 ? turn.playerHp / stats.maxHp : 0;
+    const displayHp = Math.min(turn.playerHp, stats.maxHp);
+    const hpPct = stats.maxHp > 0 ? displayHp / stats.maxHp : 0;
     const enemyPct = turn.enemyMaxHp > 0 ? turn.enemyHp / turn.enemyMaxHp : 0;
     const fullLog = turn.log.join('\n');
     const logSlice = fullLog.length > 2200 ? '...\n' + fullLog.slice(-2050) : fullLog;
@@ -314,9 +320,8 @@ function buildCombatTurnEmbed(turn: CombatTurn, char: FullCharacter): { embed: E
       new ButtonBuilder().setCustomId('rpg:combate_acao:flee').setLabel('🏃 Fugir').setStyle(ButtonStyle.Secondary),
     );
     
-    const status = [ `❤️ Você: **${turn.playerHp}/${stats.maxHp}**`, `👹 ${turn.enemyName}: **${turn.enemyHp}/${turn.enemyMaxHp}**`].join('  •  ');
+    const status = [ `❤️ Você: **${displayHp}/${stats.maxHp}**`, `👹 ${turn.enemyName}: **${turn.enemyHp}/${turn.enemyMaxHp}**`].join('  •  ');
     
-    // Maquia o título para a Expedição não ficar com título de Caçada
     const titleText = isExped ? '⚔️ Expedição' : turn.mode === 'hunt' ? '🌲 Caçada' : '⚔️ Dungeon';
     const color = isExped ? 0xE74C3C : turn.mode === 'hunt' ? 0x2ECC71 : 0xE74C3C;
 
@@ -333,7 +338,8 @@ function buildCombatResultEmbed(result: NonNullable<CombatTurn['result']>, char:
   const title = result.result === 'vitoria' ? '🏆 Vitória!' : result.result === 'derrota' ? '💀 Derrota!' : '💥 Empate!';
   const logSlice = result.log.join('\n').length > 1800 ? '...\n' + result.log.join('\n').slice(-1600) : result.log.join('\n');
   const stats = computeStats(char);
-  const hpCritical = (stats.maxHp > 0 ? result.playerHpLeft / stats.maxHp : 0) < 0.3 && result.playerHpLeft > 0;
+  const displayHp = Math.min(result.playerHpLeft, stats.maxHp);
+  const hpCritical = (stats.maxHp > 0 ? displayHp / stats.maxHp : 0) < 0.3 && displayHp > 0;
 
   const embed = new EmbedBuilder().setColor(color).setTitle(title).setDescription(logSlice)
     .addFields({ name: '⭐ XP', value: `+${result.xpGained}`, inline: true }, { name: '💰 Ouro', value: `+${result.goldGained}`, inline: true });
@@ -355,9 +361,9 @@ function buildCombatResultEmbed(result: NonNullable<CombatTurn['result']>, char:
           continueBtn = new ButtonBuilder().setCustomId('rpg:crawl:continue').setLabel('🚪 Avançar na Expedição').setStyle(ButtonStyle.Success);
       }
   } else {
-      if (isExpedition) activeExpeditions.delete(char.discordId); // Perdeu ou Fugiu: Limpa a run
+      if (isExpedition) activeExpeditions.delete(char.discordId);
       
-      const isHunt = mode === 'hunt' && !isExpedition; // Garante que a expedição volte pro menu de dungeon e não pro de caça
+      const isHunt = mode === 'hunt' && !isExpedition; 
       
       continueBtn = new ButtonBuilder()
         .setCustomId(isHunt ? 'rpg:caca_aleatoria' : 'rpg:dungeon')

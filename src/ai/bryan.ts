@@ -42,7 +42,7 @@ async function callMistral(
       body: JSON.stringify({
         model: 'mistral-small-latest',
         messages,
-        max_tokens: 450,
+        max_tokens: 180,
         temperature,
       }),
     });

@@ -15,19 +15,18 @@ export async function buildHabilidadesEmbed(char: FullCharacter, viewMode: 'clas
   const cls = getClass(char.class);
   const availableSkills = cls?.divineSkills.map(id => DIVINE_SKILLS[id]).filter(Boolean) ?? [];
 
-  // Puxa as habilidades registradas.
+  // Garante que cada habilidade tenha seu XP ISOLADO no banco. Se não existir, cria agora com segurança.
   let learnedSkillsList = await prisma.rpgLearnedSkill.findMany({
     where: { characterId: char.discordId }
   });
   let learnedMap = new Map(learnedSkillsList.map(s => [s.skillId, s]));
 
-  // Garante que cada habilidade tenha seu XP ISOLADO no banco. Se não existir, cria agora com segurança.
   const toCreate = availableSkills.filter(s => !learnedMap.has(s.id));
   if (toCreate.length > 0) {
     await Promise.all(toCreate.map(s => 
       prisma.rpgLearnedSkill.create({
         data: { characterId: char.discordId, skillId: s.id, rank: 'F', exp: 0 }
-      }).catch(() => null) // catch para evitar falhas se duplicar
+      }).catch(() => null) 
     ));
     learnedSkillsList = await prisma.rpgLearnedSkill.findMany({
       where: { characterId: char.discordId }

@@ -36,12 +36,13 @@ export function buildForjaEmbed(char: FullCharacter, userInventory: { itemId: st
     const hasGold = char.gold >= recipe.costGold;
     let canCraft = hasLevel && hasGold;
 
+    // Coloquei o nome do item de volta pra não virar um jogo de adivinhação!
     const ingredientsStr = recipe.ingredients.map(ing => {
       const ingData = getItem(ing.itemId);
-      const ingName = ingData ? `${ingData.emoji}` : `📦`;
+      const ingName = ingData ? `${ingData.emoji} ${ingData.name}` : `📦 ${ing.itemId}`;
       const playerHas = invMap.get(ing.itemId) || 0;
       if (playerHas < ing.qty) canCraft = false;
-      return `${ingName} ${playerHas}/${ing.qty}`;
+      return `${ingName} **${playerHas}/${ing.qty}**`;
     }).join(' | ');
 
     const statusIcon = canCraft ? '🟢' : '🔴';
@@ -52,7 +53,6 @@ export function buildForjaEmbed(char: FullCharacter, userInventory: { itemId: st
     recipesText += `└ 💰 ${goldText} | 🛠️ ${ingredientsStr}\n\n`;
   }
 
-  // Visual muito mais compacto e limpo!
   embed.setDescription(recipesText);
   return embed;
 }
@@ -63,7 +63,6 @@ export function buildForjaSelect(char: FullCharacter): ActionRowBuilder<StringSe
   if (availableRecipes.length === 0) return null;
 
   const select = new StringSelectMenuBuilder()
-    // 🔧 CORREÇÃO DO BUG AQUI: Alterado para 'forja_receita' para bater com seu Handler!
     .setCustomId('rpg_select:forja_receita') 
     .setPlaceholder('Escolha um equipamento para forjar...')
     .addOptions(

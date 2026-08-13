@@ -24,8 +24,10 @@ const SHOP_CATEGORIES = [
   { id: 'gloves',     label: '🧤 Luvas',        emoji: '🧤' },
   { id: 'shield',     label: '🛡️ Escudos',      emoji: '🛡️' },
   { id: 'ring',       label: '💍 Anéis',        emoji: '💍' },
+  { id: 'amulet',     label: '🔮 Amuletos',     emoji: '🔮' },
   { id: 'backpack',   label: '🎒 Mochilas',     emoji: '🎒' },
   { id: 'consumable', label: '🧪 Consumíveis',  emoji: '🧪' },
+  { id: 'material',   label: '🪨 Materiais',    emoji: '🪨' },
   { id: 'pet',        label: '🐾 Pets',         emoji: '🐾' },
 ];
 

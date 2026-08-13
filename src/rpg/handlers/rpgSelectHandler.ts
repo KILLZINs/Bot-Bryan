@@ -228,69 +228,114 @@ export async function handleRpgSelect(i: StringSelectMenuInteraction, action: st
         break;
       }
 
+      // ═══════════════════════════════════════════════════════════════════════
+      // REFORMULAÇÃO DO MENU DE ATIVIDADES
+      // ═══════════════════════════════════════════════════════════════════════
       case 'menu_atividades': {
         await i.deferUpdate();
         const option = i.values[0];
         let char = await getOrCreateCharacter(discordId, username);
 
         if (option === 'cacar') {
-          if (char.currentHp <= 0 || char.currentEnergy < 10) {
-            await i.editReply({ embeds: [errorEmbed('Caçada indisponível', 'Você precisa estar vivo e ter pelo menos **10⚡** para caçar.')] });
-            return;
-          }
-          
-          const { getEnemiesForLocation } = await import('../constants/enemies');
-          const localEnemies = getEnemiesForLocation(char.currentLocation, char.level);
-          
-          if (!localEnemies || localEnemies.length === 0) {
-            await i.editReply({ embeds: [errorEmbed('Nenhum inimigo encontrado', 'Não há monstros selvagens para caçar neste local no momento.')] });
-            return;
-          }
+          try {
+            const { buildHuntEmbed, buildHuntSelect, buildHuntButtons } = await import('../panels/dungeon');
+            const { getEnemiesForLocation } = await import('../constants/enemies');
+            const localEnemies = getEnemiesForLocation(char.currentLocation, char.level);
+            const hasEnemies = localEnemies && localEnemies.length > 0;
 
-          const randomEnemy = localEnemies[Math.floor(Math.random() * localEnemies.length)];
-          const { embed, rows } = await doBattleEnemy(char, randomEnemy.id, i.guildId ?? '', 'hunt');
-          await i.editReply({ embeds: [embed], files: [], components: rows });
+            const huntSelect = buildHuntSelect(char);
+            const huntBtns = buildHuntButtons(hasEnemies, char);
+
+            await i.editReply({ 
+              embeds: [buildHuntEmbed(char)], 
+              files: [], 
+              components: huntSelect ? [huntSelect, huntBtns] : [huntBtns] 
+            });
+          } catch (e) {
+            console.error(e);
+            await i.editReply({ embeds: [errorEmbed('Erro', 'Ocorreu um erro ao carregar o menu de caça.')], components: [] });
+          }
           return;
         }
 
         if (option === 'explorar') {
-          const expModule: any = await import('../panels/exploracao');
-          const embed = expModule.buildExploracaoEmbed ? await expModule.buildExploracaoEmbed(char) : buildDungeonEmbed(char);
-          const btns = expModule.buildExploracaoButtons ? expModule.buildExploracaoButtons(char) : [buildDungeonButtons(char)];
-          const components = Array.isArray(btns) ? btns : [btns];
-          await i.editReply({ embeds: [embed], files: [], components: components.filter(Boolean) });
+          try {
+            const { buildExploracaoEmbed, buildExploracaoButtons } = await import('../panels/exploracao');
+            const lastExplore = char.lastExplore;
+            const onCooldown = lastExplore && (Date.now() - lastExplore.getTime()) < 3 * 60 * 1000;
+            const noEnergy = char.currentEnergy < 10; // EXPLORE_ENERGY_COST = 10
+            
+            const embed = await buildExploracaoEmbed(char);
+            const btns = buildExploracaoButtons(!!onCooldown || noEnergy);
+            
+            await i.editReply({ embeds: [embed], files: [], components: btns });
+          } catch (e) {
+            console.error('Erro Explorar:', e);
+            await i.editReply({ embeds: [errorEmbed('Em Desenvolvimento 🚧', 'A exploração de região será adicionada em breve!')], components: [] });
+          }
           return;
         }
 
         if (option === 'treinar') {
-          const { buildTreinarEmbed, buildTreinarSelect, buildTreinarButtons } = await import('../panels/treinar');
-          const lastTrain = char.lastTrain;
-          const onCd = !!(lastTrain && (Date.now() - lastTrain.getTime()) < 20 * 60 * 1000);
-          await i.editReply({ embeds: [await buildTreinarEmbed(char)], files: [], components: [buildTreinarSelect(onCd), buildTreinarButtons()] });
+          try {
+            const { buildTreinarEmbed, buildTreinarSelect, buildTreinarButtons } = await import('../panels/treinar');
+            const lastTrain = char.lastTrain;
+            const onCd = !!(lastTrain && (Date.now() - lastTrain.getTime()) < 20 * 60 * 1000);
+            
+            const embed = await buildTreinarEmbed(char);
+            const select = buildTreinarSelect(onCd);
+            const btns = buildTreinarButtons();
+            
+            await i.editReply({ embeds: [embed], files: [], components: [select, btns] });
+          } catch (e) {
+            console.error('Erro Treinar:', e);
+            await i.editReply({ embeds: [errorEmbed('Em Desenvolvimento 🚧', 'A área de treinamento está passando por reformas!')], components: [] });
+          }
           return;
         }
 
         if (option === 'pescar') {
-          const pescaModule: any = await import('../panels/pescaria');
-          const embed = pescaModule.buildPescaEmbed ? await pescaModule.buildPescaEmbed(char) : buildProfileEmbed(char, computeStats(char));
-          const btns = pescaModule.buildPescaButtons ? pescaModule.buildPescaButtons(char) : [];
-          const components = Array.isArray(btns) ? btns : [btns];
-          await i.editReply({ embeds: [embed], files: [], components: components.filter(Boolean) });
+          try {
+            const { buildPescariaEmbed, buildPescariaButtons } = await import('../panels/pescaria');
+            
+            // Checa a sessão de pesca na database para controlar os botões
+            const session = await prisma.rpgFishingSession.findUnique({ where: { discordId: char.discordId } });
+            const sessionExists = !!session;
+            const isReady = session ? session.reelableAt <= new Date() : false;
+            
+            const embed = await buildPescariaEmbed(char);
+            const btns = buildPescariaButtons(char, sessionExists, isReady);
+            
+            await i.editReply({ embeds: [embed], files: [], components: btns });
+          } catch (e) {
+            console.error('Erro Pescar:', e);
+            await i.editReply({ embeds: [errorEmbed('Em Desenvolvimento 🚧', 'O lago de pesca está congelado no momento. Volte em breve!')], components: [] });
+          }
           return;
         }
 
         if (option === 'meditar') {
-          const meditarModule: any = await import('../panels/meditar');
-          const embed = meditarModule.buildMeditarEmbed ? await meditarModule.buildMeditarEmbed(char) : buildProfileEmbed(char, computeStats(char));
-          const rawBtns = meditarModule.buildMeditarButtons ? meditarModule.buildMeditarButtons(char) : [];
-          const btnComponents = Array.isArray(rawBtns) ? rawBtns : [rawBtns];
-          await i.editReply({ embeds: [embed], files: [], components: btnComponents.filter(Boolean) });
+          try {
+            const { buildMeditarEmbed, buildMeditarButtons } = await import('../panels/meditar');
+            const embed = buildMeditarEmbed(char);
+            const btns = buildMeditarButtons(char);
+            
+            await i.editReply({ embeds: [embed], files: [], components: btns });
+          } catch (e) {
+            console.error('Erro Meditar:', e);
+            await i.editReply({ embeds: [errorEmbed('Em Desenvolvimento 🚧', 'O templo de meditação está fechado no momento.')], components: [] });
+          }
           return;
         }
 
         if (option === 'taverna') {
-          const { buildTavernaEmbed, buildTavernaMenuSelect, buildTavernaButtons } = await import('../panels/taverna');
-          await i.editReply({ embeds: [await buildTavernaEmbed(char)], files: [], components: [buildTavernaMenuSelect(), buildTavernaButtons()] });
+          try {
+            const { buildTavernaEmbed, buildTavernaMenuSelect, buildTavernaButtons } = await import('../panels/taverna');
+            await i.editReply({ embeds: [await buildTavernaEmbed(char)], files: [], components: [buildTavernaMenuSelect(), buildTavernaButtons()] });
+          } catch (e) {
+            console.error('Erro Taverna:', e);
+            await i.editReply({ embeds: [errorEmbed('Em Desenvolvimento 🚧', 'A Taverna está fechada no momento!')], components: [] });
+          }
           return;
         }
         break;
@@ -502,9 +547,6 @@ export async function handleRpgSelect(i: StringSelectMenuInteraction, action: st
         break;
       }
 
-      // ═══════════════════════════════════════════════════════════════════════
-      // INTEGRAÇÃO: TIPOS ESPECIAIS (Fogo, Gelo...) -> CRAWLER ELEMENTAL
-      // ═══════════════════════════════════════════════════════════════════════
       case 'dungeon_tipo_escolher': {
         await i.deferUpdate();
         const typeId = i.values[0];
@@ -512,7 +554,6 @@ export async function handleRpgSelect(i: StringSelectMenuInteraction, action: st
         
         const { startExpedition, buildDungeonCrawlerEmbed } = await import('../panels/dungeon');
         
-        // Passamos o typeId da Dungeon direto para a expedição!
         const res = await startExpedition(char, char.currentLocation, typeId);
         
         if (!res.success) {

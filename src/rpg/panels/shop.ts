@@ -1,106 +1,86 @@
-import {
-  EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle,
-  StringSelectMenuBuilder, StringSelectMenuOptionBuilder,
-} from 'discord.js';
+import { EmbedBuilder, ActionRowBuilder, StringSelectMenuBuilder, StringSelectMenuOptionBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
 import { FullCharacter } from '../services/character';
-import { ITEMS, Item } from '../constants/items';
-
-// Emojis dinâmicos para a raridade (caso não estejam exportados no items.ts)
-const RARITY_EMOJI: Record<string, string> = {
-  common: '⬜',
-  uncommon: '🟩',
-  rare: '🟦',
-  epic: '🟪',
-  legendary: '🟧',
-  mythic: '🟥'
-};
-
-const SHOP_CATEGORIES = [
-  { id: 'weapon',     label: '⚔️ Armas',        emoji: '⚔️' },
-  { id: 'helmet',     label: '⛑️ Elmos',        emoji: '⛑️' },
-  { id: 'chest',      label: '👕 Peitorais',    emoji: '👕' },
-  { id: 'pants',      label: '👖 Calças',       emoji: '👖' },
-  { id: 'boots',      label: '👟 Botas',        emoji: '👟' },
-  { id: 'gloves',     label: '🧤 Luvas',        emoji: '🧤' },
-  { id: 'shield',     label: '🛡️ Escudos',      emoji: '🛡️' },
-  { id: 'ring',       label: '💍 Anéis',        emoji: '💍' },
-  { id: 'backpack',   label: '🎒 Mochilas',     emoji: '🎒' },
-  { id: 'consumable', label: '🧪 Consumíveis',  emoji: '🧪' },
-  { id: 'pet',        label: '🐾 Pets',         emoji: '🐾' },
-];
+import { ITEM_LIST, ItemSlot, SLOT_NAME, SLOT_EMOJI } from '../constants/items';
 
 export function buildShopEmbed(char: FullCharacter, category?: string): EmbedBuilder {
   const embed = new EmbedBuilder()
-    .setColor(0xF39C12)
+    .setColor(0xF1C40F)
     .setTitle('🛒 Loja da Aliança')
     .setFooter({ text: `💰 Seu ouro: ${char.gold.toLocaleString('pt-BR')} G` });
 
   if (!category) {
-    embed.setDescription('Selecione uma categoria no menu abaixo para ver os itens disponíveis no armazém.')
-      .addFields(SHOP_CATEGORIES.map(c => ({ name: c.label, value: '`Selecione abaixo`', inline: true })));
+    embed.setDescription('Bem-vindo ao mercado da cidade! Temos armas, poções e muito mais.\n\nSelecione uma categoria no menu abaixo para ver os itens disponíveis.');
     return embed;
   }
 
-  // Puxa todos os itens da categoria escolhida que possuem um preço de compra (buyPrice)
-  const items = Object.values(ITEMS).filter(i => i.type === category && i.buyPrice !== undefined);
-  
+  // 🔧 CORREÇÃO DO BUG: Filtra para NÃO mostrar itens de preço 0 (Lendários, Boss drops, etc)
+  const items = ITEM_LIST.filter(i => (i.slot === category || i.type === category) && i.price > 0)
+    .sort((a, b) => a.price - b.price);
+
+  embed.setTitle(`🛒 Loja — ${SLOT_EMOJI[category] ?? ''} ${SLOT_NAME[category] ?? category}`);
+
   if (items.length === 0) {
-    embed.setDescription(`Nenhum item disponível em **${category}** no momento.`);
+    embed.setDescription('*O mercador não tem itens dessa categoria no estoque hoje.*');
     return embed;
   }
 
-  const cat = SHOP_CATEGORIES.find(c => c.id === category);
-  embed.setTitle(`🛒 Loja — ${cat?.label ?? category}`);
+  const itemsText = items.map(i => {
+    return `${i.emoji} **${i.name}** — 💰 **${i.price} G**\n*${i.description}*`;
+  }).join('\n\n');
 
-  // Monta a vitrine (Limitado a 15 para não estourar o limite do Embed do Discord)
-  const lines = items.slice(0, 15).map(i =>
-    `${RARITY_EMOJI[i.rarity] || '⬜'} ${i.emoji} **${i.name}** — 💰 **${i.buyPrice?.toLocaleString('pt-BR')} G**\n` +
-    `> *${i.description}*`
-  ).join('\n\n');
-
-  embed.setDescription(lines || '*Sem itens disponíveis.*');
+  embed.setDescription(itemsText.length > 4000 ? itemsText.slice(0, 4000) + '...' : itemsText);
   return embed;
 }
 
 export function buildShopCategorySelect(): ActionRowBuilder<StringSelectMenuBuilder> {
   return new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(
     new StringSelectMenuBuilder()
-      .setCustomId('rpg_select:loja_categoria')
-      .setPlaceholder('Selecione a categoria...')
-      .addOptions(
-        SHOP_CATEGORIES.map(c =>
-          new StringSelectMenuOptionBuilder().setLabel(c.label).setValue(c.id).setEmoji(c.emoji.trim())
-        )
-      )
+      .setCustomId('loja_categoria')
+      .setPlaceholder('Navegar nas prateleiras...')
+      .addOptions([
+        { label: 'Armas', value: 'weapon', emoji: '⚔️' },
+        { label: 'Elmos', value: 'helmet', emoji: '⛑️' },
+        { label: 'Calças', value: 'pants', emoji: '👖' },
+        { label: 'Botas', value: 'boots', emoji: '👟' },
+        { label: 'Luvas', value: 'gloves', emoji: '🧤' },
+        { label: 'Escudos', value: 'shield', emoji: '🛡️' },
+        { label: 'Anéis', value: 'ring', emoji: '💍' },
+        { label: 'Amuletos', value: 'amulet', emoji: '🔮' },
+        { label: 'Mochilas', value: 'backpack', emoji: '🎒' },
+        { label: 'Pets', value: 'pet', emoji: '🐾' },
+        { label: 'Consumíveis', value: 'consumable', emoji: '🧪' },
+        { label: 'Materiais', value: 'material', emoji: '🪨' },
+      ])
   );
 }
 
 export function buildShopItemSelect(char: FullCharacter, category: string): ActionRowBuilder<StringSelectMenuBuilder> | null {
-  // Puxa todos os itens da categoria escolhida que possuem um preço de compra (buyPrice)
-  const items = Object.values(ITEMS).filter(i => i.type === category && i.buyPrice !== undefined);
-  
+  // 🔧 CORREÇÃO DO BUG: Oculta itens de preço 0 também no dropdown!
+  const items = ITEM_LIST.filter(i => (i.slot === category || i.type === category) && i.price > 0)
+    .sort((a, b) => a.price - b.price);
+
   if (items.length === 0) return null;
 
   return new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(
     new StringSelectMenuBuilder()
       .setCustomId('rpg_select:loja_comprar')
-      .setPlaceholder('Selecione o item para comprar...')
+      .setPlaceholder('Escolher item para comprar...')
       .addOptions(
-        // Discord limita Select Menus a 25 opções
-        items.slice(0, 25).map(i =>
-          new StringSelectMenuOptionBuilder()
-            .setLabel(`${i.name} — ${i.buyPrice} 💰`)
-            .setValue(i.id)
-            .setEmoji(i.emoji.trim())
-            .setDescription(`${i.rarity.toUpperCase()} | ${i.description.substring(0, 50)}...`)
+        items.slice(0, 25).map(i => new StringSelectMenuOptionBuilder()
+          .setLabel(i.name)
+          .setValue(i.id)
+          .setDescription(`Custo: ${i.price} G | Req: Nv.${i.minLevel}`)
+          .setEmoji(i.emoji.trim() || '📦')
         )
       )
   );
 }
 
 export function buildShopButtons(category?: string): ActionRowBuilder<ButtonBuilder> {
-  return new ActionRowBuilder<ButtonBuilder>().addComponents(
-    new ButtonBuilder().setCustomId('rpg:loja').setLabel('🛒 Categorias').setStyle(ButtonStyle.Primary),
-    new ButtonBuilder().setCustomId('rpg:cidade').setLabel('◀ Cidade').setStyle(ButtonStyle.Secondary),
-  );
+  const row = new ActionRowBuilder<ButtonBuilder>();
+  if (category) {
+    row.addComponents(new ButtonBuilder().setCustomId('rpg:loja').setLabel('🛒 Voltar às Categorias').setStyle(ButtonStyle.Primary));
+  }
+  row.addComponents(new ButtonBuilder().setCustomId('rpg:cidade').setLabel('◀ Sair da Loja').setStyle(ButtonStyle.Secondary));
+  return row;
 }

@@ -1,3 +1,7 @@
+// ═══════════════════════════════════════════════════════════════════════
+// PAINEL VISUAL DE INVENTÁRIO
+// ═══════════════════════════════════════════════════════════════════════
+
 import {
   EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle,
   StringSelectMenuBuilder, StringSelectMenuOptionBuilder,
@@ -23,10 +27,12 @@ export async function buildInventarioEmbed(char: FullCharacter): Promise<{
     };
   }
 
+  // Visual limpo e direto usando os emojis da categoria (ex: 👕 Peitoral, 🐾 Pet)
   const lines = inv.slice(0, 20).map(invItem => {
     const item = getItem(invItem.itemId);
     if (!item) return `❓ ${invItem.itemId} x${invItem.quantity}`;
-    return `${RARITY_EMOJI[item.rarity]} ${item.emoji} **${item.name}** ×${invItem.quantity} — *${item.description.slice(0, 50)}*`;
+    const slotEmoji = SLOT_EMOJI[item.slot] ?? '📦';
+    return `${RARITY_EMOJI[item.rarity] || '⬜'} ${slotEmoji} **${item.name}** ×${invItem.quantity}`;
   }).join('\n');
 
   const embed = new EmbedBuilder()
@@ -56,7 +62,7 @@ export async function buildInventarioEmbed(char: FullCharacter): Promise<{
                 .setLabel(`${item.name} ×${invItem.quantity}`)
                 .setValue(invItem.itemId)
                 .setEmoji(item.emoji.trim())
-                .setDescription(`${RARITY_EMOJI[item.rarity]} ${item.rarity} | ${SLOT_NAME[item.slot]}`)
+                .setDescription(`${item.rarity.toUpperCase()} | ${SLOT_NAME[item.slot]}`)
             })
           )
       )
@@ -80,12 +86,12 @@ export function buildItemActionSelect(itemId: string): ActionRowBuilder<StringSe
 
   const options: StringSelectMenuOptionBuilder[] = [];
   if (item.maxStack === 1) {
-    options.push(new StringSelectMenuOptionBuilder().setLabel('⚔️ Equipar').setValue(`equip:${itemId}`).setDescription('Equipar este item'));
+    options.push(new StringSelectMenuOptionBuilder().setLabel('⚔️ Equipar').setValue(`equip:${itemId}`).setDescription('Equipar este item no seu corpo'));
   }
   if (item.slot === 'consumable') {
-    options.push(new StringSelectMenuOptionBuilder().setLabel('🧪 Usar').setValue(`usar:${itemId}`).setDescription('Usar este consumível'));
+    options.push(new StringSelectMenuOptionBuilder().setLabel('🧪 Usar').setValue(`usar:${itemId}`).setDescription('Beber/Usar este consumível'));
   }
-  options.push(new StringSelectMenuOptionBuilder().setLabel('💰 Vender (1x)').setValue(`vender:${itemId}`).setDescription(`Receber ${item.sellPrice} ouro`));
+  options.push(new StringSelectMenuOptionBuilder().setLabel('💰 Vender (1x)').setValue(`vender:${itemId}`).setDescription(`Vender no mercador por ${item.sellPrice} ouro`));
 
   if (options.length === 0) return null;
 

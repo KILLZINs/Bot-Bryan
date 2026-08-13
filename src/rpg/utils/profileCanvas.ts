@@ -139,14 +139,16 @@ export async function generateProfileCard(char: any, stats: any, avatarUrlInput?
     return item ? stripEmojis(item.name) : stripEmojis(itemId);
   };
 
+  // 🔮 ATUALIZADO: Todos os 11 slots agora estão mapeados corretamente
   const slotItems = {
     helmet: resolveItem(eq?.helmet),
+    amulet: resolveItem(eq?.amulet),
     chest: resolveItem(eq?.chest || eq?.armor),
-    weapon: resolveItem(eq?.weapon),
-    shield: resolveItem(eq?.shield),
+    gloves: resolveItem(eq?.gloves),
     pants: resolveItem(eq?.pants),
     boots: resolveItem(eq?.boots),
-    gloves: resolveItem(eq?.gloves),
+    weapon: resolveItem(eq?.weapon),
+    shield: resolveItem(eq?.shield),
     ring: resolveItem(eq?.ring),
     backpack: resolveItem(eq?.backpack),
     pet: resolveItem(eq?.pet),
@@ -155,18 +157,16 @@ export async function generateProfileCard(char: any, stats: any, avatarUrlInput?
   const avatarUrl = avatarUrlInput || char.avatarUrl || '';
 
   // ==========================================
-  // CENÁRIO MEDIEVAL VÍVIDO (FUNDO APARECENDO BEM)
+  // CENÁRIO MEDIEVAL VÍVIDO
   // ==========================================
 
-  // 1. Céu Estilizado de Fantasia Medieval (Tons de Crepúsculo Vibrantes)
   const skyGrad = ctx.createLinearGradient(0, 0, 0, height);
-  skyGrad.addColorStop(0, '#1a102f'); // Índex místico
-  skyGrad.addColorStop(0.5, '#4a2838'); // Tom avermelhado/pôr do sol de fantasia
-  skyGrad.addColorStop(1, '#6b301c'); // Terra queimada no horizonte
+  skyGrad.addColorStop(0, '#1a102f');
+  skyGrad.addColorStop(0.5, '#4a2838');
+  skyGrad.addColorStop(1, '#6b301c');
   ctx.fillStyle = skyGrad;
   ctx.fillRect(0, 0, width, height);
 
-  // 2. Cadeia de Montanhas e Colinas Ao Fundo (Camada 1 - Longe)
   ctx.fillStyle = '#261726';
   ctx.beginPath();
   ctx.moveTo(0, height);
@@ -177,7 +177,6 @@ export async function generateProfileCard(char: any, stats: any, avatarUrlInput?
   ctx.closePath();
   ctx.fill();
 
-  // 3. Colinas Próximas e Ruínas/Muralhas (Camada 2 - Perto)
   ctx.fillStyle = '#180d17';
   ctx.beginPath();
   ctx.moveTo(0, height);
@@ -188,15 +187,13 @@ export async function generateProfileCard(char: any, stats: any, avatarUrlInput?
   ctx.closePath();
   ctx.fill();
 
-  // 4. Luz Central Mágica (Brilho que destaca o centro e escurece as bordas)
   const centerGlow = ctx.createRadialGradient(425, 250, 50, 425, 250, 400);
-  centerGlow.addColorStop(0, 'rgba(241, 196, 15, 0.18)'); // Luz dourada central
-  centerGlow.addColorStop(0.6, 'rgba(142, 68, 173, 0.08)'); // Tom arcano
-  centerGlow.addColorStop(1, 'rgba(0, 0, 0, 0.45)'); // Sombreamento nas bordas (vinheta)
+  centerGlow.addColorStop(0, 'rgba(241, 196, 15, 0.18)');
+  centerGlow.addColorStop(0.6, 'rgba(142, 68, 173, 0.08)');
+  centerGlow.addColorStop(1, 'rgba(0, 0, 0, 0.45)');
   ctx.fillStyle = centerGlow;
   ctx.fillRect(0, 0, width, height);
 
-  // Borda Externa Rústica Dourada
   ctx.strokeStyle = '#2b2118';
   ctx.lineWidth = 4;
   ctx.strokeRect(6, 6, width - 12, height - 12);
@@ -205,10 +202,9 @@ export async function generateProfileCard(char: any, stats: any, avatarUrlInput?
   ctx.lineWidth = 1.5;
   ctx.strokeRect(10, 10, width - 20, height - 20);
 
-  // Função para Painéis Glassmorphism (Vidro Escuro Translúcido para ver o fundo)
   function drawGlassPanel(x: number, y: number, w: number, h: number) {
-    ctx.fillStyle = 'rgba(10, 8, 12, 0.65)'; // Muito mais transparente para o fundo aparecer bem
-    ctx.strokeStyle = '#d4af37'; // Borda dourada brilhante nos painéis
+    ctx.fillStyle = 'rgba(10, 8, 12, 0.65)';
+    ctx.strokeStyle = '#d4af37';
     ctx.lineWidth = 1.8;
     ctx.beginPath();
     ctx.roundRect(x, y, w, h, 8);
@@ -216,9 +212,9 @@ export async function generateProfileCard(char: any, stats: any, avatarUrlInput?
     ctx.stroke();
   }
 
-  drawGlassPanel(22, 22, 240, 456); // Esquerdo
-  drawGlassPanel(274, 22, 302, 456); // Central
-  drawGlassPanel(588, 22, 240, 456); // Direito
+  drawGlassPanel(22, 22, 240, 456); 
+  drawGlassPanel(274, 22, 302, 456);
+  drawGlassPanel(588, 22, 240, 456);
 
   // ------------------------------------------
   // PAINEL ESQUERDO: STATUS & ATRIBUTOS
@@ -235,7 +231,6 @@ export async function generateProfileCard(char: any, stats: any, avatarUrlInput?
   ctx.fillText(`KARMA: ${karma}  •  GEN: ${gen}`, 38, 86);
   ctx.fillText(`LOCAL: ${locationName}`, 38, 102);
 
-  // Barras de Status
   function drawRpgBar(y: number, label: string, current: number, max: number, barColor: string, iconDrawFn?: Function) {
     const pct = Math.min(Math.round((current / (max || 1)) * 100), 100);
     
@@ -302,18 +297,25 @@ export async function generateProfileCard(char: any, stats: any, avatarUrlInput?
   const centerY = 240;
   const avatarRadius = 45;
 
-  const slotsCoords = [
-    { key: 'helmet', label: 'Elmo', x: centerX - 135, y: centerY - 130 },
-    { key: 'chest', label: 'Peito', x: centerX - 135, y: centerY - 72 },
-    { key: 'gloves', label: 'Luva', x: centerX - 135, y: centerY - 14 },
-    { key: 'pants', label: 'Calça', x: centerX - 135, y: centerY + 44 },
-    { key: 'boots', label: 'Bota', x: centerX - 135, y: centerY + 102 },
+  const leftStartX = centerX - 135;
+  const rightStartX = centerX + 45;
 
-    { key: 'weapon', label: 'Arma', x: centerX + 45, y: centerY - 130 },
-    { key: 'shield', label: 'Escudo', x: centerX + 45, y: centerY - 72 },
-    { key: 'ring', label: 'Anel', x: centerX + 45, y: centerY - 14 },
-    { key: 'backpack', label: 'Mochila', x: centerX + 45, y: centerY + 44 },
-    { key: 'pet', label: 'Pet', x: centerX + 45, y: centerY + 102 }
+  // 🔮 COORDENADAS RECALCULADAS: 6 itens na esquerda, 5 na direita
+  const slotsCoords = [
+    // LADO ESQUERDO
+    { key: 'helmet', label: 'Elmo',    x: leftStartX, y: 60 },
+    { key: 'amulet', label: 'Amuleto', x: leftStartX, y: 122 },
+    { key: 'chest',  label: 'Peito',   x: leftStartX, y: 184 },
+    { key: 'gloves', label: 'Luvas',   x: leftStartX, y: 246 },
+    { key: 'pants',  label: 'Calças',  x: leftStartX, y: 308 },
+    { key: 'boots',  label: 'Botas',   x: leftStartX, y: 370 },
+
+    // LADO DIREITO
+    { key: 'weapon',   label: 'Arma',    x: rightStartX, y: 91 },
+    { key: 'shield',   label: 'Escudo',  x: rightStartX, y: 153 },
+    { key: 'ring',     label: 'Anel',    x: rightStartX, y: 215 },
+    { key: 'backpack', label: 'Mochila', x: rightStartX, y: 277 },
+    { key: 'pet',      label: 'Pet',     x: rightStartX, y: 339 }
   ];
 
   ctx.strokeStyle = '#d4af37';

@@ -6,7 +6,7 @@ import { getLocation } from '../constants/locations';
 import { DIVINE_SKILLS } from '../constants/skills';
 import { getMarriage } from '../services/marriage';
 import { prisma } from '../../database/client';
-import { COSMETIC_TITLES, COSMETIC_BACKGROUNDS } from '../constants/cosmetics'; // ✅ Import de cosméticos adicionado
+import { COSMETIC_TITLES, COSMETIC_BACKGROUNDS } from '../constants/cosmetics'; // ✅ Import da Loja
 
 // ==========================================
 // REGISTRO DE FONTES (Com suporte a Emojis!)
@@ -126,11 +126,10 @@ export async function generateProfileCard(char: any, stats: any, avatarUrlInput?
   const avatarUrl = avatarUrlInput || char.avatarUrl || '';
 
   // ==========================================
-  // 🎨 FUNDO (COSMÉTICO OU DARK FANTASY PADRÃO)
+  // FUNDO (COSMÉTICO OU DARK FANTASY ORIGINAL)
   // ==========================================
   let hasCosmeticBg = false;
 
-  // Verifica se o jogador tem um cosmético equipado
   if (char.activeBackground && COSMETIC_BACKGROUNDS[char.activeBackground]) {
     const bg = COSMETIC_BACKGROUNDS[char.activeBackground];
     if (bg.url.startsWith('color:')) {
@@ -142,14 +141,12 @@ export async function generateProfileCard(char: any, stats: any, avatarUrlInput?
         const bgImg = await loadImage(bg.url);
         ctx.drawImage(bgImg, 0, 0, width, height);
         hasCosmeticBg = true;
-      } catch (e) {
-        console.error('Erro ao carregar fundo cosmético:', e);
-      }
+      } catch (e) { console.error('Erro imagem fundo:', e); }
     }
   }
 
-  // Fallback para o seu fundo Dark Fantasy perfeito caso ele não tenha cosmético
   if (!hasCosmeticBg) {
+    // Céu Noturno / Masmorra
     const bgGrad = ctx.createLinearGradient(0, 0, 0, height);
     bgGrad.addColorStop(0, '#0a0514'); 
     bgGrad.addColorStop(0.5, '#1a0b26'); 
@@ -157,26 +154,29 @@ export async function generateProfileCard(char: any, stats: any, avatarUrlInput?
     ctx.fillStyle = bgGrad;
     ctx.fillRect(0, 0, width, height);
 
+    // Lua Mística
     ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
     ctx.beginPath(); ctx.arc(150, 100, 45, 0, Math.PI*2); ctx.fill();
     ctx.fillStyle = 'rgba(255, 255, 255, 0.1)';
     ctx.beginPath(); ctx.arc(150, 100, 70, 0, Math.PI*2); ctx.fill();
 
+    // Silhueta de Montanhas
     ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
     ctx.beginPath();
     ctx.moveTo(0, height); ctx.lineTo(0, 450); ctx.lineTo(200, 320);
     ctx.lineTo(400, 450); ctx.lineTo(700, 250); ctx.lineTo(950, 400);
     ctx.lineTo(1200, 200); ctx.lineTo(1200, height); ctx.fill();
 
+    // Silhueta de Dragão Voando
     ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
     ctx.beginPath();
     ctx.moveTo(900, 150); ctx.quadraticCurveTo(920, 130, 950, 160);
     ctx.quadraticCurveTo(940, 180, 910, 170); ctx.fill();
-    ctx.beginPath(); ctx.moveTo(925, 155); ctx.lineTo(980, 110); ctx.lineTo(950, 165); ctx.fill();
-    ctx.beginPath(); ctx.moveTo(925, 155); ctx.lineTo(870, 120); ctx.lineTo(900, 165); ctx.fill();
+    ctx.beginPath(); ctx.moveTo(925, 155); ctx.lineTo(980, 110); ctx.lineTo(950, 165); ctx.fill(); // Asa dir
+    ctx.beginPath(); ctx.moveTo(925, 155); ctx.lineTo(870, 120); ctx.lineTo(900, 165); ctx.fill(); // Asa esq
   }
 
-  // Overlay Escuro para não brigar com os textos (Aplica em ambos)
+  // Overlay Escuro para não brigar com os textos
   ctx.fillStyle = 'rgba(15, 15, 20, 0.65)';
   ctx.fillRect(0, 0, width, height);
 
@@ -204,31 +204,31 @@ export async function generateProfileCard(char: any, stats: any, avatarUrlInput?
   }
   ctx.strokeStyle = '#d4af37'; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(avX + avSize/2, avY + avSize/2, avSize/2, 0, Math.PI * 2); ctx.stroke();
 
-  // 🏷️ INTEGRAÇÃO DO TÍTULO COSMÉTICO AQUI
+  // NOME DO JOGADOR
   ctx.fillStyle = '#ffffff';
   ctx.font = `bold 36px ${GLOBAL_FONT}`;
-  ctx.fillText(`👑 ${name.toUpperCase()}`, 175, headerY + 45); // Nome foi levemente pra cima
+  ctx.fillText(`👑 ${name.toUpperCase()}`, 175, headerY + 45); // Subiu um pouco
 
-  let nextTextY = headerY + 75;
+  let nextTextY = headerY + 70;
 
-  // Desenha o Título se ele tiver um equipado
+  // TÍTULO COSMÉTICO
   if (char.activeTitle && COSMETIC_TITLES[char.activeTitle]) {
     const title = COSMETIC_TITLES[char.activeTitle];
-    ctx.fillStyle = '#d4af37'; // Dourado do título
-    ctx.font = `italic 20px ${GLOBAL_FONT}`;
+    ctx.fillStyle = '#d4af37';
+    ctx.font = `italic 18px ${GLOBAL_FONT}`;
     ctx.fillText(`« ${title.label} »`, 175, nextTextY);
-    nextTextY += 25; // Empurra os próximos textos para baixo
+    nextTextY += 24;
   }
 
-  // Level e Classe
+  // LEVEL E CLASSE
   ctx.fillStyle = '#f1c40f';
   ctx.font = `bold 18px ${GLOBAL_FONT}`;
   ctx.fillText(`NÍVEL ${level} — 🗡️ ${className.toUpperCase()}`, 175, nextTextY);
 
-  // Localização e Ouro
+  // LOCALIZAÇÃO E OURO
   ctx.fillStyle = '#b5bac1';
   ctx.font = `14px ${GLOBAL_FONT}`;
-  ctx.fillText(`🗺️ Localização: ${locationName}   |   💰 Ouro: ${gold.toLocaleString('pt-BR')} G`, 175, nextTextY + 25);
+  ctx.fillText(`🗺️ Localização: ${locationName}   |   💰 Ouro: ${gold.toLocaleString('pt-BR')} G`, 175, nextTextY + 28);
 
   function drawLedBar(x: number, y: number, w: number, current: number, max: number, color: string, label: string) {
     ctx.fillStyle = 'rgba(0,0,0,0.5)';
@@ -256,6 +256,7 @@ export async function generateProfileCard(char: any, stats: any, avatarUrlInput?
   ctx.fillText(power.toLocaleString('pt-BR'), width - 50, headerY + 110);
   ctx.textAlign = 'left';
 
+
   const panelY = 185;
   const panelH = 540;
 
@@ -282,9 +283,11 @@ export async function generateProfileCard(char: any, stats: any, avatarUrlInput?
     }
   }
 
+
   const sy = panelY + 80;
   const sStr = char.str ?? 10; const sAgi = char.agi ?? 10; const sInt = char.int ?? 10;
   const sVit = char.vit ?? 10; const sLck = char.lck ?? 10;
+
 
   drawStat(45, sy, sStr, stats?.str ?? 10, '💪 FOR');
   drawStat(210, sy, sAgi, stats?.agi ?? 10, '🏃 AGI');
@@ -321,6 +324,7 @@ export async function generateProfileCard(char: any, stats: any, avatarUrlInput?
   ctx.fillText(`⚖️ Karma: ${karma}`, 60, panelY + 475);
   ctx.fillText(marriageText, 60, panelY + 495);
 
+
   // ==========================================
   // PAINEL 2: EQUIPAMENTO (LAYOUT TARKOV/ANATÔMICO)
   // ==========================================
@@ -329,14 +333,15 @@ export async function generateProfileCard(char: any, stats: any, avatarUrlInput?
   ctx.fillStyle = '#f1c40f'; ctx.font = `bold 16px ${GLOBAL_FONT}`; ctx.textAlign = 'center';
   ctx.fillText('🛡️ EQUIPAMENTO ATUAL', 600, panelY + 35);
 
+  // Silhueta do Personagem (Fundo)
   const cx = 600; const cy = panelY + 290;
   ctx.fillStyle = 'rgba(255, 255, 255, 0.04)';
-  ctx.beginPath(); ctx.arc(cx, cy - 140, 30, 0, Math.PI*2); ctx.fill();
-  ctx.beginPath(); ctx.roundRect(cx - 40, cy - 100, 80, 130, 10); ctx.fill();
-  ctx.beginPath(); ctx.roundRect(cx - 90, cy - 90, 35, 120, 10); ctx.fill();
-  ctx.beginPath(); ctx.roundRect(cx + 55, cy - 90, 35, 120, 10); ctx.fill();
-  ctx.beginPath(); ctx.roundRect(cx - 35, cy + 40, 30, 120, 10); ctx.fill();
-  ctx.beginPath(); ctx.roundRect(cx + 5, cy + 40, 30, 120, 10); ctx.fill();
+  ctx.beginPath(); ctx.arc(cx, cy - 140, 30, 0, Math.PI*2); ctx.fill(); // Cabeça
+  ctx.beginPath(); ctx.roundRect(cx - 40, cy - 100, 80, 130, 10); ctx.fill(); // Tronco
+  ctx.beginPath(); ctx.roundRect(cx - 90, cy - 90, 35, 120, 10); ctx.fill(); // Braço Esq
+  ctx.beginPath(); ctx.roundRect(cx + 55, cy - 90, 35, 120, 10); ctx.fill(); // Braço Dir
+  ctx.beginPath(); ctx.roundRect(cx - 35, cy + 40, 30, 120, 10); ctx.fill(); // Perna Esq
+  ctx.beginPath(); ctx.roundRect(cx + 5, cy + 40, 30, 120, 10); ctx.fill(); // Perna Dir
 
   function drawEquipSlot(x: number, y: number, itemData: any, ghostLabel: string, ghostEmoji: string) {
     const isEquipped = !!itemData;
@@ -366,6 +371,7 @@ export async function generateProfileCard(char: any, stats: any, avatarUrlInput?
     }
   }
 
+  // Mapeamento sobre a silhueta
   drawEquipSlot(cx, cy - 140, slotItems.helmet, 'Elmo', '⛑️');
   drawEquipSlot(cx, cy - 70, slotItems.amulet, 'Amuleto', '🔮');
   drawEquipSlot(cx, cy, slotItems.chest, 'Peitoral', '👕');
@@ -378,8 +384,10 @@ export async function generateProfileCard(char: any, stats: any, avatarUrlInput?
   drawEquipSlot(cx + 95, cy - 90, slotItems.backpack, 'Mochila', '🎒');
   drawEquipSlot(cx + 95, cy - 20, slotItems.shield, 'Escudo', '🛡️');
   drawEquipSlot(cx + 95, cy + 60, slotItems.ring, 'Anel', '💍');
-  drawEquipSlot(cx + 100, cy + 160, slotItems.pet, 'Pet', '🐾'); 
+
+  drawEquipSlot(cx + 100, cy + 160, slotItems.pet, 'Pet', '🐾'); // No chão
   ctx.textAlign = 'left';
+
 
   // ==========================================
   // PAINEL 3: TÁTICO & INVENTÁRIO PERFEITO
@@ -413,6 +421,7 @@ export async function generateProfileCard(char: any, stats: any, avatarUrlInput?
 
   ctx.strokeStyle = panelStroke; ctx.beginPath(); ctx.moveTo(835, panelY + 200); ctx.lineTo(1155, panelY + 200); ctx.stroke();
 
+  // INVENTÁRIO (O NOME EXATO E GRID DE 24 SEM BURACOS)
   ctx.fillStyle = '#f1c40f'; ctx.font = `bold 16px ${GLOBAL_FONT}`; ctx.textAlign = 'center';
   ctx.fillText('🎒 INVENTÁRIO', 995, panelY + 235); ctx.textAlign = 'left';
 

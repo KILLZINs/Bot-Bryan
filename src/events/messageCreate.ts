@@ -85,7 +85,7 @@ const CREATE_SUKI_WEBHOOK_REGEX =
   /\b(?:cria|criar|configure|configurar|ativa|ativar)\b[\s\S]*\b(?:suki|webhook)\b/i;
 
 // ============================================================
-// UTILIDADES & MEMÓRIA (OTIMIZADO PARA ECONOMIA DE TOKENS)
+// UTILIDADES & MEMÓRIA (OTIMIZADO)
 // ============================================================
 
 function today() {
@@ -116,7 +116,7 @@ function thisWeek() {
 
 async function fetchChannelMemory(
   message: Message,
-  limit = 5 // Reduzido para economizar tokens e acelerar a resposta da API
+  limit = 5
 ): Promise<{ role: 'user' | 'assistant'; content: string }[]> {
   try {
     const fetched = await message.channel.messages.fetch({ limit: 6 });
@@ -129,18 +129,13 @@ async function fetchChannelMemory(
 
     for (const msg of sorted) {
       const isAI = msg.author.bot || msg.webhookId !== null;
-      if (isAI) {
-        memory.push({
-          role: 'assistant',
-          content: msg.cleanContent || msg.content,
-        });
-      } else {
-        const userName = msg.member?.displayName ?? msg.author.username;
-        memory.push({
-          role: 'user',
-          content: `[Mensagem de ${userName}]: ${msg.cleanContent || msg.content}`,
-        });
-      }
+      // 💡 CORREÇÃO AQUI: Garante que Bryan e Suki sejam diferenciados no histórico
+      const userName = msg.webhookId ? msg.author.username : (msg.member?.displayName ?? msg.author.username);
+      
+      memory.push({
+        role: isAI ? 'assistant' : 'user',
+        content: `[${userName}]: ${msg.cleanContent || msg.content}`,
+      });
     }
 
     return memory;
@@ -610,9 +605,10 @@ export default {
 
         sukiCooldowns.set(sukiKey, now);
 
+        // 💡 CORREÇÃO AQUI: Removemos o apagador automático da palavra "Suki" do meio da frase
+        // para ela não receber mensagens faltando partes.
         let userMessage = content
           .replace(/<@!?\d+>/g, '')
-          .replace(/\bsuki\b/gi, '')
           .trim();
 
         if (!userMessage) {

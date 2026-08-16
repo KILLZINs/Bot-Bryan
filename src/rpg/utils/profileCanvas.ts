@@ -5,6 +5,7 @@ import { getItem } from '../constants/items';
 import { getLocation } from '../constants/locations';
 import { DIVINE_SKILLS } from '../constants/skills';
 import { getMarriage } from '../services/marriage';
+import { prisma } from '../../database/client'; // Necessário para puxar o inventário real!
 
 try {
   const fontPath = path.join(process.cwd(), 'src', 'rpg', 'fonts', 'Inter-Bold.ttf');
@@ -17,15 +18,14 @@ function stripEmojis(text: string): string {
   return text.replace(/[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F700}-\u{1F77F}\u{1F780}-\u{1F7FF}\u{1F800}-\u{1F8FF}\u{1F900}-\u{1F9FF}\u{1FA00}-\u{1FA6F}\u{1FA70}-\u{1FAFF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]/gu, '').trim();
 }
 
-function formatCooldown(date: Date | null | undefined, minutes: number): string {
-  if (!date) return 'PRONTO';
-  const remaining = minutes * 60_000 - (Date.now() - date.getTime());
-  if (remaining <= 0) return 'PRONTO';
-  const totalSeconds = Math.ceil(remaining / 1000);
-  const mins = Math.floor(totalSeconds / 60);
-  const secs = totalSeconds % 60;
-  return `${mins > 0 ? `${mins}m ` : ''}${secs}s`;
-}
+// Cores de Raridade para o Inventário
+const RARITY_COLORS: Record<string, string> = {
+  'Comum': '#95A5A6',
+  'Incomum': '#27AE60',
+  'Raro': '#3498DB',
+  'Épico': '#9B59B6',
+  'Lendário': '#F1C40F',
+};
 
 // ==========================================
 // ÍCONES VETORIAIS
@@ -45,37 +45,10 @@ function drawCoinIcon(ctx: any, x: number, y: number) {
   ctx.restore();
 }
 
-function drawHeartIcon(ctx: any, x: number, y: number) {
-  ctx.save();
-  ctx.fillStyle = '#e74c3c';
-  ctx.beginPath();
-  ctx.moveTo(x, y + 4);
-  ctx.bezierCurveTo(x, y, x - 6, y - 6, x - 6, y - 2);
-  ctx.bezierCurveTo(x - 6, y + 3, x, y + 8, x, y + 10);
-  ctx.bezierCurveTo(x, y + 8, x + 6, y + 3, x + 6, y - 2);
-  ctx.bezierCurveTo(x + 6, y - 6, x, y, x, y + 4);
-  ctx.fill();
-  ctx.restore();
-}
-
-function drawEnergyIcon(ctx: any, x: number, y: number) {
-  ctx.save();
-  ctx.fillStyle = '#f39c12';
-  ctx.beginPath();
-  ctx.moveTo(x + 2, y - 7);
-  ctx.lineTo(x - 4, y + 1);
-  ctx.lineTo(x + 1, y + 1);
-  ctx.lineTo(x - 2, y + 8);
-  ctx.lineTo(x + 5, y - 1);
-  ctx.lineTo(x, y - 1);
-  ctx.closePath();
-  ctx.fill();
-  ctx.restore();
-}
-
 export async function generateProfileCard(char: any, stats: any, avatarUrlInput?: string): Promise<Buffer> {
-  const width = 850;
-  const height = 500;
+  // Layout Vertical Estilo Mobile RPG
+  const width = 540;
+  const height = 860;
   const canvas = createCanvas(width, height);
   const ctx = canvas.getContext('2d');
 
@@ -87,26 +60,13 @@ export async function generateProfileCard(char: any, stats: any, avatarUrlInput?
   const className = stripEmojis(cls?.name ?? char.class);
   const level = char.level ?? 1;
   const karma = stripEmojis(karmaLabel(char.karma));
-  const gen = char.generation ?? 1;
   const locationName = stripEmojis(loc.name);
 
-  const currentXp = char.xp ?? 0;
-  const maxXp = rpgXpForLevel(level);
   const currentHp = char.currentHp ?? 100;
   const maxHp = stats?.maxHp ?? 100;
   const currentEnergy = char.currentEnergy ?? 100;
   const maxEnergy = stats?.maxEnergy ?? 100;
 
-  const str = stats?.str ?? 10;
-  const agi = stats?.agi ?? 10;
-  const intVal = stats?.int ?? 10;
-  const vit = stats?.vit ?? 10;
-  const lck = stats?.lck ?? 10;
-
-  const atk = stats?.attack ?? 10;
-  const def = stats?.defense ?? 10;
-  const crit = stats?.critChance ?? 0;
-  const dodge = stats?.dodgeChance ?? 0;
   const power = stats?.combatPower ?? 0;
   const gold = char.gold ?? 0;
 
@@ -119,27 +79,18 @@ export async function generateProfileCard(char: any, stats: any, avatarUrlInput?
     }
   } catch { /* Ignora erro */ }
 
-  const wins = char.totalWins ?? 0;
-  const deaths = char.totalDeaths ?? 0;
-  const pvpWins = char.pvpWins ?? 0;
-  const pvpLosses = char.pvpLosses ?? 0;
-  const bosses = char.bossKills ?? 0;
-
   let divineName = 'Nenhuma';
-  let divineRank = 'F';
   if (char.divineSkillId && DIVINE_SKILLS[char.divineSkillId]) {
-    const ds = DIVINE_SKILLS[char.divineSkillId];
-    divineName = stripEmojis(ds.name);
-    divineRank = String(char.divineSkillRank ?? 'F');
+    divineName = stripEmojis(DIVINE_SKILLS[char.divineSkillId].name);
   }
 
   const resolveItem = (itemId?: string | null) => {
-    if (!itemId) return '—';
+    if (!itemId) return '';
     const item = getItem(itemId);
     return item ? stripEmojis(item.name) : stripEmojis(itemId);
   };
 
-  // 🔮 ATUALIZADO: Todos os 11 slots agora estão mapeados corretamente
+  // Os 11 Slots Mapeados
   const slotItems = {
     helmet: resolveItem(eq?.helmet),
     amulet: resolveItem(eq?.amulet),
@@ -154,305 +105,245 @@ export async function generateProfileCard(char: any, stats: any, avatarUrlInput?
     pet: resolveItem(eq?.pet),
   };
 
+  // Busca o Inventário Real do Banco de Dados
+  const inventory = await prisma.rpgInventoryItem.findMany({
+    where: { characterId: char.discordId },
+    orderBy: { quantity: 'desc' }
+  });
+
   const avatarUrl = avatarUrlInput || char.avatarUrl || '';
 
   // ==========================================
-  // CENÁRIO MEDIEVAL VÍVIDO
+  // FUNDO GERAL (Dark UI)
   // ==========================================
-
-  const skyGrad = ctx.createLinearGradient(0, 0, 0, height);
-  skyGrad.addColorStop(0, '#1a102f');
-  skyGrad.addColorStop(0.5, '#4a2838');
-  skyGrad.addColorStop(1, '#6b301c');
-  ctx.fillStyle = skyGrad;
+  ctx.fillStyle = '#121212';
   ctx.fillRect(0, 0, width, height);
 
-  ctx.fillStyle = '#261726';
+  // Borda Externa Rústica
+  ctx.strokeStyle = '#3e3e3e';
+  ctx.lineWidth = 10;
+  ctx.strokeRect(5, 5, width - 10, height - 10);
+
+  // ==========================================
+  // TOP BAR (Ouro e Barras de Vida/Energia)
+  // ==========================================
+  ctx.fillStyle = '#0a0a0c';
+  ctx.fillRect(10, 10, width - 20, 45);
+  ctx.strokeStyle = '#d4af37';
+  ctx.lineWidth = 2;
   ctx.beginPath();
-  ctx.moveTo(0, height);
-  ctx.lineTo(0, 280);
-  ctx.bezierCurveTo(180, 220, 320, 310, 500, 260);
-  ctx.bezierCurveTo(650, 220, 750, 290, width, 250);
-  ctx.lineTo(width, height);
-  ctx.closePath();
-  ctx.fill();
-
-  ctx.fillStyle = '#180d17';
-  ctx.beginPath();
-  ctx.moveTo(0, height);
-  ctx.lineTo(0, 360);
-  ctx.bezierCurveTo(150, 320, 350, 400, 550, 350);
-  ctx.bezierCurveTo(700, 310, 780, 370, width, 340);
-  ctx.lineTo(width, height);
-  ctx.closePath();
-  ctx.fill();
-
-  const centerGlow = ctx.createRadialGradient(425, 250, 50, 425, 250, 400);
-  centerGlow.addColorStop(0, 'rgba(241, 196, 15, 0.18)');
-  centerGlow.addColorStop(0.6, 'rgba(142, 68, 173, 0.08)');
-  centerGlow.addColorStop(1, 'rgba(0, 0, 0, 0.45)');
-  ctx.fillStyle = centerGlow;
-  ctx.fillRect(0, 0, width, height);
-
-  ctx.strokeStyle = '#2b2118';
-  ctx.lineWidth = 4;
-  ctx.strokeRect(6, 6, width - 12, height - 12);
-
-  ctx.strokeStyle = '#f1c40f';
-  ctx.lineWidth = 1.5;
-  ctx.strokeRect(10, 10, width - 20, height - 20);
-
-  function drawGlassPanel(x: number, y: number, w: number, h: number) {
-    ctx.fillStyle = 'rgba(10, 8, 12, 0.65)';
-    ctx.strokeStyle = '#d4af37';
-    ctx.lineWidth = 1.8;
-    ctx.beginPath();
-    ctx.roundRect(x, y, w, h, 8);
-    ctx.fill();
-    ctx.stroke();
-  }
-
-  drawGlassPanel(22, 22, 240, 456); 
-  drawGlassPanel(274, 22, 302, 456);
-  drawGlassPanel(588, 22, 240, 456);
-
-  // ------------------------------------------
-  // PAINEL ESQUERDO: STATUS & ATRIBUTOS
-  // ------------------------------------------
-  ctx.fillStyle = '#f39c12';
-  ctx.font = 'bold 18px "InterFont", sans-serif';
-  ctx.fillText(name.toUpperCase(), 38, 52);
-
-  ctx.fillStyle = '#f1c40f';
-  ctx.font = 'bold 11px "InterFont", sans-serif';
-  ctx.fillText(`NV.${level} | ${className.toUpperCase()}`, 38, 70);
-  ctx.fillStyle = '#dcdcdc';
-  ctx.font = '11px "InterFont", sans-serif';
-  ctx.fillText(`KARMA: ${karma}  •  GEN: ${gen}`, 38, 86);
-  ctx.fillText(`LOCAL: ${locationName}`, 38, 102);
-
-  function drawRpgBar(y: number, label: string, current: number, max: number, barColor: string, iconDrawFn?: Function) {
-    const pct = Math.min(Math.round((current / (max || 1)) * 100), 100);
-    
-    if (iconDrawFn) {
-      iconDrawFn(ctx, 45, y - 1);
-      ctx.fillStyle = '#ffffff';
-      ctx.font = 'bold 10px "InterFont", sans-serif';
-      ctx.fillText(`${label}: ${current} / ${max} (${pct}%)`, 58, y);
-    } else {
-      ctx.fillStyle = '#ffffff';
-      ctx.font = 'bold 10px "InterFont", sans-serif';
-      ctx.fillText(`${label}: ${current} / ${max} (${pct}%)`, 38, y);
-    }
-
-    const startX = 38;
-    const barWidth = 210;
-
-    ctx.fillStyle = '#050403';
-    ctx.strokeStyle = '#4a3828';
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.roundRect(startX, y + 4, barWidth, 8, 3);
-    ctx.fill();
-    ctx.stroke();
-
-    const fillWidth = Math.min(((current || 0) / (max || 1)) * barWidth, barWidth);
-    if (fillWidth > 0) {
-      ctx.fillStyle = barColor;
-      ctx.beginPath();
-      ctx.roundRect(startX, y + 4, fillWidth, 8, 3);
-      ctx.fill();
-    }
-  }
-
-  drawRpgBar(122, 'XP', currentXp, maxXp, '#95a5a6');
-  drawRpgBar(156, 'HP', currentHp, maxHp, '#e74c3c', drawHeartIcon);
-  drawRpgBar(190, 'ENERGIA', currentEnergy, maxEnergy, '#f39c12', drawEnergyIcon);
-
-  ctx.strokeStyle = '#5a4533';
-  ctx.lineWidth = 1;
-  ctx.beginPath();
-  ctx.moveTo(38, 215);
-  ctx.lineTo(248, 215);
+  ctx.moveTo(10, 55); ctx.lineTo(width - 10, 55);
   ctx.stroke();
 
-  ctx.fillStyle = '#f1c40f';
-  ctx.font = 'bold 11px "InterFont", sans-serif';
-  ctx.fillText('ATRIBUTOS DE COMBATE', 38, 238);
-
+  // Ouro (Esquerda)
+  drawCoinIcon(ctx, 30, 32);
   ctx.fillStyle = '#ffffff';
-  ctx.font = 'bold 12px "InterFont", sans-serif';
-  ctx.fillText(`FOR: ${str}    AGI: ${agi}    INT: ${intVal}`, 38, 262);
-  ctx.fillText(`VIT: ${vit}    SOR: ${lck}`, 38, 282);
+  ctx.font = 'bold 18px "InterFont", sans-serif';
+  ctx.fillText(`${gold.toLocaleString('pt-BR')}`, 45, 38);
 
-  ctx.fillStyle = '#e6caa3';
-  ctx.font = '11px "InterFont", sans-serif';
-  ctx.fillText(`Ataque: ${atk}   Defesa: ${def}`, 38, 312);
-  ctx.fillText(`Critico: ${crit.toFixed(1)}%   Esquiva: ${dodge.toFixed(1)}%`, 38, 332);
-
-  // ------------------------------------------
-  // PAINEL CENTRAL: AVATAR & EQUIPAMENTOS
-  // ------------------------------------------
-  const centerX = 425;
-  const centerY = 240;
-  const avatarRadius = 45;
-
-  const leftStartX = centerX - 135;
-  const rightStartX = centerX + 45;
-
-  // 🔮 COORDENADAS RECALCULADAS: 6 itens na esquerda, 5 na direita
-  const slotsCoords = [
-    // LADO ESQUERDO
-    { key: 'helmet', label: 'Elmo',    x: leftStartX, y: 60 },
-    { key: 'amulet', label: 'Amuleto', x: leftStartX, y: 122 },
-    { key: 'chest',  label: 'Peito',   x: leftStartX, y: 184 },
-    { key: 'gloves', label: 'Luvas',   x: leftStartX, y: 246 },
-    { key: 'pants',  label: 'Calças',  x: leftStartX, y: 308 },
-    { key: 'boots',  label: 'Botas',   x: leftStartX, y: 370 },
-
-    // LADO DIREITO
-    { key: 'weapon',   label: 'Arma',    x: rightStartX, y: 91 },
-    { key: 'shield',   label: 'Escudo',  x: rightStartX, y: 153 },
-    { key: 'ring',     label: 'Anel',    x: rightStartX, y: 215 },
-    { key: 'backpack', label: 'Mochila', x: rightStartX, y: 277 },
-    { key: 'pet',      label: 'Pet',     x: rightStartX, y: 339 }
-  ];
-
-  ctx.strokeStyle = '#d4af37';
-  ctx.lineWidth = 1.5;
-  for (const s of slotsCoords) {
-    const slotCenterX = s.x + 45;
-    const slotCenterY = s.y + 24;
-
-    const angle = Math.atan2(slotCenterY - centerY, slotCenterX - centerX);
-    const startX = centerX + Math.cos(angle) * (avatarRadius + 3);
-    const startY = centerY + Math.sin(angle) * (avatarRadius + 3);
-
-    ctx.beginPath();
-    ctx.moveTo(startX, startY);
-    ctx.lineTo(slotCenterX, slotCenterY);
-    ctx.stroke();
+  // Barras HP / EN (Direita)
+  function drawMiniBar(x: number, y: number, w: number, h: number, current: number, max: number, color: string, label: string) {
+    ctx.fillStyle = '#222';
+    ctx.fillRect(x, y, w, h);
+    const pct = Math.min(current / (max || 1), 1);
+    ctx.fillStyle = color;
+    ctx.fillRect(x, y, w * pct, h);
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 11px "InterFont", sans-serif';
+    ctx.fillText(label, x - 25, y + 10);
   }
+  drawMiniBar(380, 20, 130, 12, currentHp, maxHp, '#e74c3c', 'HP');
+  drawMiniBar(380, 36, 130, 12, currentEnergy, maxEnergy, '#f39c12', 'EN');
+
+  // ==========================================
+  // HEADER (HERO -> Nome do Personagem)
+  // ==========================================
+  ctx.fillStyle = '#2c1e16'; // Fundo avermelhado/marrom escuro
+  ctx.fillRect(10, 56, width - 20, 60);
+  
+  ctx.textAlign = 'center';
+  ctx.fillStyle = '#f1c40f';
+  ctx.font = 'bold 30px "InterFont", sans-serif';
+  ctx.fillText(name.toUpperCase(), width / 2, 92);
+  
+  ctx.fillStyle = '#dcdcdc';
+  ctx.font = 'bold 13px "InterFont", sans-serif';
+  ctx.fillText(`Karma: ${karma}  |  Local: ${locationName}`, width / 2, 110);
+  ctx.textAlign = 'left';
+
+  // ==========================================
+  // ÁREA DO AVATAR E EQUIPAMENTOS (11 Slots)
+  // ==========================================
+  const equipAreaY = 116;
+  ctx.fillStyle = '#1a1a1a';
+  ctx.fillRect(10, equipAreaY, width - 20, 420);
+
+  // CAIXA DO AVATAR CENTRAL
+  const avSize = 180;
+  const avX = (width / 2) - (avSize / 2);
+  const avY = equipAreaY + 30;
 
   if (avatarUrl) {
     try {
       const avatar = await loadImage(avatarUrl);
-      ctx.save();
-      ctx.beginPath();
-      ctx.arc(centerX, centerY, avatarRadius, 0, Math.PI * 2);
-      ctx.closePath();
-      ctx.clip();
-      ctx.drawImage(avatar, centerX - avatarRadius, centerY - avatarRadius, avatarRadius * 2, avatarRadius * 2);
-      ctx.restore();
-
-      ctx.strokeStyle = '#f1c40f';
-      ctx.lineWidth = 3;
-      ctx.beginPath();
-      ctx.arc(centerX, centerY, avatarRadius, 0, Math.PI * 2);
-      ctx.stroke();
-    } catch (err) {
-      console.error('Erro avatar Canvas:', err);
-    }
+      ctx.drawImage(avatar, avX, avY, avSize, avSize);
+    } catch {}
   }
+  ctx.strokeStyle = '#5c4033';
+  ctx.lineWidth = 4;
+  ctx.strokeRect(avX, avY, avSize, avSize);
 
-  for (const slot of slotsCoords) {
-    const itemName = slotItems[slot.key as keyof typeof slotItems] || '—';
+  // Placa de Classe/Level
+  ctx.fillStyle = '#d4af37';
+  ctx.fillRect(avX - 10, avY - 15, avSize + 20, 25);
+  ctx.fillStyle = '#111';
+  ctx.textAlign = 'center';
+  ctx.font = 'bold 16px "InterFont", sans-serif';
+  ctx.fillText(className.toUpperCase(), width / 2, avY + 3);
 
-    ctx.fillStyle = 'rgba(10, 8, 12, 0.85)';
-    ctx.strokeStyle = '#5a4533';
-    ctx.lineWidth = 1.5;
-    ctx.beginPath();
-    ctx.roundRect(slot.x, slot.y, 90, 48, 5);
-    ctx.fill();
-    ctx.stroke();
+  ctx.fillStyle = '#111';
+  ctx.fillRect(avX, avY + avSize - 25, avSize, 25);
+  ctx.fillStyle = '#f1c40f';
+  ctx.font = 'bold 16px "InterFont", sans-serif';
+  ctx.fillText(`Lv: ${level}`, width / 2, avY + avSize - 7);
+  ctx.textAlign = 'left';
 
-    ctx.fillStyle = '#f1c40f';
-    ctx.font = 'bold 9px "InterFont", sans-serif';
-    ctx.fillText(`[ ${slot.label.toUpperCase()} ]`, slot.x + 6, slot.y + 13);
-
-    ctx.fillStyle = itemName !== '—' ? '#ffffff' : '#7a6450';
-    ctx.font = 'bold 11px "InterFont", sans-serif';
-
-    if (itemName.length > 13) {
-      const parts = itemName.split(' ');
-      if (parts.length > 1) {
-        ctx.fillText(parts[0], slot.x + 6, slot.y + 27);
-        ctx.fillText(parts.slice(1).join(' ').substring(0, 12), slot.x + 6, slot.y + 39);
+  // DESENHAR OS SLOTS (Caixinhas 60x60)
+  function drawSlot(x: number, y: number, itemName: string, label: string) {
+    ctx.fillStyle = '#222';
+    ctx.fillRect(x, y, 60, 60);
+    ctx.strokeStyle = itemName ? '#d4af37' : '#3e3e3e';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(x, y, 60, 60);
+    
+    if (itemName) {
+      ctx.fillStyle = '#fff';
+      ctx.font = 'bold 10px "InterFont", sans-serif';
+      ctx.textAlign = 'center';
+      const words = itemName.split(' ');
+      if (words.length > 1) {
+        ctx.fillText(words[0].substring(0, 9), x + 30, y + 28);
+        ctx.fillText(words[1].substring(0, 9), x + 30, y + 40);
       } else {
-        ctx.fillText(itemName.substring(0, 13) + '..', slot.x + 6, slot.y + 32);
+        ctx.fillText(itemName.substring(0, 9), x + 30, y + 34);
       }
+      ctx.textAlign = 'left';
     } else {
-      ctx.fillText(itemName, slot.x + 6, slot.y + 31);
+      ctx.fillStyle = '#555';
+      ctx.font = '10px "InterFont", sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText(label, x + 30, y + 34);
+      ctx.textAlign = 'left';
     }
   }
 
-  // ------------------------------------------
-  // PAINEL DIREITO: ECONOMIA, DIVINDADE & CD
-  // ------------------------------------------
-  const rightX = 604;
+  // Colunas Laterais
+  const leftX = 30;
+  const rightX = 450;
+  let currentY = equipAreaY + 20;
 
-  ctx.fillStyle = '#ffffff';
-  ctx.font = 'bold 14px "InterFont", sans-serif';
-  ctx.fillText(`PODER: #${power.toLocaleString('pt-BR')}`, rightX, 52);
+  // Lado Esquerdo (6 Slots)
+  drawSlot(leftX, currentY, slotItems.helmet, 'Elmo');
+  drawSlot(leftX, currentY + 65, slotItems.amulet, 'Amul.');
+  drawSlot(leftX, currentY + 130, slotItems.chest, 'Peito');
+  drawSlot(leftX, currentY + 195, slotItems.gloves, 'Luva');
+  drawSlot(leftX, currentY + 260, slotItems.pants, 'Calça');
+  drawSlot(leftX, currentY + 325, slotItems.boots, 'Bota');
 
-  drawCoinIcon(ctx, rightX + 8, 70);
+  // Lado Direito (5 Slots)
+  drawSlot(rightX, currentY, slotItems.weapon, 'Arma');
+  drawSlot(rightX, currentY + 65, slotItems.shield, 'Escudo');
+  drawSlot(rightX, currentY + 130, slotItems.ring, 'Anel');
+  drawSlot(rightX, currentY + 195, slotItems.backpack, 'Mochila');
+  drawSlot(rightX, currentY + 260, slotItems.pet, 'Pet');
+
+  // DEBAIXO DO AVATAR (Poder, Habilidade, Casamento)
+  const underAvY = avY + avSize + 15;
+  ctx.fillStyle = '#222';
+  ctx.strokeStyle = '#5c4033';
+  ctx.fillRect(avX - 10, underAvY, avSize + 20, 100);
+  ctx.strokeRect(avX - 10, underAvY, avSize + 20, 100);
+  
+  ctx.fillStyle = '#e74c3c';
+  ctx.font = 'bold 16px "InterFont", sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText(`⚔️ PODER: ${power.toLocaleString('pt-BR')}`, width / 2, underAvY + 25);
+  
   ctx.fillStyle = '#f1c40f';
-  ctx.font = 'bold 13px "InterFont", sans-serif';
-  ctx.fillText(`OURO: ${gold.toLocaleString('pt-BR')} G`, rightX + 22, 73);
-
-  ctx.fillStyle = '#e6caa3';
-  ctx.font = '11px "InterFont", sans-serif';
-  ctx.fillText(marriageText, rightX, 90);
-
-  ctx.strokeStyle = '#5a4533';
-  ctx.lineWidth = 1;
-  ctx.beginPath();
-  ctx.moveTo(rightX, 102);
-  ctx.lineTo(rightX + 208, 102);
-  ctx.stroke();
-
-  ctx.fillStyle = '#f1c40f';
-  ctx.font = 'bold 11px "InterFont", sans-serif';
-  ctx.fillText('HABILIDADE DIVINA', rightX, 122);
-
-  ctx.fillStyle = '#ffffff';
   ctx.font = 'bold 12px "InterFont", sans-serif';
-  ctx.fillText(`${divineName} [Rank ${divineRank}]`, rightX, 140);
+  ctx.fillText(`🌟 HABILIDADE: ${divineName.substring(0, 18)}`, width / 2, underAvY + 50);
 
-  ctx.fillStyle = '#f1c40f';
-  ctx.font = 'bold 11px "InterFont", sans-serif';
-  ctx.fillText('HISTÓRICO DE BATALHA', rightX, 172);
+  ctx.fillStyle = '#3498db';
+  ctx.fillText(`💍 ${marriageText}`, width / 2, underAvY + 75);
+  ctx.textAlign = 'left';
 
-  ctx.fillStyle = '#ffffff';
-  ctx.font = '11px "InterFont", sans-serif';
-  ctx.fillText(`Vitórias: ${wins}   Mortes: ${deaths}`, rightX, 192);
-  ctx.fillText(`PvP: ${pvpWins}W / ${pvpLosses}L   Boss: ${bosses}`, rightX, 210);
 
-  ctx.fillStyle = '#f1c40f';
-  ctx.font = 'bold 11px "InterFont", sans-serif';
-  ctx.fillText('COOLDOWNS DE ATIVIDADES', rightX, 242);
+  // ==========================================
+  // ÁREA DO INVENTÁRIO (Grid Inferior)
+  // ==========================================
+  const gridStartY = 540;
+  ctx.fillStyle = '#111';
+  ctx.fillRect(10, gridStartY, width - 20, height - gridStartY - 10);
+  
+  // Título da Aba de Inventário
+  ctx.fillStyle = '#2c1e16';
+  ctx.fillRect(10, gridStartY, width - 20, 35);
+  ctx.fillStyle = '#d4af37';
+  ctx.font = 'bold 16px "InterFont", sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText('🎒 INVENTÁRIO', width / 2, gridStartY + 23);
+  ctx.textAlign = 'left';
 
-  const cdList = [
-    { label: 'Dungeon', val: formatCooldown(char.lastDungeon, 5) },
-    { label: 'Caçada', val: 'PRONTO' },
-    { label: 'Viagem', val: formatCooldown(char.lastTravel, loc.travelCooldownMin) },
-    { label: 'Explorar', val: formatCooldown(char.lastExplore, 3) },
-    { label: 'Treino', val: formatCooldown(char.lastTrain, 20) },
-    { label: 'Pesca', val: formatCooldown(char.lastFishing, 10) },
-    { label: 'Meditar', val: formatCooldown(char.lastRest, 30) },
-    { label: 'PvP', val: formatCooldown(char.lastPvp, 10) }
-  ];
+  // Desenhando o Grid de Slots de Inventário (6 Colunas x 4 Linhas = 24 Slots)
+  const cols = 6;
+  const rows = 4;
+  const boxSize = 65;
+  const gap = 15;
+  
+  // Calcular margem esquerda para centralizar o grid
+  const totalGridWidth = (cols * boxSize) + ((cols - 1) * gap);
+  const startX = (width - totalGridWidth) / 2;
+  const startY = gridStartY + 50;
 
-  ctx.font = '10px "InterFont", sans-serif';
-  let cdY = 262;
-  for (const cd of cdList) {
-    ctx.fillStyle = '#dcdcdc';
-    ctx.fillText(`${cd.label}:`, rightX, cdY);
+  for (let i = 0; i < cols * rows; i++) {
+    const row = Math.floor(i / cols);
+    const col = i % cols;
+    const x = startX + col * (boxSize + gap);
+    const y = startY + row * (boxSize + gap);
 
-    ctx.fillStyle = cd.val === 'PRONTO' ? '#2ecc71' : '#e74c3c';
-    ctx.fillText(cd.val, rightX + 68, cdY);
+    // Fundo do Slot Vazio
+    ctx.fillStyle = '#1e1e1e';
+    ctx.fillRect(x, y, boxSize, boxSize);
+    ctx.strokeStyle = '#3e3e3e';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(x, y, boxSize, boxSize);
 
-    cdY += 17;
+    // Se tiver item no inventário, desenha dentro
+    if (inventory[i]) {
+      const itemData = getItem(inventory[i].itemId);
+      if (itemData) {
+        // Borda com a cor da raridade
+        ctx.strokeStyle = RARITY_COLORS[itemData.rarity] || '#ffffff';
+        ctx.lineWidth = 3;
+        ctx.strokeRect(x, y, boxSize, boxSize);
+
+        // Nome Abreviado do Item
+        ctx.fillStyle = '#ffffff';
+        ctx.font = 'bold 11px "InterFont", sans-serif';
+        ctx.textAlign = 'center';
+        
+        // Pega a primeira palavra forte do item pra caber no quadradinho
+        const shortName = stripEmojis(itemData.name).split(' ')[0].substring(0, 9);
+        ctx.fillText(shortName, x + boxSize / 2, y + boxSize / 2 + 4);
+
+        // Quantidade no canto inferior direito
+        ctx.fillStyle = '#f1c40f';
+        ctx.font = 'bold 11px "InterFont", sans-serif';
+        ctx.textAlign = 'right';
+        ctx.fillText(`x${inventory[i].quantity}`, x + boxSize - 4, y + boxSize - 4);
+        ctx.textAlign = 'left';
+      }
+    }
   }
 
   return canvas.toBuffer('image/png');

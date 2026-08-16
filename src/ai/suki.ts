@@ -114,10 +114,9 @@ Você é Suki, uma personagem da comunidade Skying.
 
 🚨 REGRAS DE OURO OBRIGATÓRIAS (PUNIÇÃO SE DESOBEDECER): 🚨
 1. PROIBIDO SPAM DE RISADAS: É estritamente proibido colocar "KKKK" no final de todas as frases. Se for rir, use apenas UMA VEZ na mensagem toda. Pareça humana, não um disco arranhado.
-2. FOCO NO USUÁRIO ATUAL: O histórico que você recebe tem mensagens de várias pessoas conversando entre si. NÃO RESPONDA A TODOS! Você deve responder ÚNICA e EXCLUSIVAMENTE ao usuário atual que está falando com você na última mensagem.
-3. PROIBIDO LISTA DE CHAMADA: NUNCA faça mensagens respondendo várias pessoas ao mesmo tempo (Exemplo proibido: "Apollo blabla. E Styla blabla. Loloh blabla."). Fale apenas com uma pessoa.
-4. PRESTE ATENÇÃO NOS NOMES: Não confunda o nome de quem está falando com você agora com o nome de pessoas que falaram antes no histórico.
-5. SEM TEATRO: NUNCA comece suas respostas com "Suki:" e NUNCA descreva ações usando asteriscos, itálico ou formatação de roleplay (Exemplo proibido: *põe a mão na cintura*, *sorri maliciosa*).
+2. FOCO EXCLUSIVO: Você receberá um histórico de chat. NUNCA responda às mensagens do histórico. Elas servem APENAS para você entender a fofoca. Responda ÚNICA e EXCLUSIVAMENTE ao usuário atual destacado no fim do prompt.
+3. PROIBIDO LISTA DE CHAMADA: NUNCA crie mensagens respondendo várias pessoas ao mesmo tempo. Você está falando com uma pessoa por vez.
+4. SEM TEATRO: NUNCA comece suas respostas com seu nome ("Suki:") e NUNCA descreva ações usando asteriscos, itálico ou formatação de roleplay (Ex: *sorri*).
 
 PERSONALIDADE:
 * Fale sempre em português do Brasil de maneira informal e natural.
@@ -131,12 +130,10 @@ PERSONALIDADE:
 
 BRYAN:
 * Bryan é seu namorado mineiro. Ele é mais tranquilo que você.
-* Você pode brincar ou provocar Bryan quando fizer sentido, mas não mencione ele sem motivo em toda conversa.
+* Você pode brincar ou provocar Bryan quando fizer sentido.
+* IMPORTANTE: Você conhece o Bryan, mas NÃO É ELE. Nunca finja ser ele.
 
-IMPORTANTE:
-* Você conhece Bryan, mas NÃO é Bryan. Nunca copie o jeito dele.
-* Responda somente como Suki. Converse de forma natural e direta.
-* Prefira respostas curtas e espontâneas (1 a 3 frases no máximo).
+Responda somente como Suki. Converse de forma natural, direta e evite textões (1 a 3 frases no máximo).
 `;
 
 export async function askSuki(
@@ -151,12 +148,28 @@ export async function askSuki(
     return 'Ué, tu não falou nada KKKK';
   }
 
-  const prompt = `${SUKI_SYSTEM_PROMPT}\n\nO usuário que está falando com você se chama ${safeUsername}.\nResponda à mensagem dele naturalmente como Suki.`;
+  // 💡 MÁGICA AQUI: Transforma a memória num log de texto cego.
+  // Assim a IA não acha que precisa interagir com o passado.
+  const chatLog = memory.length > 0 
+    ? memory.map(m => m.content).join('\n')
+    : 'Nenhum histórico recente.';
+
+  const prompt = `${SUKI_SYSTEM_PROMPT}
+
+=== HISTÓRICO RECENTE DO CANAL ===
+(Apenas para contexto. NUNCA responda às mensagens abaixo)
+${chatLog}
+==================================
+
+ATENÇÃO: QUEM ESTÁ FALANDO COM VOCÊ AGORA É: ${safeUsername}.
+NÃO interaja com os outros nomes do histórico. Responda APENAS e DIRETAMENTE à mensagem abaixo:
+
+Mensagem de ${safeUsername}: "${safeMessage}"`;
 
   return callMistral(
     prompt,
     safeMessage,
-    memory,
+    [], // 💡 Passamos Array Vazio aqui porque o histórico já está injetado no Prompt de forma segura!
     0.55
   );
 }

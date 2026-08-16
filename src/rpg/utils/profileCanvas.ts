@@ -391,7 +391,7 @@ export async function generateProfileCard(char: any, stats: any, avatarUrlInput?
 
   // Título
   ctx.fillStyle = '#2c1e16';
-  ctx.beginPath(); ctx.roundRect(20, invY, width - 40, 40, { upperLeft: 10, upperRight: 10 }); ctx.fill();
+  ctx.beginPath(); ctx.roundRect(20, invY, width - 40, 40, [10, 10, 0, 0]); ctx.fill();
   ctx.fillStyle = '#d4af37';
   ctx.font = 'bold 16px "InterFont", sans-serif';
   ctx.textAlign = 'center';

@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════
-// INIMIGOS E BOSSES (COM SISTEMA HÍBRIDO)
+// INIMIGOS E BOSSES (AUDITADOS E BALANCEADOS)
 // ═══════════════════════════════════════════════════════════════════════
 
 export type EnemyType = 'normal' | 'elite' | 'boss' | 'raid';
@@ -16,43 +16,38 @@ export interface Enemy {
   name: string;
   emoji: string;
   type: EnemyType;
-  locationIds: string[];   // Voltamos para Array para múltiplos locais!
+  locationIds: string[];
   
-  // Níveis
-  level: number;           // Apelido para o combate novo
+  level: number;
   minLevel: number;
   maxLevel?: number;
   
-  // Status
-  hp: number;              // Apelido
+  hp: number;
   baseHp: number;
-  attack: number;          // Apelido
+  attack: number;
   baseAttack: number;
-  defense: number;         // Apelido
+  defense: number;
   baseDefense: number;
   speed: number;
   
-  // Economia e Recompensas
   xpReward: number;
   goldMin: number;
   goldMax: number;
-  goldReward: { min: number; max: number }; // Novo Sistema
-  drops: DropRule[];       // Novo Sistema de Drops
-  dropTable: { itemId: string; chance: number }[]; // Tabela Antiga
+  goldReward: { min: number; max: number };
+  drops: DropRule[];
+  dropTable: { itemId: string; chance: number }[];
   
-  // Táticas
   abilities?: string[];
   karmaEffect?: number;
   weakness?: string;
   resistance?: string;
 }
 
-// ─── SEUS MONSTROS ORIGINAIS ───
 const RAW_ENEMIES: Record<string, any> = {
-  // ─── Cidade Inicial / Floresta dos Iniciantes ──────────────────────────────
+  // ─── Arredores da Sede Lumina / Floresta ──────────────────────────────────
   lobo: {
     id: 'lobo', name: 'Lobo Selvagem', emoji: '🐺', type: 'normal',
-    locationIds: ['floresta_iniciantes', 'cidade_inicial'],
+    locationIds: ['floresta_iniciantes'],
     minLevel: 1, maxLevel: 5,
     baseHp: 160, baseAttack: 22, baseDefense: 10, speed: 7,
     xpReward: 30, goldMin: 10, goldMax: 25,
@@ -60,7 +55,7 @@ const RAW_ENEMIES: Record<string, any> = {
   },
   goblin: {
     id: 'goblin', name: 'Goblin', emoji: '👺', type: 'normal',
-    locationIds: ['floresta_iniciantes', 'cidade_inicial'],
+    locationIds: ['floresta_iniciantes'],
     minLevel: 1, maxLevel: 6,
     baseHp: 130, baseAttack: 18, baseDefense: 8, speed: 8,
     xpReward: 25, goldMin: 12, goldMax: 30,
@@ -69,7 +64,7 @@ const RAW_ENEMIES: Record<string, any> = {
   },
   slime: {
     id: 'slime', name: 'Slime Verde', emoji: '🟢', type: 'normal',
-    locationIds: ['floresta_iniciantes', 'cidade_inicial'],
+    locationIds: ['floresta_iniciantes'],
     minLevel: 1, maxLevel: 4,
     baseHp: 110, baseAttack: 14, baseDefense: 6, speed: 3,
     xpReward: 20, goldMin: 5, goldMax: 15,
@@ -77,7 +72,7 @@ const RAW_ENEMIES: Record<string, any> = {
   },
   rato_gigante: {
     id: 'rato_gigante', name: 'Rato Gigante', emoji: '🐀', type: 'normal',
-    locationIds: ['floresta_iniciantes', 'cidade_inicial'],
+    locationIds: ['floresta_iniciantes'],
     minLevel: 1, maxLevel: 3,
     baseHp: 90, baseAttack: 16, baseDefense: 5, speed: 9,
     xpReward: 15, goldMin: 4, goldMax: 12,
@@ -85,27 +80,21 @@ const RAW_ENEMIES: Record<string, any> = {
   },
   fungo_venenoso: {
     id: 'fungo_venenoso', name: 'Fungo Venenoso', emoji: '🍄', type: 'normal',
-    locationIds: ['floresta_iniciantes', 'cidade_inicial'],
+    locationIds: ['floresta_iniciantes'],
     minLevel: 2, maxLevel: 7,
     baseHp: 140, baseAttack: 18, baseDefense: 8, speed: 2,
     xpReward: 28, goldMin: 8, goldMax: 20,
     dropTable: [{ itemId: 'erva_medicinal', chance: 55 }, { itemId: 'pocao_de_vida_p', chance: 15 }],
-    abilities: ['Veneno (2 dano/turno por 3 turnos)'],
-    weakness: 'fogo',
+    abilities: ['Veneno (2 dano/turno por 3 turnos)'], weakness: 'fogo',
   },
   rei_goblin: {
     id: 'rei_goblin', name: 'Rei Goblin', emoji: '👑', type: 'boss',
-    locationIds: ['floresta_iniciantes', 'cidade_inicial'],
+    locationIds: ['floresta_iniciantes'],
     minLevel: 5,
     baseHp: 950, baseAttack: 58, baseDefense: 35, speed: 6,
     xpReward: 350, goldMin: 150, goldMax: 280,
-    dropTable: [
-      { itemId: 'espada_de_ferro', chance: 30 },
-      { itemId: 'capacete_de_ferro', chance: 25 },
-      { itemId: 'fragmento_de_boss', chance: 50 },
-    ],
-    abilities: ['Grito de Guerra (+30% ataque por 2 turnos)', 'Chama Gobelins (invoca 2 Goblins)'],
-    karmaEffect: 5,
+    dropTable: [{ itemId: 'espada_de_ferro', chance: 30 }, { itemId: 'capacete_de_ferro', chance: 25 }, { itemId: 'fragmento_de_boss', chance: 50 }],
+    abilities: ['Grito de Guerra (+30% ataque)', 'Chama Gobelins'], karmaEffect: 5,
   },
 
   // ─── Ilha da Floresta ──────────────────────────────────────────────────────
@@ -125,8 +114,7 @@ const RAW_ENEMIES: Record<string, any> = {
     baseHp: 750, baseAttack: 55, baseDefense: 50, speed: 2,
     xpReward: 160, goldMin: 70, goldMax: 140,
     dropTable: [{ itemId: 'minerio_de_ferro', chance: 60 }, { itemId: 'cristal_arcano', chance: 15 }],
-    abilities: ['Raízes (prende por 1 turno)', 'Regeneração (recupera 5% HP/turno)'],
-    weakness: 'fogo',
+    abilities: ['Raízes (prende por 1 turno)', 'Regeneração'], weakness: 'fogo',
   },
   elfo_das_sombras: {
     id: 'elfo_das_sombras', name: 'Elfo das Sombras', emoji: '🧝', type: 'normal',
@@ -142,13 +130,8 @@ const RAW_ENEMIES: Record<string, any> = {
     minLevel: 10,
     baseHp: 2200, baseAttack: 105, baseDefense: 85, speed: 5,
     xpReward: 850, goldMin: 350, goldMax: 650,
-    dropTable: [
-      { itemId: 'arco_elfico', chance: 15 },
-      { itemId: 'botas_velozes', chance: 20 },
-      { itemId: 'fragmento_de_boss', chance: 60 },
-    ],
-    abilities: ['Tempestade de Folhas (dano em área)', 'Raízes Sagradas (cura 10% HP)'],
-    karmaEffect: 8, weakness: 'fogo',
+    dropTable: [{ itemId: 'arco_elfico', chance: 15 }, { itemId: 'botas_velozes', chance: 20 }, { itemId: 'fragmento_de_boss', chance: 60 }],
+    abilities: ['Tempestade de Folhas', 'Raízes Sagradas'], karmaEffect: 8, weakness: 'fogo',
   },
 
   // ─── Cavernas Sombrias ─────────────────────────────────────────────────────
@@ -159,8 +142,7 @@ const RAW_ENEMIES: Record<string, any> = {
     baseHp: 320, baseAttack: 62, baseDefense: 28, speed: 8,
     xpReward: 110, goldMin: 45, goldMax: 90,
     dropTable: [{ itemId: 'pocao_de_vida_m', chance: 30 }, { itemId: 'cristal_arcano', chance: 20 }],
-    abilities: ['Drenar Sangue (rouba 15% do dano causado como HP)'],
-    weakness: 'luz',
+    abilities: ['Drenar Sangue'], weakness: 'luz',
   },
   golem_de_pedra: {
     id: 'golem_de_pedra', name: 'Golem de Pedra', emoji: '🪨', type: 'elite',
@@ -169,8 +151,7 @@ const RAW_ENEMIES: Record<string, any> = {
     baseHp: 1100, baseAttack: 85, baseDefense: 110, speed: 1,
     xpReward: 220, goldMin: 100, goldMax: 200,
     dropTable: [{ itemId: 'minerio_de_aco', chance: 50 }, { itemId: 'fragmento_de_boss', chance: 10 }],
-    abilities: ['Pele de Pedra (+50% defesa em turnos ímpares)'],
-    weakness: 'magia',
+    abilities: ['Pele de Pedra'], weakness: 'magia',
   },
   aranha_gigante: {
     id: 'aranha_gigante', name: 'Aranha Gigante', emoji: '🕷️', type: 'normal',
@@ -179,7 +160,7 @@ const RAW_ENEMIES: Record<string, any> = {
     baseHp: 380, baseAttack: 68, baseDefense: 32, speed: 7,
     xpReward: 125, goldMin: 50, goldMax: 100,
     dropTable: [{ itemId: 'couro_bruto', chance: 55 }, { itemId: 'pocao_de_vida_m', chance: 20 }],
-    abilities: ['Teia (reduz velocidade do alvo à metade)'],
+    abilities: ['Teia (reduz velocidade)'],
   },
   morto_vivo: {
     id: 'morto_vivo', name: 'Morto-Vivo', emoji: '🧟', type: 'normal',
@@ -196,14 +177,8 @@ const RAW_ENEMIES: Record<string, any> = {
     minLevel: 15,
     baseHp: 4200, baseAttack: 150, baseDefense: 110, speed: 7,
     xpReward: 1500, goldMin: 600, goldMax: 1100,
-    dropTable: [
-      { itemId: 'coroa_das_sombras', chance: 8 },
-      { itemId: 'espada_das_ruinas', chance: 12 },
-      { itemId: 'fragmento_de_boss', chance: 70 },
-      { itemId: 'cristal_arcano', chance: 40 },
-    ],
-    abilities: ['Maldição (-30% stats por 3 turnos)', 'Nova das Trevas (dano maciço)'],
-    karmaEffect: 10, weakness: 'luz',
+    dropTable: [{ itemId: 'coroa_das_sombras', chance: 8 }, { itemId: 'espada_das_ruinas', chance: 12 }, { itemId: 'fragmento_de_boss', chance: 70 }],
+    abilities: ['Maldição (-30% stats)', 'Nova das Trevas'], karmaEffect: 10, weakness: 'luz',
   },
 
   // ─── Ruínas Antigas ────────────────────────────────────────────────────────
@@ -214,7 +189,7 @@ const RAW_ENEMIES: Record<string, any> = {
     baseHp: 1300, baseAttack: 100, baseDefense: 95, speed: 4,
     xpReward: 280, goldMin: 140, goldMax: 260,
     dropTable: [{ itemId: 'cristal_arcano', chance: 45 }, { itemId: 'minerio_de_aco', chance: 40 }],
-    abilities: ['Escudo Arcano (imune a magias por 1 turno)'],
+    abilities: ['Escudo Arcano'],
   },
   guardiao_ancestral: {
     id: 'guardiao_ancestral', name: 'Guardião Ancestral', emoji: '🏛️', type: 'boss',
@@ -222,13 +197,28 @@ const RAW_ENEMIES: Record<string, any> = {
     minLevel: 20,
     baseHp: 6500, baseAttack: 190, baseDefense: 160, speed: 5,
     xpReward: 2500, goldMin: 1100, goldMax: 1900,
-    dropTable: [
-      { itemId: 'cajado_arcano', chance: 15 },
-      { itemId: 'escudo_sagrado', chance: 10 },
-      { itemId: 'fragmento_de_boss', chance: 80 },
-    ],
-    abilities: ['Olho Ancestral (dano verdadeiro)', 'Memória Antiga (ressuscita com 30% HP uma vez)'],
-    karmaEffect: 12,
+    dropTable: [{ itemId: 'cajado_arcano', chance: 15 }, { itemId: 'escudo_sagrado', chance: 10 }, { itemId: 'fragmento_de_boss', chance: 80 }],
+    abilities: ['Olho Ancestral', 'Memória Antiga'], karmaEffect: 12,
+  },
+
+  // ─── Pântano Maldito (Mobs Novos!) ──────────────────────────────────────────
+  espirito_podre: {
+    id: 'espirito_podre', name: 'Espírito Podre', emoji: '👻', type: 'normal',
+    locationIds: ['pantano_maldito'],
+    minLevel: 20, maxLevel: 28,
+    baseHp: 600, baseAttack: 95, baseDefense: 50, speed: 6,
+    xpReward: 180, goldMin: 80, goldMax: 150,
+    dropTable: [{ itemId: 'erva_medicinal', chance: 60 }, { itemId: 'pocao_de_vida_g', chance: 10 }],
+    weakness: 'luz', resistance: 'trevas',
+  },
+  bruxa_suprema: {
+    id: 'bruxa_suprema', name: 'Bruxa Suprema', emoji: '🧙‍♀️', type: 'boss',
+    locationIds: ['pantano_maldito'],
+    minLevel: 24,
+    baseHp: 3800, baseAttack: 160, baseDefense: 100, speed: 5,
+    xpReward: 1200, goldMin: 500, goldMax: 800,
+    dropTable: [{ itemId: 'cajado_arcano', chance: 20 }, { itemId: 'fragmento_de_boss', chance: 60 }],
+    abilities: ['Poção Ácida', 'Maldição do Sapo'], karmaEffect: 10,
   },
 
   // ─── Montanhas Geladas ─────────────────────────────────────────────────────
@@ -238,12 +228,8 @@ const RAW_ENEMIES: Record<string, any> = {
     minLevel: 25, maxLevel: 35,
     baseHp: 2600, baseAttack: 190, baseDefense: 140, speed: 6,
     xpReward: 550, goldMin: 300, goldMax: 600,
-    dropTable: [
-      { itemId: 'cristal_arcano', chance: 50 },
-      { itemId: 'fragmento_de_boss', chance: 30 },
-    ],
-    abilities: ['Sopro de Gelo (congela por 2 turnos)', 'Cauda de Gelo (-30% velocidade)'],
-    resistance: 'gelo', weakness: 'fogo',
+    dropTable: [{ itemId: 'cristal_arcano', chance: 50 }, { itemId: 'fragmento_de_boss', chance: 30 }],
+    abilities: ['Sopro de Gelo', 'Cauda de Gelo'], resistance: 'gelo', weakness: 'fogo',
   },
   dragao_anciag: {
     id: 'dragao_anciag', name: 'Dragão Ancião Gélido', emoji: '🐲', type: 'boss',
@@ -251,14 +237,27 @@ const RAW_ENEMIES: Record<string, any> = {
     minLevel: 30,
     baseHp: 12500, baseAttack: 320, baseDefense: 230, speed: 7,
     xpReward: 5000, goldMin: 2200, goldMax: 3800,
-    dropTable: [
-      { itemId: 'arco_elfico', chance: 10 },
-      { itemId: 'espada_lendaria', chance: 2 },
-      { itemId: 'dragao_miniatura', chance: 5 },
-      { itemId: 'fragmento_de_boss', chance: 90 },
-    ],
-    abilities: ['Tempestade Gelada (dano + congelamento total)', 'Escamas de Diamante (+100% defesa por 2 turnos)', 'Rugido do Abismo (reduz seus stats em 20%)'],
-    karmaEffect: 20, resistance: 'gelo', weakness: 'fogo',
+    dropTable: [{ itemId: 'arco_elfico', chance: 10 }, { itemId: 'espada_lendaria', chance: 2 }, { itemId: 'dragao_miniatura', chance: 5 }, { itemId: 'fragmento_de_boss', chance: 90 }],
+    abilities: ['Tempestade Gelada', 'Escamas de Diamante'], karmaEffect: 20, resistance: 'gelo', weakness: 'fogo',
+  },
+
+  // ─── Deserto Ardente (Mobs Novos!) ─────────────────────────────────────────
+  escorpiao_gigante: {
+    id: 'escorpiao_gigante', name: 'Escorpião Gigante', emoji: '🦂', type: 'normal',
+    locationIds: ['deserto_ardente'],
+    minLevel: 30, maxLevel: 38,
+    baseHp: 1500, baseAttack: 180, baseDefense: 130, speed: 7,
+    xpReward: 400, goldMin: 150, goldMax: 280,
+    dropTable: [{ itemId: 'minerio_de_aco', chance: 50 }, { itemId: 'couro_bruto', chance: 40 }],
+  },
+  senhor_das_areias: {
+    id: 'senhor_das_areias', name: 'Senhor das Areias', emoji: '🧞', type: 'boss',
+    locationIds: ['deserto_ardente'],
+    minLevel: 35,
+    baseHp: 8500, baseAttack: 260, baseDefense: 180, speed: 8,
+    xpReward: 3200, goldMin: 1500, goldMax: 2500,
+    dropTable: [{ itemId: 'armadura_de_placas', chance: 15 }, { itemId: 'fragmento_de_boss', chance: 80 }],
+    abilities: ['Soterrar', 'Miragem'],
   },
 
   // ─── Torre do Abismo ───────────────────────────────────────────────────────
@@ -269,8 +268,7 @@ const RAW_ENEMIES: Record<string, any> = {
     baseHp: 3200, baseAttack: 310, baseDefense: 200, speed: 8,
     xpReward: 950, goldMin: 600, goldMax: 1200,
     dropTable: [{ itemId: 'fragmento_de_boss', chance: 40 }, { itemId: 'cristal_arcano', chance: 50 }],
-    abilities: ['Chamas do Inferno', 'Maldição Demoníaca'],
-    weakness: 'luz',
+    abilities: ['Chamas do Inferno'], weakness: 'luz',
   },
   arquidemonio: {
     id: 'arquidemonio', name: 'Arquidemônio', emoji: '😈', type: 'boss',
@@ -278,29 +276,28 @@ const RAW_ENEMIES: Record<string, any> = {
     minLevel: 45,
     baseHp: 22000, baseAttack: 520, baseDefense: 380, speed: 9,
     xpReward: 12000, goldMin: 7000, goldMax: 13000,
-    dropTable: [
-      { itemId: 'espada_lendaria', chance: 5 },
-      { itemId: 'fenix_sagrada', chance: 3 },
-      { itemId: 'fragmento_de_boss', chance: 100 },
-    ],
-    abilities: ['Portal do Abismo', 'Maldição Suprema', 'Forma Final (+100% stats)'],
-    karmaEffect: -15, weakness: 'luz',
+    dropTable: [{ itemId: 'espada_lendaria', chance: 5 }, { itemId: 'ouroboros', chance: 3 }, { itemId: 'fragmento_de_boss', chance: 100 }],
+    abilities: ['Portal do Abismo', 'Maldição Suprema'], karmaEffect: -15, weakness: 'luz',
   },
 
-  // ─── Reino das Sombras ─────────────────────────────────────────────────────
+  // ─── Reino das Sombras (Mobs Novos!) ───────────────────────────────────────
+  lich: {
+    id: 'lich', name: 'Lich Imortal', emoji: '🧟‍♂️', type: 'elite',
+    locationIds: ['reino_das_sombras'],
+    minLevel: 50, maxLevel: 60,
+    baseHp: 15000, baseAttack: 400, baseDefense: 250, speed: 6,
+    xpReward: 3500, goldMin: 1200, goldMax: 2500,
+    dropTable: [{ itemId: 'essencia_sombria', chance: 50 }, { itemId: 'grimorio_sombrio', chance: 5 }],
+    weakness: 'luz',
+  },
   o_rei_das_sombras: {
     id: 'o_rei_das_sombras', name: 'O Rei das Sombras', emoji: '👑', type: 'boss',
     locationIds: ['reino_das_sombras'],
     minLevel: 50,
     baseHp: 75000, baseAttack: 900, baseDefense: 600, speed: 10,
     xpReward: 38000, goldMin: 20000, goldMax: 45000,
-    dropTable: [
-      { itemId: 'espada_lendaria', chance: 20 },
-      { itemId: 'fenix_sagrada', chance: 10 },
-      { itemId: 'fragmento_de_boss', chance: 100 },
-    ],
-    abilities: ['Domínio das Sombras (nega todos os buffs)', 'Noite Eterna (reduz 50% dos stats)', 'Morte Imediata (5% matar instantâneo)'],
-    karmaEffect: -20,
+    dropTable: [{ itemId: 'espada_lendaria', chance: 20 }, { itemId: 'ouroboros', chance: 10 }, { itemId: 'fragmento_de_boss', chance: 100 }],
+    abilities: ['Domínio das Sombras', 'Noite Eterna'], karmaEffect: -20,
   },
 };
 
@@ -313,69 +310,46 @@ export const ENEMY_LIST: Enemy[] = [];
 
 for (const key of Object.keys(RAW_ENEMIES)) {
   const e = RAW_ENEMIES[key];
-  
   const converted: Enemy = {
     ...e,
-    // Apelidos necessários para não quebrar o combat.ts 
     level: e.minLevel,
     hp: e.baseHp,
     attack: e.baseAttack,
     defense: e.baseDefense,
     goldReward: { min: e.goldMin, max: e.goldMax },
-    
-    // Converte chance 60% para 0.60 para o novo sistema
     drops: e.dropTable ? e.dropTable.map((d: any) => ({
       itemId: d.itemId,
-      chance: d.chance / 100, // 60 vira 0.60
+      chance: d.chance / 100, 
       minQty: 1, 
       maxQty: 1 
     })) : [],
   };
-  
   ENEMIES[key] = converted;
   ENEMY_LIST.push(converted);
 }
 
-export function getEnemy(id: string): Enemy | undefined {
-  return ENEMIES[id];
-}
-
-// ─── FUNÇÕES DE AMBIENTE (FILTROS CORRIGIDOS PARA A DUNGEON) ───
+export function getEnemy(id: string): Enemy | undefined { return ENEMIES[id]; }
 
 export function getEnemiesForLocation(locationId: string, playerLevel?: number): Enemy[] {
-  let list = ENEMY_LIST.filter(e => 
-    e.locationIds.includes(locationId) && 
-    e.type !== 'boss' && e.type !== 'raid'
-  );
-  
+  let list = ENEMY_LIST.filter(e => e.locationIds.includes(locationId) && e.type !== 'boss' && e.type !== 'raid');
   if (playerLevel !== undefined) {
     const levelFiltered = list.filter(e => playerLevel >= e.minLevel);
-    // Se não tiver inimigo no nível, puxamos todos da região como fallback 
-    // para a Dungeon nunca ficar 100% vazia!
     if (levelFiltered.length > 0) return levelFiltered;
   }
-  
   return list;
 }
 
 export function getBossesForLocation(locationId: string, playerLevel?: number): Enemy[] {
-  let list = ENEMY_LIST.filter(e => 
-    e.locationIds.includes(locationId) && 
-    e.type === 'boss'
-  );
-  
+  let list = ENEMY_LIST.filter(e => e.locationIds.includes(locationId) && e.type === 'boss');
   if (playerLevel !== undefined) {
     const levelFiltered = list.filter(e => playerLevel >= e.minLevel);
     if (levelFiltered.length > 0) return levelFiltered;
   }
-  
   return list;
 }
 
-/** Escala os stats do inimigo com o nível do jogador (sua fórmula original aprimorada) */
 export function scaleEnemy(enemy: Enemy, playerLevel?: number): Enemy {
   if (!playerLevel) return enemy;
-  
   const scale = 1 + Math.max(0, playerLevel - enemy.minLevel) * 0.22;
   return {
     ...enemy,

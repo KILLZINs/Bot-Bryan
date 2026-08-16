@@ -388,6 +388,13 @@ model RpgCharacter {
   classMissions   RpgClassMission[]
   fishingSession  RpgFishingSession?
 
+  // 🎨 COSMÉTICOS
+  activeTitle         String?   // O título que está equipado agora
+  activeBackground    String?   // O fundo que está equipado agora
+  unlockedTitles      String    @default("") // Lista separada por vírgula dos títulos comprados
+  unlockedBackgrounds String    @default("") // Lista separada por vírgula dos fundos comprados
+}
+
   @@map("rpg_characters")
 }
 

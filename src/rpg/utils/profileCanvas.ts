@@ -6,7 +6,7 @@ import { getLocation } from '../constants/locations';
 import { DIVINE_SKILLS } from '../constants/skills';
 import { getMarriage } from '../services/marriage';
 import { prisma } from '../../database/client';
-import { COSMETIC_TITLES, COSMETIC_BACKGROUNDS } from '../constants/cosmetics'; // ✅ Import da Loja
+import { COSMETIC_TITLES, COSMETIC_BACKGROUNDS } from '../constants/cosmetics';
 
 // ==========================================
 // REGISTRO DE FONTES (Com suporte a Emojis!)
@@ -146,43 +146,45 @@ export async function generateProfileCard(char: any, stats: any, avatarUrlInput?
   }
 
   if (!hasCosmeticBg) {
-    // Céu Noturno / Masmorra
+    // Céu Noturno mais claro para dar contraste
     const bgGrad = ctx.createLinearGradient(0, 0, 0, height);
-    bgGrad.addColorStop(0, '#0a0514'); 
-    bgGrad.addColorStop(0.5, '#1a0b26'); 
-    bgGrad.addColorStop(1, '#05030a');
+    bgGrad.addColorStop(0, '#150a29'); 
+    bgGrad.addColorStop(0.5, '#26113b'); 
+    bgGrad.addColorStop(1, '#0a0514');
     ctx.fillStyle = bgGrad;
     ctx.fillRect(0, 0, width, height);
 
-    // Lua Mística
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
-    ctx.beginPath(); ctx.arc(150, 100, 45, 0, Math.PI*2); ctx.fill();
+    // Lua Mística (Movida um pouco para a direita para sair de trás do avatar)
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
+    ctx.beginPath(); ctx.arc(350, 100, 50, 0, Math.PI*2); ctx.fill();
     ctx.fillStyle = 'rgba(255, 255, 255, 0.1)';
-    ctx.beginPath(); ctx.arc(150, 100, 70, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc(350, 100, 80, 0, Math.PI*2); ctx.fill();
 
-    // Silhueta de Montanhas
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+    // Silhueta de Montanhas (Com uma cor mais sólida e visível)
+    ctx.fillStyle = 'rgba(10, 5, 20, 0.9)';
     ctx.beginPath();
     ctx.moveTo(0, height); ctx.lineTo(0, 450); ctx.lineTo(200, 320);
     ctx.lineTo(400, 450); ctx.lineTo(700, 250); ctx.lineTo(950, 400);
     ctx.lineTo(1200, 200); ctx.lineTo(1200, height); ctx.fill();
 
-    // Silhueta de Dragão Voando
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
+    // Silhueta de Dragão Voando (Aumentei ele um pouco e clareei a sombra)
+    ctx.fillStyle = 'rgba(5, 2, 10, 0.95)';
     ctx.beginPath();
-    ctx.moveTo(900, 150); ctx.quadraticCurveTo(920, 130, 950, 160);
-    ctx.quadraticCurveTo(940, 180, 910, 170); ctx.fill();
-    ctx.beginPath(); ctx.moveTo(925, 155); ctx.lineTo(980, 110); ctx.lineTo(950, 165); ctx.fill(); // Asa dir
-    ctx.beginPath(); ctx.moveTo(925, 155); ctx.lineTo(870, 120); ctx.lineTo(900, 165); ctx.fill(); // Asa esq
+    ctx.moveTo(850, 130); ctx.quadraticCurveTo(870, 110, 900, 140);
+    ctx.quadraticCurveTo(890, 160, 860, 150); ctx.fill();
+    ctx.beginPath(); ctx.moveTo(875, 135); ctx.lineTo(950, 80); ctx.lineTo(900, 145); ctx.fill(); // Asa dir
+    ctx.beginPath(); ctx.moveTo(875, 135); ctx.lineTo(800, 90); ctx.lineTo(850, 145); ctx.fill(); // Asa esq
   }
 
-  // Overlay Escuro para não brigar com os textos
-  ctx.fillStyle = 'rgba(15, 15, 20, 0.65)';
+  // Reduzi a opacidade do filtro escuro para o fundo respirar
+  ctx.fillStyle = 'rgba(15, 15, 20, 0.15)'; // Era 0.65
   ctx.fillRect(0, 0, width, height);
 
   // Borda
   ctx.strokeStyle = '#2b2d31'; ctx.lineWidth = 10; ctx.strokeRect(5, 5, width - 10, height - 10);
-  const panelBg = 'rgba(30, 31, 34, 0.85)'; 
+  
+  // 🔥 O SEGREDO: Transparência dos painéis de 85% para 55% para dar efeito de vidro
+  const panelBg = 'rgba(20, 21, 24, 0.55)'; 
   const panelStroke = '#383a40';
 
   // ==========================================

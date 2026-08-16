@@ -294,7 +294,7 @@ export default {
     // ── /rpg info <classe> ───────────────────────────────────────────────────
     if (sub === 'info') {
       await interaction.deferReply({ ephemeral: true });
-      const classId = interaction.options.getString('classe', true).toLowerCase();
+      const classId = interaction.options.getString('classe', true).toLowerCase().replace(/\s+/g, '_');
       const { getClass } = await import('../rpg/constants/classes');
       const cls = getClass(classId);
       if (!cls) {
@@ -304,7 +304,7 @@ export default {
 
       const embed = new EmbedBuilder()
         .setColor(cls.color)
-        .setTitle(`${cls.emoji} cls.name — Tier ${cls.tier}`)
+        .setTitle(`${cls.emoji} ${cls.name} — Tier ${cls.tier}`) // 🛠️ CORREÇÃO AQUI!
         .setDescription(`*${cls.lore}*`)
         .addFields(
           { name: '📊 Raridade', value: cls.rarity, inline: true },

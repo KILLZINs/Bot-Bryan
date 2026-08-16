@@ -12,7 +12,8 @@ export async function handleSelect(interaction: StringSelectMenuInteraction) {
     const selectedValue = interaction.values[0];
     const [, classId] = selectedValue.split(':');
 
-    const { getCharacter, createCharacter } = await import('../rpg/services/character');
+    const { getCharacter } = await import('../rpg/services/character');
+    const { prisma } = await import('../database/client');
     const existing = await getCharacter(interaction.user.id);
 
     if (existing) {
@@ -20,7 +21,17 @@ export async function handleSelect(interaction: StringSelectMenuInteraction) {
     }
 
     try {
-      await createCharacter(interaction.user.id, interaction.user.username, classId);
+      // Criamos direto no banco de dados para evitar erro da função não exportada
+      await prisma.rpgCharacter.create({
+        data: {
+          discordId: interaction.user.id,
+          username: interaction.user.username,
+          class: classId,
+          level: 1,
+          xp: 0,
+          gold: 0
+        }
+      });
       return interaction.editReply({ content: `✅ Personagem criado com sucesso! Você agora é um aventureiro da classe **${classId.toUpperCase()}**. Use \`/rpg perfil\` para ver seus status.` });
     } catch (err) {
       console.error('Erro ao criar personagem via select:', err);
@@ -60,6 +71,9 @@ export async function handleSelect(interaction: StringSelectMenuInteraction) {
     const item = isBg ? COSMETIC_BACKGROUNDS[itemId] : COSMETIC_TITLES[itemId];
     if (!item) return interaction.editReply({ content: '❌ Item não encontrado na loja.' });
 
+    // Forçamos o tipo (any) para o TypeScript parar de chorar sobre .name e .label
+    const itemName = isBg ? (item as any).name : (item as any).label;
+    
     const ownedList = isBg 
       ? (char.unlockedBackgrounds ? char.unlockedBackgrounds.split(',') : [])
       : (char.unlockedTitles ? char.unlockedTitles.split(',') : []);
@@ -73,7 +87,7 @@ export async function handleSelect(interaction: StringSelectMenuInteraction) {
         where: { discordId: interaction.user.id },
         data: isBg ? { activeBackground: null } : { activeTitle: null }
       });
-      return interaction.editReply({ content: `✅ Você desequipou o ${isBg ? 'fundo' : 'título'} **${item.name || (item as any).label}**.` });
+      return interaction.editReply({ content: `✅ Você desequipou o ${isBg ? 'fundo' : 'título'} **${itemName}**.` });
     }
 
     // Ação 2: Equipar (se já possui)
@@ -82,7 +96,7 @@ export async function handleSelect(interaction: StringSelectMenuInteraction) {
         where: { discordId: interaction.user.id },
         data: isBg ? { activeBackground: itemId } : { activeTitle: itemId }
       });
-      return interaction.editReply({ content: `✨ Você equipou o ${isBg ? 'fundo' : 'título'} **${item.name || (item as any).label}**! Veja seu \`/rpg perfil\`.` });
+      return interaction.editReply({ content: `✨ Você equipou o ${isBg ? 'fundo' : 'título'} **${itemName}**! Veja seu \`/rpg perfil\`.` });
     }
 
     // Ação 3: Comprar
@@ -103,7 +117,7 @@ export async function handleSelect(interaction: StringSelectMenuInteraction) {
       }
     });
 
-    return interaction.editReply({ content: `🛍️ Compra realizada com sucesso! Você comprou e equipou **${item.name || (item as any).label}** por ${item.price.toLocaleString('pt-BR')} Ouro!` });
+    return interaction.editReply({ content: `🛍️ Compra realizada com sucesso! Você comprou e equipou **${itemName}** por ${item.price.toLocaleString('pt-BR')} Ouro!` });
   }
 
   // Fallback

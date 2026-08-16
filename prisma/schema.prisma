@@ -393,7 +393,6 @@ model RpgCharacter {
   activeBackground    String?   // O fundo que está equipado agora
   unlockedTitles      String    @default("") // Lista separada por vírgula dos títulos comprados
   unlockedBackgrounds String    @default("") // Lista separada por vírgula dos fundos comprados
-}
 
   @@map("rpg_characters")
 }

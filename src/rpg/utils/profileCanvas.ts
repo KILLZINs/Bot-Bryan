@@ -28,34 +28,33 @@ function formatCooldown(date: Date | null | undefined, minutes: number): string 
   return `${mins > 0 ? `${mins}m ` : ''}${secs}s`;
 }
 
-// Cores de Raridade
+// Cores de Raridade Minimalistas
 const RARITY_COLORS: Record<string, string> = {
   'Comum': '#95A5A6',
-  'Incomum': '#27AE60',
-  'Raro': '#3498DB',
-  'Épico': '#9B59B6',
-  'Lendário': '#F1C40F',
+  'Incomum': '#5c9c6f',
+  'Raro': '#4c7b9e',
+  'Épico': '#8c6b9e',
+  'Lendário': '#e3aa59',
 };
 
 // ==========================================
-// ÍCONES VETORIAIS E AUXILIARES
+// ÍCONES E PAINÉIS VETORIAIS
 // ==========================================
 function drawCoinIcon(ctx: any, x: number, y: number) {
   ctx.save();
-  ctx.fillStyle = '#f1c40f';
-  ctx.strokeStyle = '#b7950b';
+  ctx.fillStyle = '#e3aa59';
+  ctx.strokeStyle = '#b8853b';
   ctx.lineWidth = 1.5;
   ctx.beginPath();
-  ctx.arc(x, y, 7, 0, Math.PI * 2);
+  ctx.arc(x, y, 9, 0, Math.PI * 2);
   ctx.fill();
   ctx.stroke();
-  ctx.fillStyle = '#7d6608';
-  ctx.font = 'bold 10px "InterFont", sans-serif';
-  ctx.fillText('G', x - 4, y + 4);
+  ctx.fillStyle = '#4a3212';
+  ctx.font = 'bold 12px "InterFont", sans-serif';
+  ctx.fillText('G', x - 5, y + 4.5);
   ctx.restore();
 }
 
-// Desenha painéis com cantos arredondados (Glassmorphism)
 function drawRoundedPanel(ctx: any, x: number, y: number, w: number, h: number, radius: number, bgColor: string, strokeColor?: string) {
   ctx.fillStyle = bgColor;
   ctx.beginPath();
@@ -68,9 +67,8 @@ function drawRoundedPanel(ctx: any, x: number, y: number, w: number, h: number, 
   }
 }
 
-// Lida com quebra de linha inteligente para nomes de itens longos
 function drawItemName(ctx: any, text: string, x: number, y: number) {
-  ctx.fillStyle = '#ffffff';
+  ctx.fillStyle = '#f4efe6';
   ctx.font = 'bold 10px "InterFont", sans-serif';
   ctx.textAlign = 'center';
   if (!text) return;
@@ -85,13 +83,13 @@ function drawItemName(ctx: any, text: string, x: number, y: number) {
     ctx.fillText(words[0].substring(0, 11), x, y - 2);
     ctx.fillText(words.slice(1).join(' ').substring(0, 9) + '..', x, y + 10);
   }
-  ctx.textAlign = 'left'; // Reset
+  ctx.textAlign = 'left'; 
 }
 
 export async function generateProfileCard(char: any, stats: any, avatarUrlInput?: string): Promise<Buffer> {
-  // Aumentei a altura para 1200px para tudo respirar e o inventário não cortar
-  const width = 560;
-  const height = 1200;
+  // Layout Widescreen/Horizontal para leitura confortável
+  const width = 1200;
+  const height = 630;
   const canvas = createCanvas(width, height);
   const ctx = canvas.getContext('2d');
 
@@ -158,130 +156,150 @@ export async function generateProfileCard(char: any, stats: any, avatarUrlInput?
   const avatarUrl = avatarUrlInput || char.avatarUrl || '';
 
   // ==========================================
-  // CENÁRIO E FUNDO (De volta às raízes bonitas)
+  // FUNDO: TONS TERROSOS & MINIMALISTA
   // ==========================================
-  
-  // Céu Místico
-  const skyGrad = ctx.createLinearGradient(0, 0, 0, height);
-  skyGrad.addColorStop(0, '#100a1c'); // Topo escuro
-  skyGrad.addColorStop(0.3, '#3a1c2a'); // Fundo arroxeado
-  skyGrad.addColorStop(1, '#080808'); // Base preta
-  ctx.fillStyle = skyGrad;
+  const bgGrad = ctx.createLinearGradient(0, 0, 0, height);
+  bgGrad.addColorStop(0, '#1c1815'); // Marrom escuro 
+  bgGrad.addColorStop(1, '#120f0d'); // Off-black
+  ctx.fillStyle = bgGrad;
   ctx.fillRect(0, 0, width, height);
 
-  // Cadeia de Montanhas (Silhueta)
-  ctx.fillStyle = 'rgba(20, 15, 25, 0.6)';
-  ctx.beginPath();
-  ctx.moveTo(0, height);
-  ctx.lineTo(0, 400);
-  ctx.bezierCurveTo(150, 350, 300, 450, 560, 380);
-  ctx.lineTo(width, height);
-  ctx.closePath();
-  ctx.fill();
-
-  // Borda Externa Rústica
-  ctx.strokeStyle = '#2b2118';
-  ctx.lineWidth = 12;
-  ctx.strokeRect(6, 6, width - 12, height - 12);
-  ctx.strokeStyle = '#d4af37';
-  ctx.lineWidth = 2;
-  ctx.strokeRect(12, 12, width - 24, height - 24);
+  ctx.strokeStyle = '#2e2621';
+  ctx.lineWidth = 10;
+  ctx.strokeRect(5, 5, width - 10, height - 10);
+  ctx.strokeStyle = '#42372f';
+  ctx.lineWidth = 1;
+  ctx.strokeRect(15, 15, width - 30, height - 30);
 
   // ==========================================
-  // TOP BAR (Ouro e Barras de HP/EN/XP)
+  // TOP BAR
   // ==========================================
-  drawRoundedPanel(ctx, 20, 20, width - 40, 60, 10, 'rgba(10, 10, 15, 0.85)', '#3a2e24');
+  drawRoundedPanel(ctx, 30, 25, width - 60, 50, 8, '#241f1b', '#3b322b');
 
   // Ouro
-  drawCoinIcon(ctx, 45, 50);
-  ctx.fillStyle = '#ffffff';
-  ctx.font = 'bold 20px "InterFont", sans-serif';
-  ctx.fillText(`${gold.toLocaleString('pt-BR')}`, 65, 56);
+  drawCoinIcon(ctx, 60, 50);
+  ctx.fillStyle = '#f4efe6';
+  ctx.font = 'bold 22px "InterFont", sans-serif';
+  ctx.fillText(`${gold.toLocaleString('pt-BR')}`, 80, 57);
 
-  // Barras
-  function drawMiniBar(x: number, y: number, w: number, h: number, current: number, max: number, color: string, label: string) {
-    ctx.fillStyle = '#111';
+  // Barras HP / EN / XP
+  function drawBar(x: number, y: number, w: number, h: number, current: number, max: number, color: string, label: string) {
+    ctx.fillStyle = '#14110f';
     ctx.beginPath(); ctx.roundRect(x, y, w, h, 4); ctx.fill();
     const pct = Math.min(current / (max || 1), 1);
     if (pct > 0) {
       ctx.fillStyle = color;
       ctx.beginPath(); ctx.roundRect(x, y, w * pct, h, 4); ctx.fill();
     }
-    ctx.fillStyle = '#fff';
-    ctx.font = 'bold 11px "InterFont", sans-serif';
-    ctx.fillText(label, x - 25, y + 9);
+    ctx.fillStyle = '#d6ccc0';
+    ctx.font = 'bold 12px "InterFont", sans-serif';
+    ctx.textAlign = 'right';
+    ctx.fillText(label, x - 10, y + 11);
+    ctx.textAlign = 'left';
   }
-  
-  drawMiniBar(380, 30, 130, 10, currentHp, maxHp, '#e74c3c', 'HP');
-  drawMiniBar(380, 47, 130, 10, currentEnergy, maxEnergy, '#f39c12', 'EN');
-  drawMiniBar(380, 64, 130, 10, currentXp, maxXp, '#95a5a6', 'XP');
+
+  // Terracota, Mostarda e Cinza Off-White
+  drawBar(650, 42, 130, 14, currentHp, maxHp, '#c45843', 'HP');
+  drawBar(835, 42, 130, 14, currentEnergy, maxEnergy, '#d18c47', 'EN');
+  drawBar(1015, 42, 110, 14, currentXp, maxXp, '#857e78', 'XP');
+
+  // Constantes de Layout dos Painéis Principais
+  const panelY = 90;
+  const panelH = 510;
 
   // ==========================================
-  // ÁREA CENTRAL (Avatar, Info, Equipamentos)
+  // PAINEL 1: PERFIL & STATUS (Esquerda)
   // ==========================================
-  const equipY = 110;
-  
-  // Painel de Fundo Translúcido para o Avatar e Info
-  drawRoundedPanel(ctx, 120, equipY, 320, 400, 15, 'rgba(15, 12, 20, 0.6)');
+  drawRoundedPanel(ctx, 30, panelY, 360, panelH, 10, '#241f1b', '#3b322b');
 
-  // AVATAR
-  const avSize = 160;
-  const avX = (width / 2) - (avSize / 2);
-  const avY = equipY + 20;
-
+  const avSize = 130;
   if (avatarUrl) {
     try {
       const avatar = await loadImage(avatarUrl);
       ctx.save();
-      ctx.beginPath();
-      ctx.roundRect(avX, avY, avSize, avSize, 15); // Avatar arredondado (Moderno)
-      ctx.clip();
-      ctx.drawImage(avatar, avX, avY, avSize, avSize);
+      ctx.beginPath(); ctx.roundRect(50, panelY + 20, avSize, avSize, 12); ctx.clip();
+      ctx.drawImage(avatar, 50, panelY + 20, avSize, avSize);
       ctx.restore();
     } catch {}
   }
-  // Borda do Avatar
-  ctx.strokeStyle = '#d4af37';
+  ctx.strokeStyle = '#594d45';
   ctx.lineWidth = 3;
-  ctx.beginPath(); ctx.roundRect(avX, avY, avSize, avSize, 15); ctx.stroke();
+  ctx.beginPath(); ctx.roundRect(50, panelY + 20, avSize, avSize, 12); ctx.stroke();
 
-  // NOME E INFORMAÇÕES
-  ctx.textAlign = 'center';
-  ctx.fillStyle = '#f1c40f';
-  ctx.font = 'bold 28px "InterFont", sans-serif';
-  ctx.fillText(name.toUpperCase(), width / 2, avY + avSize + 40);
-  
-  ctx.fillStyle = '#ffffff';
-  ctx.font = 'bold 15px "InterFont", sans-serif';
-  ctx.fillText(`Lv. ${level} — ${className.toUpperCase()}`, width / 2, avY + avSize + 65);
+  // Informações de Perfil
+  ctx.fillStyle = '#e3aa59';
+  ctx.font = 'bold 26px "InterFont", sans-serif';
+  ctx.fillText(name.toUpperCase(), 195, panelY + 45);
 
-  ctx.fillStyle = '#aaaaaa';
+  ctx.fillStyle = '#f4efe6';
+  ctx.font = 'bold 14px "InterFont", sans-serif';
+  ctx.fillText(`Lv. ${level} — ${className.toUpperCase()}`, 195, panelY + 68);
+
+  ctx.fillStyle = '#b0a498';
   ctx.font = '13px "InterFont", sans-serif';
-  ctx.fillText(`Local: ${locationName}`, width / 2, avY + avSize + 85);
-  ctx.fillText(`Karma: ${karma}  |  Gen: ${gen}`, width / 2, avY + avSize + 105);
+  ctx.fillText(`Local: ${locationName}`, 195, panelY + 90);
+  ctx.fillText(`Karma: ${karma}`, 195, panelY + 110);
+  ctx.fillText(`Gen: ${gen}  |  💍 ${marriageText}`, 195, panelY + 130);
 
-  // CAIXA DE PODER E HABILIDADE DIVINA
-  drawRoundedPanel(ctx, 140, avY + avSize + 125, 280, 80, 10, 'rgba(0,0,0,0.5)', '#3a2e24');
-  ctx.fillStyle = '#e74c3c';
-  ctx.font = 'bold 16px "InterFont", sans-serif';
-  ctx.fillText(`⚔️ PODER TOTAL: ${power.toLocaleString('pt-BR')}`, width / 2, avY + avSize + 150);
-  
-  ctx.fillStyle = '#f1c40f';
+  // Poder Divino
+  drawRoundedPanel(ctx, 50, panelY + 165, 320, 75, 8, '#1f1a17', '#332b25');
+  ctx.fillStyle = '#c45843';
+  ctx.font = 'bold 15px "InterFont", sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText(`⚔️ PODER: ${power.toLocaleString('pt-BR')}`, 210, panelY + 195);
+  ctx.fillStyle = '#e3aa59';
   ctx.font = 'bold 13px "InterFont", sans-serif';
-  ctx.fillText(`🌟 Habilidade: ${divineName}`, width / 2, avY + avSize + 172);
+  ctx.fillText(`🌟 Habilidade: ${divineName}`, 210, panelY + 220);
+  ctx.textAlign = 'left';
 
-  ctx.fillStyle = '#3498db';
-  ctx.fillText(`💍 ${marriageText}`, width / 2, avY + avSize + 192);
-  ctx.textAlign = 'left'; // Reset
+  // Divisória
+  ctx.strokeStyle = '#332b25';
+  ctx.beginPath(); ctx.moveTo(50, panelY + 265); ctx.lineTo(370, panelY + 265); ctx.stroke();
 
-  // DESENHAR OS SLOTS LATERAIS
-  function drawSlot(x: number, y: number, itemName: string, label: string) {
-    drawRoundedPanel(ctx, x, y, 70, 70, 8, 'rgba(25, 25, 30, 0.85)', itemName ? '#d4af37' : '#3e3e3e');
-    
+  // Atributos Base
+  ctx.fillStyle = '#e3aa59';
+  ctx.font = 'bold 13px "InterFont", sans-serif';
+  ctx.fillText('ATRIBUTOS BASE', 50, panelY + 295);
+
+  ctx.fillStyle = '#f4efe6';
+  ctx.font = '14px "InterFont", sans-serif';
+  ctx.fillText(`FOR: ${stats?.str ?? 10}`, 50, panelY + 325);
+  ctx.fillText(`AGI: ${stats?.agi ?? 10}`, 160, panelY + 325);
+  ctx.fillText(`INT: ${stats?.int ?? 10}`, 270, panelY + 325);
+  ctx.fillText(`VIT: ${stats?.vit ?? 10}`, 50, panelY + 355);
+  ctx.fillText(`SOR: ${stats?.lck ?? 10}`, 160, panelY + 355);
+
+  // Status de Combate
+  ctx.fillStyle = '#c45843';
+  ctx.font = 'bold 13px "InterFont", sans-serif';
+  ctx.fillText('STATUS DE COMBATE', 50, panelY + 400);
+
+  ctx.fillStyle = '#f4efe6';
+  ctx.font = '14px "InterFont", sans-serif';
+  ctx.fillText(`Ataque: ${stats?.attack ?? 10}`, 50, panelY + 430);
+  ctx.fillText(`Defesa: ${stats?.defense ?? 10}`, 210, panelY + 430);
+  ctx.fillText(`Crítico: ${(stats?.critChance ?? 0).toFixed(1)}%`, 50, panelY + 460);
+  ctx.fillText(`Esquiva: ${(stats?.dodgeChance ?? 0).toFixed(1)}%`, 210, panelY + 460);
+  ctx.fillText(`PvP: ${char.pvpWins ?? 0} V`, 50, panelY + 490);
+  ctx.fillText(`PvE: ${char.totalWins ?? 0} V`, 210, panelY + 490);
+
+  // ==========================================
+  // PAINEL 2: EQUIPAMENTOS (Centro)
+  // ==========================================
+  drawRoundedPanel(ctx, 410, panelY, 340, panelH, 10, '#241f1b', '#3b322b');
+
+  ctx.fillStyle = '#e3aa59';
+  ctx.font = 'bold 14px "InterFont", sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText('EQUIPAMENTOS', 580, panelY + 35);
+  ctx.textAlign = 'left';
+
+  function drawEquipSlot(x: number, y: number, itemName: string, label: string) {
+    drawRoundedPanel(ctx, x, y, 70, 70, 8, '#1c1815', itemName ? '#e3aa59' : '#332b25');
     if (itemName) {
       drawItemName(ctx, itemName, x + 35, y + 33);
     } else {
-      ctx.fillStyle = '#555555';
+      ctx.fillStyle = '#594d45';
       ctx.font = '11px "InterFont", sans-serif';
       ctx.textAlign = 'center';
       ctx.fillText(label, x + 35, y + 39);
@@ -289,162 +307,111 @@ export async function generateProfileCard(char: any, stats: any, avatarUrlInput?
     }
   }
 
-  const leftX = 30;
-  const rightX = 460;
-  const slotGap = 80; // Espaçamento vertical
+  const col1 = 435;
+  const col2 = 545;
+  const col3 = 655;
+  const rowStart = panelY + 60;
+  const rowGap = 100;
 
-  // Esquerda (6 Slots)
-  drawSlot(leftX, equipY, slotItems.helmet, 'Elmo');
-  drawSlot(leftX, equipY + slotGap, slotItems.amulet, 'Amuleto');
-  drawSlot(leftX, equipY + slotGap * 2, slotItems.chest, 'Peitoral');
-  drawSlot(leftX, equipY + slotGap * 3, slotItems.gloves, 'Luvas');
-  drawSlot(leftX, equipY + slotGap * 4, slotItems.pants, 'Calças');
-  drawSlot(leftX, equipY + slotGap * 5, slotItems.boots, 'Botas');
+  // Lado Esquerdo
+  drawEquipSlot(col1, rowStart, slotItems.weapon, 'Arma');
+  drawEquipSlot(col1, rowStart + rowGap, slotItems.gloves, 'Luvas');
+  drawEquipSlot(col1, rowStart + rowGap * 2, slotItems.ring, 'Anel');
+  drawEquipSlot(col1, rowStart + rowGap * 3, slotItems.amulet, 'Amuleto');
 
-  // Direita (5 Slots)
-  drawSlot(rightX, equipY, slotItems.weapon, 'Arma');
-  drawSlot(rightX, equipY + slotGap, slotItems.shield, 'Escudo');
-  drawSlot(rightX, equipY + slotGap * 2, slotItems.ring, 'Anel');
-  drawSlot(rightX, equipY + slotGap * 3, slotItems.backpack, 'Mochila');
-  drawSlot(rightX, equipY + slotGap * 4, slotItems.pet, 'Pet');
+  // Centro
+  drawEquipSlot(col2, rowStart, slotItems.helmet, 'Elmo');
+  drawEquipSlot(col2, rowStart + rowGap, slotItems.chest, 'Peitoral');
+  drawEquipSlot(col2, rowStart + rowGap * 2, slotItems.pants, 'Calças');
+  drawEquipSlot(col2, rowStart + rowGap * 3, slotItems.boots, 'Botas');
 
-  // ==========================================
-  // ÁREA DE STATUS E COMBATE (Recuperado!)
-  // ==========================================
-  const statsY = 610;
-  drawRoundedPanel(ctx, 20, statsY, width - 40, 140, 10, 'rgba(15, 12, 20, 0.85)', '#3a2e24');
-
-  // Divisória no meio
-  ctx.strokeStyle = '#3e3e3e';
-  ctx.beginPath(); ctx.moveTo(width / 2, statsY + 15); ctx.lineTo(width / 2, statsY + 125); ctx.stroke();
-
-  // Esquerda: Atributos
-  ctx.fillStyle = '#f1c40f';
-  ctx.font = 'bold 14px "InterFont", sans-serif';
-  ctx.fillText('ATRIBUTOS BASE', 40, statsY + 30);
-  
-  ctx.fillStyle = '#ffffff';
-  ctx.font = '14px "InterFont", sans-serif';
-  ctx.fillText(`FOR: ${stats?.str ?? 10}`, 40, statsY + 60);
-  ctx.fillText(`AGI: ${stats?.agi ?? 10}`, 150, statsY + 60);
-  ctx.fillText(`INT: ${stats?.int ?? 10}`, 40, statsY + 90);
-  ctx.fillText(`VIT: ${stats?.vit ?? 10}`, 150, statsY + 90);
-  ctx.fillText(`SOR: ${stats?.lck ?? 10}`, 40, statsY + 120);
-
-  // Direita: Combate
-  ctx.fillStyle = '#e74c3c';
-  ctx.font = 'bold 14px "InterFont", sans-serif';
-  ctx.fillText('STATUS DE COMBATE', width / 2 + 20, statsY + 30);
-
-  ctx.fillStyle = '#ffffff';
-  ctx.font = '14px "InterFont", sans-serif';
-  ctx.fillText(`Ataque: ${stats?.attack ?? 10}`, width / 2 + 20, statsY + 60);
-  ctx.fillText(`Defesa: ${stats?.defense ?? 10}`, width / 2 + 130, statsY + 60);
-  ctx.fillText(`Crítico: ${(stats?.critChance ?? 0).toFixed(1)}%`, width / 2 + 20, statsY + 90);
-  ctx.fillText(`Esquiva: ${(stats?.dodgeChance ?? 0).toFixed(1)}%`, width / 2 + 130, statsY + 90);
-  ctx.fillText(`PvP: ${char.pvpWins ?? 0} V`, width / 2 + 20, statsY + 120);
-  ctx.fillText(`PvE/Boss: ${char.totalWins ?? 0}`, width / 2 + 130, statsY + 120);
+  // Lado Direito
+  drawEquipSlot(col3, rowStart, slotItems.shield, 'Escudo');
+  drawEquipSlot(col3, rowStart + rowGap, slotItems.backpack, 'Mochila');
+  drawEquipSlot(col3, rowStart + rowGap * 2, slotItems.pet, 'Pet');
 
   // ==========================================
-  // ÁREA DE COOLDOWNS (Mais Compacta)
+  // PAINEL 3: COOLDOWNS & INVENTÁRIO (Direita)
   // ==========================================
-  const cdY = 765;
-  drawRoundedPanel(ctx, 20, cdY, width - 40, 100, 10, 'rgba(15, 12, 20, 0.85)', '#3a2e24');
+  drawRoundedPanel(ctx, 770, panelY, 400, panelH, 10, '#241f1b', '#3b322b');
 
-  ctx.fillStyle = '#f1c40f';
+  // COOLDOWNS
+  ctx.fillStyle = '#e3aa59';
   ctx.font = 'bold 14px "InterFont", sans-serif';
   ctx.textAlign = 'center';
-  ctx.fillText('TEMPO DE RECARGA (COOLDOWNS)', width / 2, cdY + 25);
+  ctx.fillText('COOLDOWNS', 970, panelY + 35);
   ctx.textAlign = 'left';
 
   const cdList = [
     { label: 'Dungeon', val: formatCooldown(char.lastDungeon, 5) },
-    { label: 'Treino', val: formatCooldown(char.lastTrain, 20) },
+    { label: 'Treinar', val: formatCooldown(char.lastTrain, 20) },
     { label: 'Explorar', val: formatCooldown(char.lastExplore, 3) },
-    { label: 'Pesca', val: formatCooldown(char.lastFishing, 10) },
+    { label: 'Pescar', val: formatCooldown(char.lastFishing, 10) },
     { label: 'Meditar', val: formatCooldown(char.lastRest, 30) },
     { label: 'Viagem', val: formatCooldown(char.lastTravel, loc.travelCooldownMin) },
   ];
 
-  let cx = 40;
-  let cy = cdY + 55;
+  let cx = 800;
+  let cy = panelY + 70;
   ctx.font = '13px "InterFont", sans-serif';
-  
   for (let i = 0; i < cdList.length; i++) {
-    ctx.fillStyle = '#aaaaaa';
+    ctx.fillStyle = '#b0a498';
     ctx.fillText(`${cdList[i].label}:`, cx, cy);
-    ctx.fillStyle = cdList[i].val === 'PRONTO' ? '#2ecc71' : '#e74c3c';
-    ctx.fillText(cdList[i].val, cx + 65, cy);
+    ctx.fillStyle = cdList[i].val === 'PRONTO' ? '#5c9c6f' : '#c45843';
+    ctx.fillText(cdList[i].val, cx + 70, cy);
 
-    cx += 165;
-    if ((i + 1) % 3 === 0) {
-      cx = 40;
+    cx += 170;
+    if ((i + 1) % 2 === 0) {
+      cx = 800;
       cy += 30;
     }
   }
 
-  // ==========================================
-  // ÁREA DO INVENTÁRIO (Espaçoso e sem cortar!)
-  // ==========================================
-  const invY = 880;
-  drawRoundedPanel(ctx, 20, invY, width - 40, height - invY - 20, 10, 'rgba(15, 12, 20, 0.85)', '#3a2e24');
+  // Divisória
+  ctx.strokeStyle = '#332b25';
+  ctx.beginPath(); ctx.moveTo(800, panelY + 160); ctx.lineTo(1140, panelY + 160); ctx.stroke();
 
-  // Título
-  ctx.fillStyle = '#2c1e16';
-  ctx.beginPath(); ctx.roundRect(20, invY, width - 40, 40, [10, 10, 0, 0]); ctx.fill();
-  ctx.fillStyle = '#d4af37';
-  ctx.font = 'bold 16px "InterFont", sans-serif';
+  // INVENTÁRIO (Grid perfeito sem cortar)
+  ctx.fillStyle = '#e3aa59';
+  ctx.font = 'bold 14px "InterFont", sans-serif';
   ctx.textAlign = 'center';
-  ctx.fillText('🎒 SEU INVENTÁRIO', width / 2, invY + 26);
+  ctx.fillText('INVENTÁRIO', 970, panelY + 195);
   ctx.textAlign = 'left';
 
-  // Grid do Inventário (6 Colunas x 4 Linhas)
-  const cols = 6;
-  const rows = 4;
-  const boxSize = 65;
-  const gap = 15;
-  
-  const totalGridWidth = (cols * boxSize) + ((cols - 1) * gap);
-  const startX = (width - totalGridWidth) / 2;
-  const startY = invY + 60;
+  // 6 Colunas x 4 Linhas = 24 Slots
+  const invCols = 6;
+  const invRows = 4;
+  const invBoxSize = 52;
+  const invGap = 10;
+  const invStartX = 785;
+  const invStartY = panelY + 225;
 
-  for (let i = 0; i < cols * rows; i++) {
-    const row = Math.floor(i / cols);
-    const col = i % cols;
-    const x = startX + col * (boxSize + gap);
-    const y = startY + row * (boxSize + gap);
+  for (let i = 0; i < invCols * invRows; i++) {
+    const row = Math.floor(i / invCols);
+    const col = i % invCols;
+    const x = invStartX + col * (invBoxSize + invGap);
+    const y = invStartY + row * (invBoxSize + invGap);
 
     if (inventory[i]) {
       const itemData = getItem(inventory[i].itemId);
       if (itemData) {
-        // Fundo e Borda com base na Raridade
         const rarityColor = RARITY_COLORS[itemData.rarity] || '#ffffff';
-        
-        // Fundo levemente tingido com a cor da raridade
-        ctx.fillStyle = 'rgba(30, 30, 35, 0.9)'; 
-        ctx.beginPath(); ctx.roundRect(x, y, boxSize, boxSize, 6); ctx.fill();
-        
-        ctx.strokeStyle = rarityColor;
-        ctx.lineWidth = 2.5;
-        ctx.stroke();
+        drawRoundedPanel(ctx, x, y, invBoxSize, invBoxSize, 6, '#1c1815', rarityColor);
 
-        // Nome Abreviado
-        ctx.fillStyle = '#ffffff';
-        ctx.font = 'bold 11px "InterFont", sans-serif';
+        ctx.fillStyle = '#f4efe6';
+        ctx.font = 'bold 10px "InterFont", sans-serif';
         ctx.textAlign = 'center';
-        const shortName = stripEmojis(itemData.name).split(' ')[0].substring(0, 9);
-        ctx.fillText(shortName, x + boxSize / 2, y + boxSize / 2 + 4);
+        const shortName = stripEmojis(itemData.name).split(' ')[0].substring(0, 8);
+        ctx.fillText(shortName, x + invBoxSize / 2, y + invBoxSize / 2 + 2);
 
-        // Quantidade
-        ctx.fillStyle = '#f1c40f';
-        ctx.font = 'bold 11px "InterFont", sans-serif';
+        ctx.fillStyle = '#e3aa59';
+        ctx.font = 'bold 10px "InterFont", sans-serif';
         ctx.textAlign = 'right';
-        ctx.fillText(`x${inventory[i].quantity}`, x + boxSize - 5, y + boxSize - 5);
+        ctx.fillText(`x${inventory[i].quantity}`, x + invBoxSize - 4, y + invBoxSize - 4);
         ctx.textAlign = 'left';
       }
     } else {
-      // Slot Vazio
-      drawRoundedPanel(ctx, x, y, boxSize, boxSize, 6, 'rgba(25, 25, 30, 0.5)', '#3e3e3e');
+      drawRoundedPanel(ctx, x, y, invBoxSize, invBoxSize, 6, '#1a1715', '#332b25');
     }
   }
 

@@ -1,5 +1,5 @@
 import { SlashCommandBuilder, ChatInputCommandInteraction, GuildMember } from 'discord.js';
-import { useMainPlayer, QueryType } from 'discord-player'; // 👈 IMPORTANTE: QueryType adicionado
+import { useMainPlayer, QueryType } from 'discord-player';
 import { errorEmbed } from '../../utils/embeds'; 
 
 export default {
@@ -24,18 +24,22 @@ export default {
     await interaction.deferReply();
 
     try {
-      // 1. Pesquisa a música antes de qualquer coisa
+      // 🧠 BUSCA INTELIGENTE
+      // Se tiver "http" no texto, é um link. Se não tiver, é uma pesquisa por nome.
+      const isLink = query.startsWith('http://') || query.startsWith('https://');
+      
+      // Força a busca no YouTube se for apenas texto (muito mais preciso)
+      const engineToUse = isLink ? QueryType.AUTO : QueryType.YOUTUBE_SEARCH;
+
       const searchResult = await player.search(query, {
         requestedBy: interaction.user,
-        searchEngine: QueryType.AUTO // Procura em todas as plataformas
+        searchEngine: engineToUse
       });
 
-      // Se não achou NADA, avisa e para aqui
       if (!searchResult.hasTracks()) {
-         return interaction.followUp('❌ Não consegui encontrar nenhuma música com esse nome/link.');
+         return interaction.followUp('❌ Não consegui encontrar nenhuma música com esse nome/link. Tente ser mais específico.');
       }
 
-      // 2. Se achou, entra na call e toca!
       const { track } = await player.play(member.voice.channel, searchResult, {
         nodeOptions: {
           metadata: interaction,
@@ -49,8 +53,7 @@ export default {
       
     } catch (e: any) {
       console.error('[ERRO DE MÚSICA]', e);
-      // Se der erro de novo, agora o bot vai falar EXATAMENTE o motivo no chat do Discord
-      return interaction.followUp(`❌ Falha crítica ao tocar: \`${e.message || 'Erro Desconhecido'}\``);
+      return interaction.followUp(`❌ Falha ao tocar. O erro foi: \`${e.message || 'Erro Desconhecido'}\``);
     }
   }
 };

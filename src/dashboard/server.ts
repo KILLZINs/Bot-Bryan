@@ -5,7 +5,7 @@ import path from 'path';
 import { prisma } from '../database/client';
 
 // 👑 COLOQUE O SEU ID DO DISCORD AQUI PARA ACESSO MÁXIMO
-const BOT_OWNER_ID = 'COLOQUE_SEU_ID_AQUI'; 
+const BOT_OWNER_ID = '1195254699943796791'; 
 
 // ==========================================
 // 🧩 1. MÓDULOS (LIGA/DESLIGA - BOOLEANS)

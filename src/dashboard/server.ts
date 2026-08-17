@@ -25,7 +25,7 @@ const GLOBAL_FEATURES = [
 ];
 
 // 👑 COLOQUE O SEU ID DO DISCORD AQUI PARA TER ACESSO MASTER
-const BOT_OWNER_ID = 'COLOQUE_SEU_ID_AQUI'; 
+const BOT_OWNER_ID = '1195254699943796791'; 
 
 export function startDashboard() {
   const app = express();

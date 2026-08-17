@@ -16,7 +16,7 @@ const client = new Client({
     GatewayIntentBits.GuildModeration,
     GatewayIntentBits.MessageContent,
     GatewayIntentBits.DirectMessages,
-    GatewayIntentBits.GuildVoiceStates, // Essencial para a música!
+    GatewayIntentBits.GuildVoiceStates, // Essencial para a música funcionar!
   ],
   partials: [Partials.Message, Partials.Channel, Partials.Reaction],
 }) as ExtendedClient;
@@ -25,8 +25,21 @@ client.commands       = new Collection<string, Command>();
 client.prefixCommands = new Collection<string, PrefixCommand>();
 client.cooldowns      = new Collection<string, Collection<string, number>>();
 
-// 🎵 Inicia a estrutura do motor de música (sem forçar o carregamento aqui em cima)
-const player = new Player(client);
+// 🎵 Inicia a estrutura do motor de música e otimiza a conexão para evitar cortes
+const player = new Player(client, {
+  ytdlOptions: {
+    quality: 'highestaudio',
+    highWaterMark: 1 << 25 // Aumenta o buffer de memória para a música não engasgar
+  }
+});
+
+// 🚨 MONITORES DE ERRO (Essencial para não ficarmos cegos se o YouTube bloquear o IP)
+player.events.on('error', (queue, error) => {
+  console.log(`[ERRO NA FILA] ${error.message}`);
+});
+player.events.on('playerError', (queue, error) => {
+  console.log(`[ERRO DE ÁUDIO/STREAM] ${error.message}`);
+});
 
 // ─── Load slash commands (supports subfolders one level deep) ─────────────────
 const commandsPath = join(__dirname, 'commands');
@@ -91,7 +104,7 @@ startDashboard();
 client.login(process.env.DISCORD_TOKEN).then(async () => {
   console.log('🤖 Bot conectado ao Discord! Iniciando motores de áudio...');
   
-  // O await aqui é crucial! Ele garante que o bot só libere as músicas depois de carregar tudo.
+  // O await aqui é crucial! Ele garante que o bot só libere as músicas depois de baixar os extratores (YouTube, Spotify, etc).
   await player.extractors.loadDefault();
   
   console.log('🎵 Sistema de Música 100% Operacional!');

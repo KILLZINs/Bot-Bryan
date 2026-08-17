@@ -5,6 +5,7 @@ import { handleButton } from '../handlers/buttonHandler';
 import { handleSelect } from '../handlers/selectHandler';
 import { handleModal } from '../handlers/modalHandler';
 import { isGuildAllowed, isEnforcementActive } from '../utils/allowlist';
+import { prisma } from '../database/client'; // 👈 Importamos o Prisma para ler o banco!
 
 export default {
   name: 'interactionCreate',
@@ -28,6 +29,50 @@ export default {
     if (interaction.isChatInputCommand()) {
       const command = client.commands.get(interaction.commandName);
       if (!command) return;
+
+      // 🛡️ ── GUARDA DO DASHBOARD (MÓDULOS) ── 🛡️
+      const commandName = interaction.commandName;
+
+      // 1. Verifica Módulos Globais (Bot Owner Panel)
+      if (commandName === 'afk') {
+        const globalConfig = await prisma.botConfig.findUnique({ where: { id: 'global' } });
+        if (globalConfig && globalConfig.featAfk === false) {
+          return interaction.reply({
+            embeds: [errorEmbed('Módulo Desativado', 'O sistema AFK foi **desativado globalmente** pela administração.')],
+            ephemeral: true
+          });
+        }
+      }
+
+      // 2. Verifica Módulos Locais do Servidor
+      if (interaction.guildId) {
+        // Dicionário que liga o nome do comando com o nome da coluna no Banco de Dados
+        const featureMap: Record<string, string> = {
+          'rpg': 'featRpg', 'rpgwipe': 'featRpg', 'perfil': 'featRpg', 'conquista': 'featRpg', 'leaderboard': 'featRpg',
+          'nivel': 'featLeveling', 'rank': 'featLeveling', 'recompensa': 'featLeveling',
+          'ticket': 'featTickets',
+          'poll': 'featPolls',
+          'giveaway': 'featGiveaways',
+          'rp': 'featSocial', 'genero': 'featSocial',
+          'mod': 'featMod', 'moderacao': 'featMod', 'logs': 'featMod',
+          'anuncio': 'featAnnouncements', 'evento': 'featAnnouncements'
+        };
+
+        const requiredFeature = featureMap[commandName];
+
+        if (requiredFeature) {
+          const guildConfig = await prisma.guildConfig.findUnique({ where: { guildId: interaction.guildId } });
+          
+          // Se o servidor tem uma configuração salva e a feature específica for "false" (desligada)
+          if (guildConfig && (guildConfig as any)[requiredFeature] === false) {
+            return interaction.reply({
+              embeds: [errorEmbed('Módulo Desativado', 'Este comando faz parte de um sistema que foi **desativado** pelos donos deste servidor no Dashboard.')],
+              ephemeral: true
+            });
+          }
+        }
+      }
+      // 🛡️ ── FIM DO GUARDA ── 🛡️
 
       // Cooldown
       const { cooldowns } = client;

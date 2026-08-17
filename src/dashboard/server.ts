@@ -3,7 +3,7 @@ import express from 'express';
 export function startDashboard() {
   const app = express();
   // O Railway define a porta automaticamente pelo ambiente
-  const port = process.env.PORT || 3000;
+  const port = Number(process.env.PORT) || 8080;
 
   // Rota principal (A página inicial do site)
   app.get('/', (req, res) => {
@@ -42,8 +42,8 @@ export function startDashboard() {
     `);
   });
 
-  // Liga o servidor
-  app.listen(port, () => {
+  // Liga o servidor e avisa o Railway que pode aceitar conexões (0.0.0.0)
+  app.listen(port, '0.0.0.0', () => {
     console.log(`🌐 Dashboard Web rodando na porta ${port}`);
   });
 }

@@ -10,31 +10,47 @@ const BOT_OWNER_ID = 'COLOQUE_SEU_ID_AQUI';
 // ==========================================
 // 🧩 1. MÓDULOS (LIGA/DESLIGA)
 // ==========================================
-const SERVER_CATEGORIES = [
+const SERVER_SETTINGS = [
   {
-    category: "⚔️ RPG & Economia",
-    features: [
-      { id: 'featRpg', name: 'Sistema RPG (Geral)', desc: 'Ativa/desativa todo o ecossistema RPG.' },
-      { id: 'featEconomy', name: '🪙 Economia', desc: 'Sistema de moedas, transferências e loja.' },
-      { id: 'featMissions', name: '📋 Missões', desc: 'Missões diárias e semanais com recompensas.' }
+    category: "📁 Canais e Categorias (IDs)",
+    items: [
+      { id: 'logChannelId', name: 'Canal de Logs', type: 'text', placeholder: 'Onde os logs de moderação vão cair' },
+      { id: 'welcomeChannelId', name: 'Canal de Boas-Vindas', type: 'text', placeholder: 'Canal para novas entradas' },
+      { id: 'announcementChannelId', name: 'Canal de Anúncios', type: 'text', placeholder: 'Canal para avisos globais/eventos' },
+      { id: 'suggestionChannelId', name: 'Canal de Sugestões', type: 'text', placeholder: 'Onde o /sugestao vai ser enviado' },
+      { id: 'feedbackChannelId', name: 'Canal de Feedback', type: 'text', placeholder: 'Onde o /feedback vai ser enviado' },
+      { id: 'levelUpChannelId', name: 'Canal de Level Up', type: 'text', placeholder: 'Onde o bot avisa que o membro subiu de nível' }
     ]
   },
   {
-    category: "🛡️ Administração & Moderação",
-    features: [
-      { id: 'featMod', name: '🔨 Auto-Moderação', desc: 'Filtro anti-spam, links e punições automáticas.' },
-      { id: 'featTickets', name: '🎫 Tickets / Suporte', desc: 'Atendimento via canais privados.' },
-      { id: 'featSelfRole', name: '🎭 Registro de Cargos', desc: 'Menus interativos para auto-cargo.' }
+    category: "🎫 Sistema de Tickets (IDs)",
+    items: [
+      { id: 'ticketCategoryId', name: 'Categoria de Tickets', type: 'text', placeholder: 'Categoria onde os tickets abrem' },
+      { id: 'ticketLogChannelId', name: 'Logs de Tickets (Transcripts)', type: 'text', placeholder: 'Canal para salvar o histórico dos tickets' }
     ]
   },
   {
-    category: "🎉 Engajamento & Comunidade",
-    features: [
-      { id: 'featLeveling', name: '🎯 XP & Níveis', desc: 'Progressão por mensagens e ranking.' },
-      { id: 'featGiveaways', name: '🎁 Sorteios', desc: 'Sorteios automatizados com participação via botão.' },
-      { id: 'featPolls', name: '📊 Enquetes', desc: 'Ferramenta de criação de enquetes na comunidade.' },
-      { id: 'featSocial', name: '🤝 Roleplay Social', desc: 'Ações de RP como abraçar, bater, beijar.' },
-      { id: 'featAnnouncements', name: '📢 Anúncios', desc: 'Eventos globais e avisos do servidor.' }
+    category: "🛡️ Cargos de Permissão e Moderação (IDs)",
+    items: [
+      { id: 'adminRoleId', name: 'Cargo de Administrador', type: 'text', placeholder: 'Cargo com passe livre no bot' },
+      { id: 'modRoleId', name: 'Cargo de Moderador', type: 'text', placeholder: 'Cargo que pode usar comandos de punição' },
+      { id: 'mutedRoleId', name: 'Cargo de Mutado', type: 'text', placeholder: 'Cargo dado quando alguém toma mute' },
+      { id: 'autoRoleId', name: 'Cargo Automático (Auto-Role)', type: 'text', placeholder: 'Cargo dado assim que o membro entra' },
+      { id: 'memberRoleId', name: 'Cargo de Membro Registrado', type: 'text', placeholder: 'Cargo oficial de membro' }
+    ]
+  },
+  {
+    category: "🎯 Balanceamento de XP e Economia",
+    items: [
+      { id: 'xpMin', name: 'XP Mínimo por Mensagem', type: 'number', placeholder: 'Ex: 15' },
+      { id: 'xpMax', name: 'XP Máximo por Mensagem', type: 'number', placeholder: 'Ex: 25' },
+      { id: 'xpCooldown', name: 'Cooldown de XP (Segundos)', type: 'number', placeholder: 'Ex: 60' }
+    ]
+  },
+  {
+    category: "💬 Mensagens Personalizadas",
+    items: [
+      { id: 'welcomeMessage', name: 'Mensagem de Recepção', type: 'text', placeholder: 'Ex: Bem-vindo(a) à Aliança, {user}!' }
     ]
   }
 ];

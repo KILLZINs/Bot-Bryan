@@ -5,15 +5,13 @@ import { COLORS, EMOJIS } from '../utils/embeds';
 import { loadAllowlist, isEnforcementActive, isGuildAllowed, getOwnerIds } from '../utils/allowlist';
 import { loadBotConfig } from '../utils/botConfig';
 import { loadEmbedTemplates, refreshImageUrls } from '../utils/embedTemplates';
-import { startDashboard } from '../dashboard/server';
 
 export default {
   name: 'ready',
   once: true,
   async execute(client: Client) {
     console.log(`✅ Bot online como ${client.user?.tag}`);
-// Inicia o nosso site junto com o bot!
-    startDashboard();
+
     // ─── Carregar allowlist + configs ─────────────────────────────────────────
     await Promise.all([loadAllowlist(), loadBotConfig(), loadEmbedTemplates()]);
     console.log(`[botConfig] Configuração de embeds carregada.`);

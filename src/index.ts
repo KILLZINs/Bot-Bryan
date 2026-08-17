@@ -1,5 +1,6 @@
 import 'dotenv/config';
 import { Client, Collection, GatewayIntentBits, Partials } from 'discord.js';
+import { Player } from 'discord-player';
 import { readdirSync } from 'fs';
 import { join } from 'path';
 import { Command, PrefixCommand, ExtendedClient } from './types';
@@ -15,7 +16,7 @@ const client = new Client({
     GatewayIntentBits.GuildModeration,
     GatewayIntentBits.MessageContent,
     GatewayIntentBits.DirectMessages,
-    GatewayIntentBits.GuildVoiceStates,
+    GatewayIntentBits.GuildVoiceStates, // Essencial para a música!
   ],
   partials: [Partials.Message, Partials.Channel, Partials.Reaction],
 }) as ExtendedClient;
@@ -23,6 +24,10 @@ const client = new Client({
 client.commands       = new Collection<string, Command>();
 client.prefixCommands = new Collection<string, PrefixCommand>();
 client.cooldowns      = new Collection<string, Collection<string, number>>();
+
+// 🎵 Inicia o motor de música e os extratores padrão (YouTube, Spotify, etc)
+const player = new Player(client);
+player.extractors.loadDefault();
 
 // ─── Load slash commands (supports subfolders one level deep) ─────────────────
 const commandsPath = join(__dirname, 'commands');

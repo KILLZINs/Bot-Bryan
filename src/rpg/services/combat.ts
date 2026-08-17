@@ -146,6 +146,11 @@ export async function runCombat(
       state.log.push(playerDmg.msg);
     }
 
+    // 🔥 TURNO DO PET (Automático)
+    if (state.enemyHp > 0) {
+      executePetTurn(char, stats, state);
+    }
+
     if (state.enemyHp <= 0) break;
 
     if (state.stubbedRounds > 0) {
@@ -215,11 +220,15 @@ export async function runCombat(
 
   if (xpGained > 0) await addRpgXp(char, xpGained, { currentHp: Math.max(1, newHp), currentEnergy: finalEnergy });
 
+  // 🔥 PROCESSA XP DO PET E SOBE DE NÍVEL SE NECESSÁRIO
+  const petUpdateData = calcPetXp(char, xpGained, state.log);
+
   await prisma.rpgCharacter.update({
     where: { discordId: char.discordId },
     data: {
       ...(xpGained > 0 ? {} : { currentHp: Math.max(1, newHp), currentEnergy: finalEnergy }),
       gold: { increment: goldGained },
+      ...petUpdateData, // Adiciona o XP e Nível do Pet no Banco de Dados
       totalKills: result === 'vitoria' ? { increment: 1 } : undefined,
       totalDeaths: result === 'derrota' ? { increment: 1 } : undefined,
       totalWins:   result === 'vitoria' ? { increment: 1 } : undefined,
@@ -364,6 +373,11 @@ export async function takeCombatAction(discordId: string, action: CombatAction):
     state.log.push(`🧪 Você usou **${potion.name}** e recuperou **${potion.heal} HP**.`);
   }
 
+  // 🔥 TURNO DO PET (Interativo)
+  if (state.enemyHp > 0) {
+    executePetTurn(char, stats, state);
+  }
+
   if (state.enemyHp <= 0) {
     state.log.push(`🏆 **VITÓRIA!** ${enemy.name} foi derrotado!`);
     const result = await finalizeInteractiveCombat(session, 'vitoria');
@@ -505,11 +519,16 @@ async function finalizeInteractiveCombat(session: InteractiveCombatSession, resu
 
   if (xpGained > 0) await addRpgXp(char, xpGained, { currentHp: Math.max(1, newHp), currentEnergy: finalEnergy });
   
+  // 🔥 PROCESSA XP DO PET E SOBE DE NÍVEL SE NECESSÁRIO
+  const petUpdateData = calcPetXp(char, xpGained, state.log);
+
   await prisma.rpgCharacter.update({
     where: { discordId: char.discordId },
     data: {
       ...(xpGained > 0 ? {} : { currentHp: Math.max(1, newHp), currentEnergy: finalEnergy }),
-      gold: { increment: goldGained }, totalKills: result === 'vitoria' ? { increment: 1 } : undefined,
+      gold: { increment: goldGained }, 
+      ...petUpdateData, // Adiciona o XP e Nível do Pet no Banco de Dados
+      totalKills: result === 'vitoria' ? { increment: 1 } : undefined,
       totalDeaths: result === 'derrota' ? { increment: 1 } : undefined, totalWins: result === 'vitoria' ? { increment: 1 } : undefined,
       bossKills: result === 'vitoria' && enemy.type === 'boss' ? { increment: 1 } : undefined, karma: enemy.karmaEffect ? { increment: enemy.karmaEffect } : undefined,
       ...(mode === 'dungeon' ? { lastDungeon: session.startedAt } : {}),
@@ -528,7 +547,59 @@ async function finalizeInteractiveCombat(session: InteractiveCombatSession, resu
   return { result, rounds: state.round, log: state.log, xpGained, goldGained, itemsDropped, playerHpLeft: Math.max(1, newHp), playerEnergyLeft: finalEnergy, bossKill: enemy.type === 'boss' && result === 'vitoria' };
 }
 
-// ─── Helpers internos (MANTIDOS INTACTOS) ─────────────────────────────────────────────────────
+// ─── Lógica de Pets e Helpers Internos ─────────────────────────────────────────────────────────
+
+function executePetTurn(char: FullCharacter, stats: ComputedStats, state: CombatState) {
+  const petId = char.equipment?.pet;
+  if (!petId) return;
+  
+  const pet = getItem(petId);
+  if (!pet || !pet.petSkill) return;
+
+  if (Math.random() <= pet.petSkill.triggerChance) {
+    // Puxa o nível salvo no banco de dados (fallback para 1)
+    const petLevel = (char as any).activePetLevel || 1;
+    
+    // O pet ganha +5% de eficácia em suas curas/danos a cada Nível
+    const scale = 1 + (petLevel - 1) * 0.05;
+
+    if (pet.petSkill.damageMultiplier) {
+      const dmg = Math.max(1, Math.floor(stats.attack * pet.petSkill.damageMultiplier * scale));
+      state.enemyHp = Math.max(0, state.enemyHp - dmg);
+      state.log.push(`> ${pet.petSkill.logText} (💥 **${dmg}** dano)`);
+    }
+    
+    if (pet.petSkill.healMultiplier) {
+      const heal = Math.max(1, Math.floor(stats.maxHp * pet.petSkill.healMultiplier * scale));
+      state.playerHp = Math.min(stats.maxHp, state.playerHp + heal);
+      state.log.push(`> ${pet.petSkill.logText} (💚 **+${heal}** HP)`);
+    }
+  }
+}
+
+function calcPetXp(char: FullCharacter, xpGained: number, log: string[]) {
+  const petId = char.equipment?.pet;
+  if (!petId || xpGained <= 0) return {}; // Sem pet ou derrota
+
+  let currentLevel = (char as any).activePetLevel || 1;
+  let currentXp = ((char as any).activePetXp || 0) + Math.floor(xpGained * 0.5); // Pet absorve 50% do seu XP total
+  let leveledUp = false;
+
+  // Curva de XP: Nível 1 exige 100 XP, Nível 2 exige 200 XP, Nível 3 exige 300 XP, etc.
+  const getRequiredXp = (level: number) => level * 100;
+
+  while (currentXp >= getRequiredXp(currentLevel) && currentLevel < 100) { // Nível máximo do Pet é 100
+    currentXp -= getRequiredXp(currentLevel);
+    currentLevel++;
+    leveledUp = true;
+  }
+
+  if (leveledUp) {
+    log.push(`\n🐾 **Level Up!** Seu pet alcançou o Nível **${currentLevel}**! Suas habilidades estão mais fortes.`);
+  }
+
+  return { activePetLevel: currentLevel, activePetXp: currentXp };
+}
 
 export async function runPvp(attacker: FullCharacter, defender: FullCharacter): Promise<{winner: string; loser: string; log: string[]; xpGained: number; goldStolen: number;}> {
   const atkStats = computeStats(attacker);

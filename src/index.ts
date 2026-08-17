@@ -4,7 +4,7 @@ import 'dotenv/config';
     import { join } from 'path';
     import { Command, PrefixCommand, ExtendedClient } from './types';
     import { prisma } from './database/client';
-
+    import { startDashboard } from './dashboard/server';
     const client = new Client({
     intents: [
       GatewayIntentBits.Guilds,

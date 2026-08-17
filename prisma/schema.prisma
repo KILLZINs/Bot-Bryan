@@ -300,6 +300,7 @@ model GuildConfig {
   featEconomy         Boolean  @default(true)
   featMod             Boolean  @default(true)
   featAnnouncements   Boolean  @default(true)
+  featMusic           Boolean  @default(true) // 👈 ADICIONE ESTA LINHA!
 
   logFlags              Int      @default(31)
   updatedAt             DateTime @updatedAt @default(now())

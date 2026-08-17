@@ -34,7 +34,8 @@ const SERVER_CATEGORIES = [
       { id: 'featGiveaways', name: '🎁 Sorteios', desc: 'Sorteios automatizados com participação via botão.' },
       { id: 'featPolls', name: '📊 Enquetes', desc: 'Ferramenta de criação de enquetes na comunidade.' },
       { id: 'featSocial', name: '🤝 Roleplay Social', desc: 'Ações de RP como abraçar, bater, beijar.' },
-      { id: 'featAnnouncements', name: '📢 Anúncios', desc: 'Eventos globais e avisos do servidor.' }
+      { id: 'featAnnouncements', name: '📢 Anúncios', desc: 'Eventos globais e avisos do servidor.' },
+      { id: 'featMusic', name: '🎵 Sistema de Música', desc: 'Permite que o bot toque músicas nos canais de voz.' }
     ]
   }
 ];

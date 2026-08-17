@@ -1,5 +1,5 @@
 import { SlashCommandBuilder, ChatInputCommandInteraction, GuildMember } from 'discord.js';
-import { useMainPlayer } from 'discord-player';
+import { useMainPlayer, QueryType } from 'discord-player'; // 👈 IMPORTANTE: QueryType adicionado
 import { errorEmbed } from '../../utils/embeds'; 
 
 export default {
@@ -17,29 +17,40 @@ export default {
     const query = interaction.options.getString('musica', true);
     const member = interaction.member as GuildMember;
 
-    // Trava: O usuário precisa estar em uma call
     if (!member.voice.channel) {
       return interaction.reply({ embeds: [errorEmbed('Erro', 'Você precisa estar em um canal de voz para colocar música!')], ephemeral: true });
     }
 
-    // DeferReply é essencial porque pesquisar a música pode demorar mais de 3 segundos
     await interaction.deferReply();
 
     try {
-      const { track } = await player.play(member.voice.channel, query, {
+      // 1. Pesquisa a música antes de qualquer coisa
+      const searchResult = await player.search(query, {
+        requestedBy: interaction.user,
+        searchEngine: QueryType.AUTO // Procura em todas as plataformas
+      });
+
+      // Se não achou NADA, avisa e para aqui
+      if (!searchResult.hasTracks()) {
+         return interaction.followUp('❌ Não consegui encontrar nenhuma música com esse nome/link.');
+      }
+
+      // 2. Se achou, entra na call e toca!
+      const { track } = await player.play(member.voice.channel, searchResult, {
         nodeOptions: {
           metadata: interaction,
           leaveOnEmpty: true,
-          leaveOnEmptyCooldown: 300000, // Sai após 5 minutos sozinho
-          leaveOnEnd: false, // Fica na call quando a música acabar
+          leaveOnEmptyCooldown: 300000, 
+          leaveOnEnd: false, 
         }
       });
 
       return interaction.followUp(`🎶 **${track.title}** adicionada à fila com sucesso!`);
       
-    } catch (e) {
+    } catch (e: any) {
       console.error('[ERRO DE MÚSICA]', e);
-      return interaction.followUp('❌ Não consegui encontrar/tocar essa música. Verifique o link ou o nome.');
+      // Se der erro de novo, agora o bot vai falar EXATAMENTE o motivo no chat do Discord
+      return interaction.followUp(`❌ Falha crítica ao tocar: \`${e.message || 'Erro Desconhecido'}\``);
     }
   }
 };

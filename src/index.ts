@@ -25,9 +25,8 @@ client.commands       = new Collection<string, Command>();
 client.prefixCommands = new Collection<string, PrefixCommand>();
 client.cooldowns      = new Collection<string, Collection<string, number>>();
 
-// 🎵 Inicia o motor de música e os extratores padrão (YouTube, Spotify, etc)
+// 🎵 Inicia a estrutura do motor de música (sem forçar o carregamento aqui em cima)
 const player = new Player(client);
-player.extractors.loadDefault();
 
 // ─── Load slash commands (supports subfolders one level deep) ─────────────────
 const commandsPath = join(__dirname, 'commands');
@@ -88,5 +87,12 @@ process.on('uncaughtException',  (err) => console.error('Uncaught exception:',  
 // 🌐 LIGA O SITE DO DASHBOARD PRIMEIRO
 startDashboard();
 
-// 🤖 LIGA O BOT DO DISCORD
-client.login(process.env.DISCORD_TOKEN).catch(console.error);
+// 🤖 LIGA O BOT E DEPOIS OS MOTORES DE MÚSICA
+client.login(process.env.DISCORD_TOKEN).then(async () => {
+  console.log('🤖 Bot conectado ao Discord! Iniciando motores de áudio...');
+  
+  // O await aqui é crucial! Ele garante que o bot só libere as músicas depois de carregar tudo.
+  await player.extractors.loadDefault();
+  
+  console.log('🎵 Sistema de Música 100% Operacional!');
+}).catch(console.error);

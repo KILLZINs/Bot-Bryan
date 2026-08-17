@@ -388,6 +388,10 @@ model RpgCharacter {
   classMissions   RpgClassMission[]
   fishingSession  RpgFishingSession?
 
+// Sistema de Pets
+  activePetLevel Int @default(1)
+  activePetXp    Int @default(0)
+
   // 🎨 COSMÉTICOS
   activeTitle         String?   // O título que está equipado agora
   activeBackground    String?   // O fundo que está equipado agora

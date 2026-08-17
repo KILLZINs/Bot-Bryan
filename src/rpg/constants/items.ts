@@ -12,6 +12,14 @@ export interface ItemStats {
   maxHp?: number; // Alias para combate
 }
 
+// 🔥 NOVA INTERFACE: Define o que o Pet faz no meio da batalha
+export interface PetSkill {
+  triggerChance: number;      // Ex: 0.20 (20% de chance de agir por turno)
+  damageMultiplier?: number;  // Multiplica o ataque do dono (para pets de dano)
+  healMultiplier?: number;    // Multiplica a inteligência/vit do dono (para pets suportes)
+  logText: string;            // O que o bot vai narrar quando o pet agir
+}
+
 export interface RpgItem {
   id: string;
   name: string;
@@ -29,6 +37,7 @@ export interface RpgItem {
   classRestriction?: string[];
   effect?: string;
   craftable?: boolean;
+  petSkill?: PetSkill;     // 🔥 ADICIONADO: Habilidade única de combate
 }
 
 export type Item = RpgItem;
@@ -120,13 +129,58 @@ export const ITEMS: Record<string, RpgItem> = {
   mochila_magica: { id: 'mochila_magica', name: 'Mochila Dimensional', emoji: '🌌', description: 'Espaço quase infinito.', slot: 'backpack', rarity: 'Raro', minLevel: 25, stats: { lck: 10 }, price: 8000, sellPrice: 1600, maxStack: 1, effect: 'Inventário +50 slots' },
 
   // ═══════════════ PETS (pet) ═══════════════
-  gato_preto: { id: 'gato_preto', name: 'Gato Preto', emoji: '🐈‍⬛', description: 'Dá azar aos inimigos.', slot: 'pet', rarity: 'Comum', minLevel: 1, stats: { lck: 8, agi: 4 }, price: 800, sellPrice: 160, maxStack: 1 },
-  lobo_filhote: { id: 'lobo_filhote', name: 'Lobo Leal', emoji: '🐺', description: 'Te defende com a vida.', slot: 'pet', rarity: 'Incomum', minLevel: 5, stats: { str: 8, vit: 5, attack: 15 }, price: 2000, sellPrice: 400, maxStack: 1 },
-  slime_azul: { id: 'slime_azul', name: 'Slime Doméstico', emoji: '🫧', description: 'Amortece os golpes.', slot: 'pet', rarity: 'Incomum', minLevel: 5, stats: { vit: 12, hp: 50, defense: 10 }, price: 1800, sellPrice: 360, maxStack: 1 },
-  tartaruga_casco: { id: 'tartaruga_casco', name: 'Tartaruga Casco-Duro', emoji: '🐢', description: 'Uma muralha portátil.', slot: 'pet', rarity: 'Raro', minLevel: 12, stats: { vit: 25, defense: 30, hp: 120 }, price: 5000, sellPrice: 1000, maxStack: 1 },
-  coruja_mistica: { id: 'coruja_mistica', name: 'Coruja Arcana', emoji: '🦉', description: 'Regenera sua mana na batalha.', slot: 'pet', rarity: 'Raro', minLevel: 15, stats: { int: 20, energy: 100, xpBonus: 5 }, price: 6000, sellPrice: 1200, maxStack: 1 },
-  fada_cura: { id: 'fada_cura', name: 'Fada da Luz', emoji: '🧚', description: 'Um brilho de esperança.', slot: 'pet', rarity: 'Épico', minLevel: 28, stats: { int: 25, vit: 15, hp: 200 }, price: 15000, sellPrice: 3000, maxStack: 1, effect: 'Cura passivamente a cada rodada' },
-  dragao_miniatura: { id: 'dragao_miniatura', name: 'Dragão de Bolso', emoji: '🐉', description: 'Cospe fogo de verdade.', slot: 'pet', rarity: 'Épico', minLevel: 35, stats: { str: 30, int: 30, attack: 50 }, price: 0, sellPrice: 15000, maxStack: 1 },
+  gato_preto: { 
+    id: 'gato_preto', name: 'Gato Preto', emoji: '🐈‍⬛', description: 'Dá azar aos inimigos.', slot: 'pet', rarity: 'Comum', minLevel: 1, stats: { lck: 8, agi: 4 }, price: 800, sellPrice: 160, maxStack: 1,
+    petSkill: { triggerChance: 0.10, damageMultiplier: 0.10, logText: '🐈‍⬛ O Gato Preto arranhou o inimigo causando azar!' }
+  },
+  espirito_floresta: { 
+    id: 'espirito_floresta', name: 'Espírito da Floresta', emoji: '🌿', description: 'Uma pequena luz verde que alivia feridas.', slot: 'pet', rarity: 'Incomum', minLevel: 3, stats: { vit: 8, hp: 30 }, price: 1200, sellPrice: 240, maxStack: 1,
+    petSkill: { triggerChance: 0.15, healMultiplier: 0.10, logText: '🌿 O Espírito da Floresta liberou pólen curativo!' }
+  },
+  lobo_filhote: { 
+    id: 'lobo_filhote', name: 'Lobo Leal', emoji: '🐺', description: 'Te defende com a vida.', slot: 'pet', rarity: 'Incomum', minLevel: 5, stats: { str: 8, vit: 5, attack: 15 }, price: 2000, sellPrice: 400, maxStack: 1,
+    petSkill: { triggerChance: 0.20, damageMultiplier: 0.20, logText: '🐺 O Lobo saltou e mordeu ferozmente o inimigo!' }
+  },
+  slime_azul: { 
+    id: 'slime_azul', name: 'Slime Doméstico', emoji: '🫧', description: 'Amortece os golpes.', slot: 'pet', rarity: 'Incomum', minLevel: 5, stats: { vit: 12, hp: 50, defense: 10 }, price: 1800, sellPrice: 360, maxStack: 1,
+    petSkill: { triggerChance: 0.15, healMultiplier: 0.10, logText: '🫧 O Slime envolveu suas feridas, amortecendo a dor!' }
+  },
+  tartaruga_casco: { 
+    id: 'tartaruga_casco', name: 'Tartaruga Casco-Duro', emoji: '🐢', description: 'Uma muralha portátil.', slot: 'pet', rarity: 'Raro', minLevel: 12, stats: { vit: 25, defense: 30, hp: 120 }, price: 5000, sellPrice: 1000, maxStack: 1 
+    // Tartaruga é um pet passivo tanker, não precisa de petSkill!
+  },
+  coruja_mistica: { 
+    id: 'coruja_mistica', name: 'Coruja Arcana', emoji: '🦉', description: 'Regenera energia no combate.', slot: 'pet', rarity: 'Raro', minLevel: 15, stats: { int: 20, energy: 100, xpBonus: 5 }, price: 6000, sellPrice: 1200, maxStack: 1,
+    petSkill: { triggerChance: 0.20, healMultiplier: 0.15, logText: '🦉 A Coruja bateu as asas, restaurando sua energia mística!' }
+  },
+  grifo_jovem: { 
+    id: 'grifo_jovem', name: 'Grifo Jovem', emoji: '🦅', description: 'Vela pelos céus buscando presas.', slot: 'pet', rarity: 'Raro', minLevel: 18, stats: { agi: 25, str: 15, attack: 30 }, price: 6500, sellPrice: 1300, maxStack: 1,
+    petSkill: { triggerChance: 0.20, damageMultiplier: 0.25, logText: '🦅 O Grifo desceu em um rasante cortando o inimigo com suas garras!' }
+  },
+  fada_cura: { 
+    id: 'fada_cura', name: 'Fada da Luz', emoji: '🧚', description: 'Um brilho de esperança.', slot: 'pet', rarity: 'Épico', minLevel: 28, stats: { int: 25, vit: 15, hp: 200 }, price: 15000, sellPrice: 3000, maxStack: 1, effect: 'Cura passivamente a cada rodada',
+    petSkill: { triggerChance: 0.25, healMultiplier: 0.25, logText: '🧚 A Fada da Luz irradiou uma magia curativa poderosa!' }
+  },
+  dragao_miniatura: { 
+    id: 'dragao_miniatura', name: 'Dragão de Bolso', emoji: '🐉', description: 'Cospe fogo de verdade.', slot: 'pet', rarity: 'Épico', minLevel: 32, stats: { str: 30, int: 30, attack: 50 }, price: 0, sellPrice: 15000, maxStack: 1,
+    petSkill: { triggerChance: 0.25, damageMultiplier: 0.35, logText: '🐉 O Dragão de Bolso cuspiu uma bola de fogo massiva!' }
+  },
+  golem_pedra: { 
+    id: 'golem_pedra', name: 'Golem de Pedra Mágica', emoji: '🪨', description: 'Quase indestrutível. Absorve muito dano.', slot: 'pet', rarity: 'Épico', minLevel: 35, stats: { vit: 40, defense: 60, hp: 300 }, price: 0, sellPrice: 14000, maxStack: 1
+    // Golem é Passivo (Tanker Absoluto)
+  },
+  panda_monge: { 
+    id: 'panda_monge', name: 'Panda Monge', emoji: '🐼', description: 'Mestre no equilíbrio do Chi.', slot: 'pet', rarity: 'Épico', minLevel: 38, stats: { str: 15, agi: 15, int: 15, vit: 15, lck: 15, xpBonus: 10 }, price: 18000, sellPrice: 3600, maxStack: 1,
+    petSkill: { triggerChance: 0.20, healMultiplier: 0.20, logText: '🐼 O Panda Monge canalizou seu Chi, revitalizando seu corpo!' }
+  },
+  sombra_perseguidora: { 
+    id: 'sombra_perseguidora', name: 'Sombra Perseguidora', emoji: '👤', description: 'Um espectro assassino grudado em você.', slot: 'pet', rarity: 'Lendário', minLevel: 45, stats: { agi: 40, str: 30, attack: 80, critBonus: 15 }, price: 0, sellPrice: 25000, maxStack: 1,
+    petSkill: { triggerChance: 0.35, damageMultiplier: 0.40, logText: '👤 A Sombra Perseguidora atacou os pontos vitais do inimigo!' }
+  },
+  fenix_renascida: { 
+    id: 'fenix_renascida', name: 'Fênix Renascida', emoji: '🔥', description: 'Chamas que curam aliados e queimam inimigos.', slot: 'pet', rarity: 'Lendário', minLevel: 50, stats: { int: 50, vit: 30, hp: 500, energy: 200 }, price: 0, sellPrice: 30000, maxStack: 1,
+    petSkill: { triggerChance: 0.30, healMultiplier: 0.30, logText: '🔥 As cinzas da Fênix envolveram você em uma restauração divina!' }
+  },
 
   // ═══════════════ CONSUMÍVEIS (consumable) ═══════════════
   pocao_de_vida_p: { id: 'pocao_de_vida_p', name: 'Poção de Vida (P)', emoji: '🧪', description: 'Restaura 100 HP.', slot: 'consumable', rarity: 'Comum', minLevel: 1, stats: { hp: 100 }, price: 50, sellPrice: 10, maxStack: 99 },

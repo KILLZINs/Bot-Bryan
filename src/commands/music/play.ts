@@ -17,19 +17,18 @@ export default {
     const query = interaction.options.getString('musica', true);
     const member = interaction.member as GuildMember;
 
-    if (!member.voice.channel) {
+    if (!member?.voice?.channel) {
       return interaction.reply({ embeds: [errorEmbed('Erro', 'Você precisa estar em um canal de voz para colocar música!')], ephemeral: true });
     }
 
+    // Dá mais tempo pro bot pensar
     await interaction.deferReply();
 
     try {
-      // 🧠 BUSCA INTELIGENTE
-      // Se tiver "http" no texto, é um link. Se não tiver, é uma pesquisa por nome.
+      // 🧠 BUSCA INTELIGENTE TURBINADA
+      // Se tiver "http", é link. Se for só texto, pesquisa direto no Spotify (muito mais rápido e preciso)
       const isLink = query.startsWith('http://') || query.startsWith('https://');
-      
-      // Força a busca no YouTube se for apenas texto (muito mais preciso)
-      const engineToUse = isLink ? QueryType.AUTO : QueryType.YOUTUBE_SEARCH;
+      const engineToUse = isLink ? QueryType.AUTO : QueryType.SPOTIFY_SEARCH;
 
       const searchResult = await player.search(query, {
         requestedBy: interaction.user,
@@ -37,15 +36,17 @@ export default {
       });
 
       if (!searchResult.hasTracks()) {
-         return interaction.followUp('❌ Não consegui encontrar nenhuma música com esse nome/link. Tente ser mais específico.');
+         return interaction.followUp('❌ Não consegui encontrar nenhuma música. Verifique o nome/link.');
       }
 
+      // Toca a música e força a engine a usar estratégias antiblock
       const { track } = await player.play(member.voice.channel, searchResult, {
         nodeOptions: {
           metadata: interaction,
           leaveOnEmpty: true,
           leaveOnEmptyCooldown: 300000, 
           leaveOnEnd: false, 
+          bufferingTimeout: 3000, // Tempo de espera para buffer
         }
       });
 
@@ -53,7 +54,7 @@ export default {
       
     } catch (e: any) {
       console.error('[ERRO DE MÚSICA]', e);
-      return interaction.followUp(`❌ Falha ao tocar. O erro foi: \`${e.message || 'Erro Desconhecido'}\``);
+      return interaction.followUp(`❌ Falha crítica ao tocar. O bloqueio de IP pode estar ativo. Erro: \`${e.message || 'Desconhecido'}\``);
     }
   }
 };

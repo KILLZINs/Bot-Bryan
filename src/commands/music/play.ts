@@ -21,32 +21,27 @@ export default {
       return interaction.reply({ embeds: [errorEmbed('Erro', 'Você precisa estar em um canal de voz para colocar música!')], ephemeral: true });
     }
 
-    // Dá mais tempo pro bot pensar
+    // Dá tempo pro bot pesquisar (evita "A interação falhou")
     await interaction.deferReply();
 
     try {
-      // 🧠 BUSCA INTELIGENTE TURBINADA
-      // Se tiver "http", é link. Se for só texto, pesquisa direto no Spotify (muito mais rápido e preciso)
-      const isLink = query.startsWith('http://') || query.startsWith('https://');
-      const engineToUse = isLink ? QueryType.AUTO : QueryType.SPOTIFY_SEARCH;
-
+      // 🧠 BUSCA GLOBAL: Tenta achar em qualquer plataforma
       const searchResult = await player.search(query, {
         requestedBy: interaction.user,
-        searchEngine: engineToUse
+        searchEngine: QueryType.AUTO
       });
 
       if (!searchResult.hasTracks()) {
-         return interaction.followUp('❌ Não consegui encontrar nenhuma música. Verifique o nome/link.');
+         return interaction.followUp('❌ Não consegui encontrar nenhuma música. Verifique o nome ou o link enviado.');
       }
 
-      // Toca a música e força a engine a usar estratégias antiblock
       const { track } = await player.play(member.voice.channel, searchResult, {
         nodeOptions: {
-          metadata: interaction,
+          metadata: interaction, // Passamos a interação para o index.ts avisar se der erro
           leaveOnEmpty: true,
           leaveOnEmptyCooldown: 300000, 
           leaveOnEnd: false, 
-          bufferingTimeout: 3000, // Tempo de espera para buffer
+          bufferingTimeout: 10000, // Dá mais tempo pro Railway baixar a música
         }
       });
 
@@ -54,7 +49,7 @@ export default {
       
     } catch (e: any) {
       console.error('[ERRO DE MÚSICA]', e);
-      return interaction.followUp(`❌ Falha crítica ao tocar. O bloqueio de IP pode estar ativo. Erro: \`${e.message || 'Desconhecido'}\``);
+      return interaction.followUp(`❌ Falha crítica ao processar o comando. Erro: \`${e.message || 'Desconhecido'}\``);
     }
   }
 };

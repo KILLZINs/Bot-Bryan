@@ -1,9 +1,18 @@
 import 'dotenv/config';
-import { Client, Collection, GatewayIntentBits, Partials } from 'discord.js';
+import {
+  Client,
+  Collection,
+  GatewayIntentBits,
+  Partials,
+} from 'discord.js';
 import { Player } from 'discord-player';
 import { readdirSync } from 'fs';
 import { join } from 'path';
-import { Command, PrefixCommand, ExtendedClient } from './types';
+import {
+  Command,
+  PrefixCommand,
+  ExtendedClient,
+} from './types';
 import { prisma } from './database/client';
 import { startDashboard } from './dashboard/server';
 
@@ -16,97 +25,200 @@ const client = new Client({
     GatewayIntentBits.GuildModeration,
     GatewayIntentBits.MessageContent,
     GatewayIntentBits.DirectMessages,
-    GatewayIntentBits.GuildVoiceStates, // 🎙️ Essencial para a música
+    GatewayIntentBits.GuildVoiceStates,
   ],
-  partials: [Partials.Message, Partials.Channel, Partials.Reaction],
+  partials: [
+    Partials.Message,
+    Partials.Channel,
+    Partials.Reaction,
+  ],
 }) as ExtendedClient;
 
-client.commands       = new Collection<string, Command>();
+client.commands = new Collection<string, Command>();
 client.prefixCommands = new Collection<string, PrefixCommand>();
-client.cooldowns      = new Collection<string, Collection<string, number>>();
+client.cooldowns = new Collection<
+  string,
+  Collection<string, number>
+>();
 
-// 🎵 Inicia a estrutura do motor de música
+// Inicializa o motor de música.
 const player = new Player(client, {
   ytdlOptions: {
     quality: 'highestaudio',
-    highWaterMark: 1 << 25 // Buffer turbinado para evitar engasgos
-  }
+    highWaterMark: 1 << 25,
+  },
 });
 
-// 🚨 MONITORES DE ERRO AVANÇADOS
+// Monitores de erro do player.
 player.events.on('error', (queue, error) => {
   console.log(`[ERRO NA FILA] ${error.message}`);
 });
+
 player.events.on('playerError', (queue, error) => {
   console.log(`[ERRO DE ÁUDIO/STREAM] ${error.message}`);
+
   if (queue.metadata) {
     const interaction = queue.metadata as any;
-    interaction.channel?.send(`❌ **O áudio falhou:** \`${error.message}\``).catch(() => {});
+
+    interaction.channel
+      ?.send(`❌ **O áudio falhou:** \`${error.message}\``)
+      .catch(() => {});
   }
 });
 
-// ─── Load slash commands ──────────────────────────────────────────────────────
+// Carrega os comandos slash.
 const commandsPath = join(__dirname, 'commands');
-for (const entry of readdirSync(commandsPath, { withFileTypes: true })) {
+
+for (const entry of readdirSync(commandsPath, {
+  withFileTypes: true,
+})) {
   if (entry.isDirectory()) {
     const folderPath = join(commandsPath, entry.name);
-    for (const file of readdirSync(folderPath).filter(f => f.endsWith('.js') || f.endsWith('.ts'))) {
-      const command: Command = require(join(folderPath, file)).default;
-      if (command?.data && typeof command.execute === 'function') {
+
+    for (
+      const file of readdirSync(folderPath).filter(
+        (fileName) =>
+          fileName.endsWith('.js') ||
+          fileName.endsWith('.ts'),
+      )
+    ) {
+      const command: Command = require(
+        join(folderPath, file),
+      ).default;
+
+      if (
+        command?.data &&
+        typeof command.execute === 'function'
+      ) {
         client.commands.set(command.data.name, command);
       }
     }
-  } else if (entry.isFile() && (entry.name.endsWith('.js') || entry.name.endsWith('.ts'))) {
-    const command: Command = require(join(commandsPath, entry.name)).default;
-    if (command?.data && typeof command.execute === 'function') {
+  } else if (
+    entry.isFile() &&
+    (entry.name.endsWith('.js') ||
+      entry.name.endsWith('.ts'))
+  ) {
+    const command: Command = require(
+      join(commandsPath, entry.name),
+    ).default;
+
+    if (
+      command?.data &&
+      typeof command.execute === 'function'
+    ) {
       client.commands.set(command.data.name, command);
     }
   }
 }
 
-// ─── Load prefix commands ─────────────────────────────────────────────────────
+// Carrega os comandos com prefixo.
 const prefixCommandsPath = join(__dirname, 'prefix-commands');
+
 try {
-  for (const file of readdirSync(prefixCommandsPath).filter(f => f.endsWith('.js') || f.endsWith('.ts'))) {
-    const cmd: PrefixCommand = require(join(prefixCommandsPath, file)).default;
-    if (cmd?.name && typeof cmd.execute === 'function') {
-      client.prefixCommands.set(cmd.name, cmd);
+  for (
+    const file of readdirSync(prefixCommandsPath).filter(
+      (fileName) =>
+        fileName.endsWith('.js') ||
+        fileName.endsWith('.ts'),
+    )
+  ) {
+    const command: PrefixCommand = require(
+      join(prefixCommandsPath, file),
+    ).default;
+
+    if (
+      command?.name &&
+      typeof command.execute === 'function'
+    ) {
+      client.prefixCommands.set(command.name, command);
     }
   }
-} catch {}
+} catch {
+  // A pasta pode não existir em algumas versões do build.
+}
 
-// ─── Load events ──────────────────────────────────────────────────────────────
+// Carrega os eventos.
 const eventsPath = join(__dirname, 'events');
-for (const file of readdirSync(eventsPath).filter(f => f.endsWith('.js') || f.endsWith('.ts'))) {
+
+for (
+  const file of readdirSync(eventsPath).filter(
+    (fileName) =>
+      fileName.endsWith('.js') ||
+      fileName.endsWith('.ts'),
+  )
+) {
   const event = require(join(eventsPath, file)).default;
+
   if (event.once) {
-    client.once(event.name, (...args) => event.execute(...args, client));
+    client.once(event.name, (...args) =>
+      event.execute(...args, client),
+    );
   } else {
-    client.on(event.name, (...args) => event.execute(...args, client));
+    client.on(event.name, (...args) =>
+      event.execute(...args, client),
+    );
   }
 }
 
-// ─── Graceful shutdown ────────────────────────────────────────────────────────
+// Desligamento seguro.
 async function shutdown() {
-  console.log('Shutting down...');
+  console.log('Desligando o bot...');
+
   await prisma.$disconnect();
   client.destroy();
+
   process.exit(0);
 }
+
 process.on('SIGTERM', shutdown);
 process.on('SIGINT', shutdown);
-process.on('unhandledRejection', (err) => console.error('Unhandled rejection:', err));
-process.on('uncaughtException',  (err) => console.error('Uncaught exception:',  err));
 
-// 🌐 LIGA O SITE DO DASHBOARD PRIMEIRO
-startDashboard();
+process.on('unhandledRejection', (error) => {
+  console.error('Unhandled rejection:', error);
+});
 
-// 🤖 LIGA O BOT E DEPOIS OS MOTORES DE MÚSICA
-client.login(process.env.DISCORD_TOKEN).then(async () => {
-  console.log('🤖 Bot conectado ao Discord! Iniciando motores de áudio...');
-  
-  // 🚀 O GOLPE DE MESTRE: Carrega Spotify e SoundCloud, mas BLOQUEIA o YouTube
-  await player.extractors.loadDefault((ext) => ext !== 'YouTubeExtractor');
-  
-  console.log('🎵 Sistema de Música 100% Operacional (Modo Anti-Block Ativado)!');
-}).catch(console.error);
+process.on('uncaughtException', (error) => {
+  console.error('Uncaught exception:', error);
+});
+
+async function start() {
+  /*
+   * O extractor padrão do YouTube pode quebrar com mudanças
+   * frequentes da plataforma.
+   *
+   * A busca por YouTube é feita pelo play-dl no play.ts.
+   * Depois, o título é localizado no SoundCloud para tocar
+   * através de um extractor mais estável.
+   *
+   * Spotify e SoundCloud continuam usando os extractors
+   * padrão do discord-player.
+   *
+   * O carregamento acontece antes do login para impedir que
+   * comandos sejam executados antes do motor de música estar pronto.
+   */
+  const loaded = await player.extractors.loadDefault(
+    (extractor) => extractor !== 'YouTubeExtractor',
+  );
+
+  if (!loaded.success) {
+    throw loaded.error;
+  }
+
+  startDashboard();
+
+  await client.login(process.env.DISCORD_TOKEN);
+
+  console.log('🤖 Bot conectado ao Discord!');
+  console.log(
+    '🎵 Sistema de música pronto para busca por nome e links.',
+  );
+}
+
+start().catch((error) => {
+  console.error(
+    '[INICIALIZAÇÃO] Não foi possível iniciar o bot:',
+    error,
+  );
+
+  process.exitCode = 1;
+});

@@ -4,42 +4,9 @@ import {
   GuildMember,
 } from 'discord.js';
 import { useMainPlayer, QueryType } from 'discord-player';
-import play from 'play-dl';
 import { errorEmbed } from '../../utils/embeds';
 
 const YOUTUBE_URL = /(?:youtube\.com|youtu\.be)/i;
-
-async function soundCloudSearch(
-  player: ReturnType<typeof useMainPlayer>,
-  query: string,
-) {
-  const result = await player.search(query, {
-    searchEngine: QueryType.SOUNDCLOUD_SEARCH,
-  });
-
-  if (result.hasTracks()) {
-    return result;
-  }
-
-  /*
-   * Alguns títulos não aparecem com a grafia exata no SoundCloud.
-   * Nesse caso, usamos o primeiro resultado do YouTube apenas como
-   * referência e pesquisamos o título final no SoundCloud.
-   */
-  const youtubeResults = await play.search(query, { limit: 3 });
-  const firstResult = youtubeResults[0];
-
-  if (!firstResult) {
-    return result;
-  }
-
-  return player.search(
-    `${firstResult.title} ${firstResult.channel?.name ?? ''}`,
-    {
-      searchEngine: QueryType.SOUNDCLOUD_SEARCH,
-    },
-  );
-}
 
 export default {
   data: new SlashCommandBuilder()
@@ -49,7 +16,7 @@ export default {
       option
         .setName('musica')
         .setDescription(
-          'Nome da música ou link do YouTube, Spotify ou SoundCloud',
+          'Nome da música ou link do Spotify ou SoundCloud',
         )
         .setRequired(true),
     ),
@@ -71,36 +38,37 @@ export default {
       });
     }
 
+    // 🛡️ TRAVA: Bloqueia links do YouTube para evitar o IP Block da nuvem
+    if (YOUTUBE_URL.test(query)) {
+      return interaction.reply({
+        embeds: [
+          errorEmbed(
+            'Bloqueio do YouTube',
+            'Links diretos do YouTube estão desativados devido a bloqueios do Google contra bots.\n\n🎧 **Use links do Spotify, SoundCloud ou digite o nome da música!**',
+          ),
+        ],
+        ephemeral: true,
+      });
+    }
+
     await interaction.deferReply();
 
     try {
       let searchResult;
+      const isLink = /^https?:\/\//i.test(query);
 
-      if (YOUTUBE_URL.test(query)) {
-        /*
-         * O link do YouTube não é enviado diretamente para o player,
-         * pois o sistema de stream do YouTube sofre bloqueios e alterações
-         * frequentes. Pegamos o título e localizamos a mesma música no
-         * SoundCloud para reproduzir de forma mais estável.
-         */
-        const info = await play.video_basic_info(query);
-
-        const title = info.video_details.title;
-        const author = info.video_details.channel?.name ?? '';
-
-        searchResult = await soundCloudSearch(
-          player,
-          `${title} ${author}`,
-        );
-      } else if (/^https?:\/\//i.test(query)) {
-        // Spotify e SoundCloud continuam usando os extractors nativos.
+      if (isLink) {
+        // Se for um link (ex: Spotify), o bot lê no automático
         searchResult = await player.search(query, {
           requestedBy: interaction.user,
           searchEngine: QueryType.AUTO,
         });
       } else {
-        // Pesquisa por nome, com fallback usando o YouTube como índice.
-        searchResult = await soundCloudSearch(player, query);
+        // Se for texto, pesquisa e baixa direto do SoundCloud (anti-block + instantâneo)
+        searchResult = await player.search(query, {
+          requestedBy: interaction.user,
+          searchEngine: QueryType.SOUNDCLOUD_SEARCH,
+        });
       }
 
       if (!searchResult.hasTracks()) {
@@ -125,7 +93,7 @@ export default {
       console.error('[ERRO DE MÚSICA]', error);
 
       return interaction.editReply(
-        '❌ Não consegui iniciar o áudio. Verifique se o bot tem as permissões **Conectar** e **Falar** no canal de voz e tente novamente.',
+        '❌ Não consegui iniciar o áudio. O servidor pode estar sofrendo lentidão na rede ou sem permissões.',
       );
     }
   },

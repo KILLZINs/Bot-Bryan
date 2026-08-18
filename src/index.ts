@@ -1,5 +1,16 @@
 import 'dotenv/config';
-import { setDefaultResultOrder } from 'dns'; // 👈 IMPORTANTE PARA O FIX DE REDE
+
+// 🛠️ FIX 1: OBRIGATÓRIO PARA O ÁUDIO FUNCIONAR NO RAILWAY
+// Garante que o motor de áudio nunca seja pulado ("skipFFmpeg: true")
+const ffmpegPath = require('ffmpeg-static');
+if (ffmpegPath) {
+  process.env.FFMPEG_PATH = ffmpegPath;
+}
+
+// 🌐 FIX 2: BLINDAGEM DE REDE
+import { setDefaultResultOrder } from 'dns';
+setDefaultResultOrder('ipv4first');
+
 import {
   Client,
   Collection,
@@ -16,11 +27,6 @@ import {
 } from './types';
 import { prisma } from './database/client';
 import { startDashboard } from './dashboard/server';
-
-// 🚀 O GOLPE DE MESTRE DA REDE:
-// Força o servidor do Railway (e o Node.js) a priorizar IPv4.
-// Isso impede que o SoundCloud/Spotify bloqueiem o IP da nuvem e cortem o áudio, resolvendo o "Silêncio Fantasma".
-setDefaultResultOrder('ipv4first');
 
 const client = new Client({
   intents: [
@@ -47,7 +53,6 @@ client.cooldowns = new Collection<
   Collection<string, number>
 >();
 
-// Inicializa o motor de música.
 const player = new Player(client, {
   ytdlOptions: {
     quality: 'highestaudio',
@@ -55,159 +60,75 @@ const player = new Player(client, {
   },
 });
 
-// Monitores de erro do player.
 player.events.on('error', (queue, error) => {
   console.log(`[ERRO NA FILA] ${error.message}`);
 });
 
 player.events.on('playerError', (queue, error) => {
   console.log(`[ERRO DE ÁUDIO/STREAM] ${error.message}`);
-
   if (queue.metadata) {
     const interaction = queue.metadata as any;
-
     interaction.channel
       ?.send(`❌ **O áudio falhou:** \`${error.message}\``)
       .catch(() => {});
   }
 });
 
-// ☢️ VISÃO DE RAIO-X (DEBUG)
-// Isso vai mostrar exatamente o que o FFmpeg e a rede estão fazendo no terminal do Railway
 player.events.on('debug', (queue, message) => {
   console.log(`[RAIO-X PLAYER] ${message}`);
 });
 
-// Carrega os comandos slash.
 const commandsPath = join(__dirname, 'commands');
-
-for (const entry of readdirSync(commandsPath, {
-  withFileTypes: true,
-})) {
+for (const entry of readdirSync(commandsPath, { withFileTypes: true })) {
   if (entry.isDirectory()) {
     const folderPath = join(commandsPath, entry.name);
-
-    for (
-      const file of readdirSync(folderPath).filter(
-        (fileName) =>
-          fileName.endsWith('.js') ||
-          fileName.endsWith('.ts'),
-      )
-    ) {
-      const command: Command = require(
-        join(folderPath, file),
-      ).default;
-
-      if (
-        command?.data &&
-        typeof command.execute === 'function'
-      ) {
+    for (const file of readdirSync(folderPath).filter(f => f.endsWith('.js') || f.endsWith('.ts'))) {
+      const command: Command = require(join(folderPath, file)).default;
+      if (command?.data && typeof command.execute === 'function') {
         client.commands.set(command.data.name, command);
       }
     }
-  } else if (
-    entry.isFile() &&
-    (entry.name.endsWith('.js') ||
-      entry.name.endsWith('.ts'))
-  ) {
-    const command: Command = require(
-      join(commandsPath, entry.name),
-    ).default;
-
-    if (
-      command?.data &&
-      typeof command.execute === 'function'
-    ) {
+  } else if (entry.isFile() && (entry.name.endsWith('.js') || entry.name.endsWith('.ts'))) {
+    const command: Command = require(join(commandsPath, entry.name)).default;
+    if (command?.data && typeof command.execute === 'function') {
       client.commands.set(command.data.name, command);
     }
   }
 }
 
-// Carrega os comandos com prefixo.
 const prefixCommandsPath = join(__dirname, 'prefix-commands');
-
 try {
-  for (
-    const file of readdirSync(prefixCommandsPath).filter(
-      (fileName) =>
-        fileName.endsWith('.js') ||
-        fileName.endsWith('.ts'),
-    )
-  ) {
-    const command: PrefixCommand = require(
-      join(prefixCommandsPath, file),
-    ).default;
-
-    if (
-      command?.name &&
-      typeof command.execute === 'function'
-    ) {
+  for (const file of readdirSync(prefixCommandsPath).filter(f => f.endsWith('.js') || f.endsWith('.ts'))) {
+    const command: PrefixCommand = require(join(prefixCommandsPath, file)).default;
+    if (command?.name && typeof command.execute === 'function') {
       client.prefixCommands.set(command.name, command);
     }
   }
-} catch {
-  // A pasta pode não existir em algumas versões do build.
-}
+} catch {}
 
-// Carrega os eventos.
 const eventsPath = join(__dirname, 'events');
-
-for (
-  const file of readdirSync(eventsPath).filter(
-    (fileName) =>
-      fileName.endsWith('.js') ||
-      fileName.endsWith('.ts'),
-  )
-) {
+for (const file of readdirSync(eventsPath).filter(f => f.endsWith('.js') || f.endsWith('.ts'))) {
   const event = require(join(eventsPath, file)).default;
-
   if (event.once) {
-    client.once(event.name, (...args) =>
-      event.execute(...args, client),
-    );
+    client.once(event.name, (...args) => event.execute(...args, client));
   } else {
-    client.on(event.name, (...args) =>
-      event.execute(...args, client),
-    );
+    client.on(event.name, (...args) => event.execute(...args, client));
   }
 }
 
-// Desligamento seguro.
 async function shutdown() {
   console.log('Desligando o bot...');
-
   await prisma.$disconnect();
   client.destroy();
-
   process.exit(0);
 }
 
 process.on('SIGTERM', shutdown);
 process.on('SIGINT', shutdown);
-
-process.on('unhandledRejection', (error) => {
-  console.error('Unhandled rejection:', error);
-});
-
-process.on('uncaughtException', (error) => {
-  console.error('Uncaught exception:', error);
-});
+process.on('unhandledRejection', (error) => console.error('Unhandled rejection:', error));
+process.on('uncaughtException', (error) => console.error('Uncaught exception:', error));
 
 async function start() {
-  /*
-   * O extractor padrão do YouTube pode quebrar com mudanças
-   * frequentes da plataforma.
-   *
-   * A busca por YouTube é feita pelo play-dl no play.ts.
-   * Depois, o título é localizado no SoundCloud para tocar
-   * através de um extractor mais estável.
-   *
-   * Spotify e SoundCloud continuam usando os extractors
-   * padrão do discord-player.
-   *
-   * O carregamento acontece antes do login para impedir que
-   * comandos sejam executados antes do motor de música estar pronto.
-   */
   const loaded = await player.extractors.loadDefault(
     (extractor) => extractor !== 'YouTubeExtractor',
   );
@@ -217,20 +138,12 @@ async function start() {
   }
 
   startDashboard();
-
   await client.login(process.env.DISCORD_TOKEN);
-
   console.log('🤖 Bot conectado ao Discord!');
-  console.log(
-    '🎵 Sistema de música pronto para busca por nome e links.',
-  );
+  console.log('🎵 Sistema de música pronto para busca por nome e links.');
 }
 
 start().catch((error) => {
-  console.error(
-    '[INICIALIZAÇÃO] Não foi possível iniciar o bot:',
-    error,
-  );
-
+  console.error('[INICIALIZAÇÃO] Não foi possível iniciar o bot:', error);
   process.exitCode = 1;
 });

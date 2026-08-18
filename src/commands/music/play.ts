@@ -5,10 +5,10 @@ import { errorEmbed } from '../../utils/embeds';
 export default {
   data: new SlashCommandBuilder()
     .setName('play')
-    .setDescription('▶️ Toca uma música ou playlist nos canais de voz')
+    .setDescription('▶️ Toca uma música nos canais de voz')
     .addStringOption(option => 
       option.setName('musica')
-        .setDescription('Nome da música ou link (YouTube, Spotify, Soundcloud)')
+        .setDescription('Nome da música ou link (Spotify / SoundCloud)')
         .setRequired(true)
     ),
 
@@ -21,27 +21,40 @@ export default {
       return interaction.reply({ embeds: [errorEmbed('Erro', 'Você precisa estar em um canal de voz para colocar música!')], ephemeral: true });
     }
 
-    // Dá tempo pro bot pesquisar (evita "A interação falhou")
+    // 🛡️ TRAVA DE SEGURANÇA: Bloqueia links brutos do YouTube
+    if (query.includes('youtube.com') || query.includes('youtu.be')) {
+      return interaction.reply({ 
+        embeds: [errorEmbed('Bloqueio do YouTube', 'Links diretos do YouTube estão temporariamente desativados devido a restrições de sistema do Google.\n\n🎧 **Use links do Spotify, SoundCloud ou digite o nome da música!**')], 
+        ephemeral: true 
+      });
+    }
+
+    // Dá tempo pro bot pesquisar (evita o erro "A interação falhou")
     await interaction.deferReply();
 
     try {
-      // 🧠 BUSCA GLOBAL: Tenta achar em qualquer plataforma
+      // 🧠 BUSCA SUPER RÁPIDA:
+      // Se for link, deixa ler no automático (perfeito pro Spotify).
+      // Se for texto, pesquisa e baixa direto do SoundCloud (anti-block + instantâneo).
+      const isLink = query.startsWith('http://') || query.startsWith('https://');
+      const engineToUse = isLink ? QueryType.AUTO : QueryType.SOUNDCLOUD_SEARCH;
+
       const searchResult = await player.search(query, {
         requestedBy: interaction.user,
-        searchEngine: QueryType.AUTO
+        searchEngine: engineToUse
       });
 
       if (!searchResult.hasTracks()) {
          return interaction.followUp('❌ Não consegui encontrar nenhuma música. Verifique o nome ou o link enviado.');
       }
 
+      // 🎧 Entra na call e roda o som
       const { track } = await player.play(member.voice.channel, searchResult, {
         nodeOptions: {
-          metadata: interaction, // Passamos a interação para o index.ts avisar se der erro
+          metadata: interaction,
           leaveOnEmpty: true,
           leaveOnEmptyCooldown: 300000, 
           leaveOnEnd: false, 
-          bufferingTimeout: 10000, // Dá mais tempo pro Railway baixar a música
         }
       });
 

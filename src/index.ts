@@ -7,11 +7,8 @@ import { Command, PrefixCommand, ExtendedClient } from './types';
 import { prisma } from './database/client';
 import { startDashboard } from './dashboard/server';
 
-// 🛠️ FORÇA O RAILWAY A LIGAR O PROCESSADOR DE ÁUDIO
-const ffmpegPath = require('ffmpeg-static');
-if (ffmpegPath) {
-  process.env.FFMPEG_PATH = ffmpegPath;
-}
+// 🚀 NÓS REMOVEMOS A GAMBIARRA DO FFMPEG DAQUI!
+// Agora o bot vai usar o FFmpeg nativo super potente que instalamos no painel do Railway.
 
 const client = new Client({
   intents: [
@@ -39,7 +36,7 @@ const player = new Player(client, {
   }
 });
 
-// 🚨 MONITORES DE ERRO AVANÇADOS (Avisa direto no chat do Discord se algo der ruim)
+// 🚨 MONITORES DE ERRO AVANÇADOS
 player.events.on('error', (queue, error) => {
   console.log(`[ERRO NA FILA] ${error.message}`);
 });

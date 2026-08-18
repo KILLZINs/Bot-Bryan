@@ -115,15 +115,15 @@ model Warn {
 }
 
 model Poll {
-  id        String      @id @default(cuid())
+  id        String    @id @default(cuid())
   guildId   String
   channelId String
   messageId String?
   question  String
   createdBy String
   endsAt    DateTime?
-  ended     Boolean     @default(false)
-  createdAt DateTime    @default(now())
+  ended     Boolean   @default(false)
+  createdAt DateTime  @default(now())
 
   options PollOption[]
 
@@ -289,21 +289,22 @@ model GuildConfig {
   antiSpam              Boolean  @default(false)
   antiLinks             Boolean  @default(false)
 
-  featLeveling        Boolean  @default(true)
-  featRpg             Boolean  @default(true)
-  featTickets         Boolean  @default(true)
-  featPolls           Boolean  @default(true)
-  featGiveaways       Boolean  @default(true)
-  featSelfRole        Boolean  @default(true)
-  featMissions        Boolean  @default(true)
-  featSocial          Boolean  @default(true)
-  featEconomy         Boolean  @default(true)
-  featMod             Boolean  @default(true)
-  featAnnouncements   Boolean  @default(true)
-  featMusic           Boolean  @default(true) // 👈 ADICIONE ESTA LINHA!
+  // 🧩 Módulos Dinâmicos (Ativados no Dashboard)
+  featLeveling      Boolean  @default(true)
+  featRpg           Boolean  @default(true)
+  featTickets       Boolean  @default(true)
+  featPolls         Boolean  @default(true)
+  featGiveaways     Boolean  @default(true)
+  featSelfRole      Boolean  @default(true)
+  featMissions      Boolean  @default(true)
+  featSocial        Boolean  @default(true)
+  featEconomy       Boolean  @default(true)
+  featMod           Boolean  @default(true)
+  featAnnouncements Boolean  @default(true)
+  featMusic         Boolean  @default(true)
 
-  logFlags              Int      @default(31)
-  updatedAt             DateTime @updatedAt @default(now())
+  logFlags  Int      @default(31)
+  updatedAt DateTime @updatedAt @default(now())
 
   @@map("guild_config")
 }
@@ -389,7 +390,7 @@ model RpgCharacter {
   classMissions   RpgClassMission[]
   fishingSession  RpgFishingSession?
 
-// Sistema de Pets
+  // Sistema de Pets
   activePetLevel Int @default(1)
   activePetXp    Int @default(0)
 
@@ -403,7 +404,7 @@ model RpgCharacter {
 }
 
 model RpgEquipment {
-  characterId String   @id
+  characterId String @id
   weapon      String?
   helmet      String?
   chest       String?  
@@ -433,20 +434,20 @@ model RpgInventoryItem {
 }
 
 model RpgGuild {
-  id          String   @id @default(cuid())
-  name        String   @unique
-  tag         String   @unique
-  emblem      String   @default("⚔️")
-  description String?
-  leaderId    String
-  level       Int      @default(1)
-  xp          Int      @default(0)
-  gold        Int      @default(0)
-  maxMembers  Int      @default(20)
+  id           String   @id @default(cuid())
+  name         String   @unique
+  tag          String   @unique
+  emblem       String   @default("⚔️")
+  description  String?
+  leaderId     String
+  level        Int      @default(1)
+  xp           Int      @default(0)
+  gold         Int      @default(0)
+  maxMembers   Int      @default(20)
   announcement String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  members     RpgGuildMember[]
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  members      RpgGuildMember[]
 
   @@map("rpg_guilds")
 }
@@ -613,9 +614,9 @@ model WorldBossParticipant {
 }
 
 model Marriage {
-  id        String   @id @default(cuid())
-  userId1   String
-  userId2   String
+  id       String   @id @default(cuid())
+  userId1  String
+  userId2  String
   marriedAt DateTime @default(now())
 
   @@unique([userId1, userId2])
@@ -688,6 +689,9 @@ model AllianceEmbed {
   @@map("alliance_embeds")
 }
 
+// ==========================================
+// 👑 GLOBAL BOT CONFIGURATION
+// ==========================================
 model BotConfig {
   id            String   @id @default("global")
   footerText    String   @default("⚔️ Aliança Skyline")
@@ -759,12 +763,12 @@ model VipConfig {
 }
 
 model VipGuildConfig {
-  id                       String   @id @default(cuid())
-  guildId                  String   @unique
+  id                     String   @id @default(cuid())
+  guildId                String   @unique
   gradientTicketCategoryId String?
   defaultFavoriteLimit     Int      @default(3)
-  createdAt                DateTime @default(now())
-  updatedAt                DateTime @updatedAt
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
 
   @@map("vip_guild_configs")
 }

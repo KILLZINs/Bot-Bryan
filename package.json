@@ -21,6 +21,7 @@
     "axios": "^1.6.2",
     "cookie-parser": "^1.4.6",
     "discord-player": "^6.6.6",
+    "discord-player-youtubei": "^1.4.1",
     "discord.js": "^14.14.1",
     "dotenv": "^16.3.1",
     "ejs": "^3.1.9",

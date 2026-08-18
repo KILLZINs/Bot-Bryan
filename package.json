@@ -32,7 +32,6 @@
     "node-cron": "^3.0.3",
     "opusscript": "^0.0.8",
     "mediaplex": "^0.0.9",
-    "play-dl": "^1.9.7",
     "tweetnacl": "^1.0.3"
   },
   "devDependencies": {

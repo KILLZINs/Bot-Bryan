@@ -47,6 +47,23 @@ const GLOBAL_CATEGORIES = [
       { id: 'featAfk', name: '💤 Sistema AFK', desc: 'Habilita comando /afk e monitoramento de menções.' },
       { id: 'featWelcomeDm', name: '📩 DM de Boas-vindas', desc: 'Recepciona novos membros com mensagem no privado.' }
     ]
+  },
+  {
+    category: "🌍 Master Switches (Desliga em TODOS os servidores)",
+    features: [
+      { id: 'featRpg', name: 'Sistema RPG (Geral)', desc: 'Desliga o ecossistema RPG inteiro do bot.' },
+      { id: 'featEconomy', name: '🪙 Economia', desc: 'Trava moedas, lojas e transferências globais.' },
+      { id: 'featMissions', name: '📋 Missões', desc: 'Congela missões diárias e semanais.' },
+      { id: 'featMod', name: '🔨 Auto-Moderação', desc: 'Desliga filtros e punições do bot.' },
+      { id: 'featTickets', name: '🎫 Tickets', desc: 'Impede a criação de tickets em qualquer lugar.' },
+      { id: 'featSelfRole', name: '🎭 Registro de Cargos', desc: 'Desativa os menus interativos de cargo.' },
+      { id: 'featLeveling', name: '🎯 XP & Níveis', desc: 'Congela o ganho de XP em todos os servidores.' },
+      { id: 'featGiveaways', name: '🎁 Sorteios', desc: 'Trava todos os sorteios atuais e futuros.' },
+      { id: 'featPolls', name: '📊 Enquetes', desc: 'Desativa a ferramenta de enquetes.' },
+      { id: 'featSocial', name: '🤝 Roleplay Social', desc: 'Desliga interações como beijar, bater, abraçar.' },
+      { id: 'featAnnouncements', name: '📢 Anúncios', desc: 'Bloqueia os comandos de eventos e avisos.' },
+      { id: 'featMusic', name: '🎵 Sistema de Música', desc: 'Desliga o motor de áudio globalmente por segurança.' }
+    ]
   }
 ];
 

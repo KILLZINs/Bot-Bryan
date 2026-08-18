@@ -1,7 +1,6 @@
 import 'dotenv/config';
 import { Client, Collection, GatewayIntentBits, Partials } from 'discord.js';
 import { Player } from 'discord-player';
-import { YoutubeiExtractor } from 'discord-player-youtubei'; // 👈 NOVO IMPORT DO EXTRATOR BLINDADO
 import { readdirSync } from 'fs';
 import { join } from 'path';
 import { Command, PrefixCommand, ExtendedClient } from './types';
@@ -17,7 +16,7 @@ const client = new Client({
     GatewayIntentBits.GuildModeration,
     GatewayIntentBits.MessageContent,
     GatewayIntentBits.DirectMessages,
-    GatewayIntentBits.GuildVoiceStates,
+    GatewayIntentBits.GuildVoiceStates, // 🎙️ Essencial para a música
   ],
   partials: [Partials.Message, Partials.Channel, Partials.Reaction],
 }) as ExtendedClient;
@@ -26,13 +25,15 @@ client.commands       = new Collection<string, Command>();
 client.prefixCommands = new Collection<string, PrefixCommand>();
 client.cooldowns      = new Collection<string, Collection<string, number>>();
 
+// 🎵 Inicia a estrutura do motor de música
 const player = new Player(client, {
   ytdlOptions: {
     quality: 'highestaudio',
-    highWaterMark: 1 << 25
+    highWaterMark: 1 << 25 // Buffer turbinado para evitar engasgos
   }
 });
 
+// 🚨 MONITORES DE ERRO AVANÇADOS
 player.events.on('error', (queue, error) => {
   console.log(`[ERRO NA FILA] ${error.message}`);
 });
@@ -85,6 +86,7 @@ for (const file of readdirSync(eventsPath).filter(f => f.endsWith('.js') || f.en
   }
 }
 
+// ─── Graceful shutdown ────────────────────────────────────────────────────────
 async function shutdown() {
   console.log('Shutting down...');
   await prisma.$disconnect();
@@ -96,17 +98,15 @@ process.on('SIGINT', shutdown);
 process.on('unhandledRejection', (err) => console.error('Unhandled rejection:', err));
 process.on('uncaughtException',  (err) => console.error('Uncaught exception:',  err));
 
+// 🌐 LIGA O SITE DO DASHBOARD PRIMEIRO
 startDashboard();
 
+// 🤖 LIGA O BOT E DEPOIS OS MOTORES DE MÚSICA
 client.login(process.env.DISCORD_TOKEN).then(async () => {
   console.log('🤖 Bot conectado ao Discord! Iniciando motores de áudio...');
   
-  // 🚀 A MÁGICA ACONTECE AQUI:
-  // Carrega os extratores de Spotify e Soundcloud, mas BLOQUEIA o do YouTube quebrado
+  // 🚀 O GOLPE DE MESTRE: Carrega Spotify e SoundCloud, mas BLOQUEIA o YouTube
   await player.extractors.loadDefault((ext) => ext !== 'YouTubeExtractor');
   
-  // Instala o nosso novo Extrator Blindado (Youtubei) por cima
-  await player.extractors.register(YoutubeiExtractor, {});
-  
-  console.log('🎵 Sistema de Música 100% Operacional (Com Anti-Block)!');
+  console.log('🎵 Sistema de Música 100% Operacional (Modo Anti-Block Ativado)!');
 }).catch(console.error);

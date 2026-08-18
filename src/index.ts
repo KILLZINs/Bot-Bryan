@@ -7,6 +7,12 @@ import { Command, PrefixCommand, ExtendedClient } from './types';
 import { prisma } from './database/client';
 import { startDashboard } from './dashboard/server';
 
+// 🛠️ FORÇA O RAILWAY A LIGAR O PROCESSADOR DE ÁUDIO
+const ffmpegPath = require('ffmpeg-static');
+if (ffmpegPath) {
+  process.env.FFMPEG_PATH = ffmpegPath;
+}
+
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
@@ -25,23 +31,27 @@ client.commands       = new Collection<string, Command>();
 client.prefixCommands = new Collection<string, PrefixCommand>();
 client.cooldowns      = new Collection<string, Collection<string, number>>();
 
-// 🎵 Inicia a estrutura do motor de música e otimiza a conexão para evitar cortes
+// 🎵 Inicia a estrutura do motor de música
 const player = new Player(client, {
   ytdlOptions: {
     quality: 'highestaudio',
-    highWaterMark: 1 << 25 // Aumenta o buffer de memória para a música não engasgar
+    highWaterMark: 1 << 25 // Aumenta o buffer para a música não engasgar
   }
 });
 
-// 🚨 MONITORES DE ERRO (Essencial para não ficarmos cegos se o YouTube bloquear o IP)
+// 🚨 MONITORES DE ERRO AVANÇADOS (Avisa direto no chat do Discord se algo der ruim)
 player.events.on('error', (queue, error) => {
   console.log(`[ERRO NA FILA] ${error.message}`);
 });
 player.events.on('playerError', (queue, error) => {
   console.log(`[ERRO DE ÁUDIO/STREAM] ${error.message}`);
+  if (queue.metadata) {
+    const interaction = queue.metadata as any;
+    interaction.channel?.send(`❌ **O áudio falhou:** \`${error.message}\``).catch(() => {});
+  }
 });
 
-// ─── Load slash commands (supports subfolders one level deep) ─────────────────
+// ─── Load slash commands ──────────────────────────────────────────────────────
 const commandsPath = join(__dirname, 'commands');
 for (const entry of readdirSync(commandsPath, { withFileTypes: true })) {
   if (entry.isDirectory()) {
@@ -69,9 +79,7 @@ try {
       client.prefixCommands.set(cmd.name, cmd);
     }
   }
-} catch {
-  // pasta ainda não existe em tempo de execução — ignora silenciosamente
-}
+} catch {}
 
 // ─── Load events ──────────────────────────────────────────────────────────────
 const eventsPath = join(__dirname, 'events');
@@ -93,7 +101,6 @@ async function shutdown() {
 }
 process.on('SIGTERM', shutdown);
 process.on('SIGINT', shutdown);
-
 process.on('unhandledRejection', (err) => console.error('Unhandled rejection:', err));
 process.on('uncaughtException',  (err) => console.error('Uncaught exception:',  err));
 
@@ -103,9 +110,6 @@ startDashboard();
 // 🤖 LIGA O BOT E DEPOIS OS MOTORES DE MÚSICA
 client.login(process.env.DISCORD_TOKEN).then(async () => {
   console.log('🤖 Bot conectado ao Discord! Iniciando motores de áudio...');
-  
-  // O await aqui é crucial! Ele garante que o bot só libere as músicas depois de baixar os extratores (YouTube, Spotify, etc).
   await player.extractors.loadDefault();
-  
   console.log('🎵 Sistema de Música 100% Operacional!');
 }).catch(console.error);

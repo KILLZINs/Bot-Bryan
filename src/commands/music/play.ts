@@ -28,25 +28,14 @@ export default {
 
     if (!member?.voice?.channel) {
       return interaction.reply({
-        embeds: [
-          errorEmbed(
-            'Erro',
-            'Você precisa estar em um canal de voz para colocar música!',
-          ),
-        ],
+        embeds: [errorEmbed('Erro', 'Você precisa estar em um canal de voz para colocar música!')],
         ephemeral: true,
       });
     }
 
-    // 🛡️ TRAVA: Bloqueia links do YouTube para evitar o IP Block da nuvem
     if (YOUTUBE_URL.test(query)) {
       return interaction.reply({
-        embeds: [
-          errorEmbed(
-            'Bloqueio do YouTube',
-            'Links diretos do YouTube estão desativados devido a bloqueios do Google contra bots.\n\n🎧 **Use links do Spotify, SoundCloud ou digite o nome da música!**',
-          ),
-        ],
+        embeds: [errorEmbed('Bloqueio', 'Links do YouTube desativados. 🎧 **Use links do Spotify, SoundCloud ou digite o nome!**')],
         ephemeral: true,
       });
     }
@@ -58,13 +47,11 @@ export default {
       const isLink = /^https?:\/\//i.test(query);
 
       if (isLink) {
-        // Se for um link (ex: Spotify), o bot lê no automático
         searchResult = await player.search(query, {
           requestedBy: interaction.user,
           searchEngine: QueryType.AUTO,
         });
       } else {
-        // Se for texto, pesquisa e baixa direto do SoundCloud (anti-block + instantâneo)
         searchResult = await player.search(query, {
           requestedBy: interaction.user,
           searchEngine: QueryType.SOUNDCLOUD_SEARCH,
@@ -72,9 +59,7 @@ export default {
       }
 
       if (!searchResult.hasTracks()) {
-        return interaction.editReply(
-          '❌ Não encontrei essa música. Tente informar o artista junto com o título ou enviar um link do Spotify/SoundCloud.',
-        );
+        return interaction.editReply('❌ Não encontrei essa música. Tente enviar um link do Spotify.');
       }
 
       const { track } = await player.play(member.voice.channel, searchResult, {
@@ -83,18 +68,14 @@ export default {
           leaveOnEmpty: true,
           leaveOnEmptyCooldown: 300000,
           leaveOnEnd: false,
+          connectionTimeout: 120000, // ⏳ Dá 2 minutos de folga pro servidor da nuvem conectar com calma
         },
       });
 
-      return interaction.editReply(
-        `🎶 **${track.title}** adicionada à fila com sucesso!`,
-      );
+      return interaction.editReply(`🎶 **${track.title}** adicionada à fila com sucesso!`);
     } catch (error) {
       console.error('[ERRO DE MÚSICA]', error);
-
-      return interaction.editReply(
-        '❌ Não consegui iniciar o áudio. O servidor pode estar sofrendo lentidão na rede ou sem permissões.',
-      );
+      return interaction.editReply('❌ Não consegui iniciar o áudio. O servidor da nuvem demorou para responder.');
     }
   },
 };

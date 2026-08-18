@@ -1,4 +1,5 @@
 import 'dotenv/config';
+import { setDefaultResultOrder } from 'dns'; // 👈 IMPORTANTE PARA O FIX DE REDE
 import {
   Client,
   Collection,
@@ -15,6 +16,11 @@ import {
 } from './types';
 import { prisma } from './database/client';
 import { startDashboard } from './dashboard/server';
+
+// 🚀 O GOLPE DE MESTRE DA REDE:
+// Força o servidor do Railway (e o Node.js) a priorizar IPv4.
+// Isso impede que o SoundCloud/Spotify bloqueiem o IP da nuvem e cortem o áudio, resolvendo o "Silêncio Fantasma".
+setDefaultResultOrder('ipv4first');
 
 const client = new Client({
   intents: [
@@ -64,6 +70,12 @@ player.events.on('playerError', (queue, error) => {
       ?.send(`❌ **O áudio falhou:** \`${error.message}\``)
       .catch(() => {});
   }
+});
+
+// ☢️ VISÃO DE RAIO-X (DEBUG)
+// Isso vai mostrar exatamente o que o FFmpeg e a rede estão fazendo no terminal do Railway
+player.events.on('debug', (queue, message) => {
+  console.log(`[RAIO-X PLAYER] ${message}`);
 });
 
 // Carrega os comandos slash.

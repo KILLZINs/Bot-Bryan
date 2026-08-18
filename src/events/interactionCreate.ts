@@ -57,21 +57,35 @@ export default {
         const isGlobalAfk = commandName === 'afk';
 
         // 🚀 OTIMIZAÇÃO: Busca no banco Global e Local ao mesmo tempo!
+        // Se precisar de alguma checagem global (AFK ou Kill Switch de Módulos), ele já puxa.
+        const fetchGlobal = isGlobalAfk || !!requiredFeature;
+        const fetchGuild = interaction.guildId && !!requiredFeature;
+
         const [globalConfig, guildConfig] = await Promise.all([
-          isGlobalAfk ? prisma.botConfig.findUnique({ where: { id: 'global' } }) : Promise.resolve(null),
-          (interaction.guildId && requiredFeature) ? prisma.guildConfig.findUnique({ where: { guildId: interaction.guildId } }) : Promise.resolve(null)
+          fetchGlobal ? prisma.botConfig.findUnique({ where: { id: 'global' } }) : Promise.resolve(null),
+          fetchGuild ? prisma.guildConfig.findUnique({ where: { guildId: interaction.guildId } }) : Promise.resolve(null)
         ]);
 
-        // 1. Bloqueios Globais
-        if (isGlobalAfk && globalConfig?.featAfk === false) {
-          return interaction.reply({
-            embeds: [errorEmbed('Módulo Desativado', 'O sistema AFK foi **desativado globalmente** pela administração.')],
-            ephemeral: true
-          });
+        // 1. Bloqueios Globais (Kill Switches do Bryan)
+        if (globalConfig) {
+          // Trava específica do AFK
+          if (isGlobalAfk && globalConfig.featAfk === false) {
+            return interaction.reply({
+              embeds: [errorEmbed('Módulo Desativado', 'O sistema AFK foi **desativado globalmente** pela administração.')],
+              ephemeral: true
+            });
+          }
+          // Trava de todos os outros módulos (RPG, Música, Level, etc)
+          if (requiredFeature && (globalConfig as any)[requiredFeature] === false) {
+            return interaction.reply({
+              embeds: [errorEmbed('Manutenção Global', '🚧 Este sistema foi **desativado globalmente** pela administração para manutenção.\nVolte mais tarde!')],
+              ephemeral: true
+            });
+          }
         }
 
-        // 2. Bloqueios Locais
-        if (guildConfig && (guildConfig as any)[requiredFeature] === false) {
+        // 2. Bloqueios Locais (Dono do Servidor)
+        if (guildConfig && requiredFeature && (guildConfig as any)[requiredFeature] === false) {
           return interaction.reply({
             embeds: [errorEmbed('Sistema Offline', 'Este comando pertence a um módulo que foi **desativado** pelos administradores deste servidor.')],
             ephemeral: true

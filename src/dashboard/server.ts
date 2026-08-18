@@ -103,7 +103,9 @@ const GLOBAL_SETTINGS = [
     category: "🎨 Personalização Global do Bot",
     items: [
       { id: 'footerText', name: 'Texto de Rodapé Padrão', type: 'text', placeholder: 'Aparece na maioria das embeds' },
-      { id: 'rpFooterText', name: 'Rodapé Roleplay', type: 'text', placeholder: 'Aparece nos comandos de /rp' }
+      { id: 'rpFooterText', name: 'Rodapé Roleplay', type: 'text', placeholder: 'Aparece nos comandos de /rp' },
+      { id: 'botIconUrl', name: 'Ícone do Bot (Link da Imagem)', type: 'text', placeholder: 'Ex: https://i.imgur.com/foto.png' },
+      { id: 'primaryColor', name: 'Cor Primária (Número Decimal)', type: 'number', placeholder: 'Ex: 10180278' }
     ]
   }
 ];
@@ -216,6 +218,9 @@ export function startDashboard() {
       if (isNaN(finalValue)) finalValue = 0;
     }
     if (value === "") finalValue = null;
+
+    // 🛡️ Segurança: primaryColor é Int obrigatório no Prisma, não pode ser null.
+    if (feature === 'primaryColor' && finalValue === null) finalValue = 10180278; 
 
     try {
       if (type === 'server') await prisma.guildConfig.update({ where: { guildId }, data: { [feature]: finalValue } });
@@ -363,7 +368,7 @@ export function startDashboard() {
 
               if(data.isOwner) {
                   renderModules('globalModulesArea', GLOBAL_CATEGORIES, data.globalConfig, 'global', '👑 Módulos Globais (Apenas Bryan)');
-                  renderSettings('globalSettingsArea', GLOBAL_SETTINGS, data.globalConfig, 'global', '👑 Textos Globais (Apenas Bryan)');
+                  renderSettings('globalSettingsArea', GLOBAL_SETTINGS, data.globalConfig, 'global', '👑 Identidade Visual Global (Apenas Bryan)');
               }
             }
 

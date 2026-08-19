@@ -35,7 +35,7 @@ export default {
 
     if (YOUTUBE_URL.test(query)) {
       return interaction.reply({
-        embeds: [errorEmbed('Bloqueio', 'Links do YouTube desativados. 🎧 **Use links do Spotify, SoundCloud ou digite o nome!**')],
+        embeds: [errorEmbed('Bloqueio', 'Links diretos do YouTube estão instáveis. 🎧 **Use links do Spotify, SoundCloud ou digite o nome da música!**')],
         ephemeral: true,
       });
     }
@@ -68,15 +68,14 @@ export default {
           leaveOnEmpty: true,
           leaveOnEmptyCooldown: 300000,
           leaveOnEnd: false,
-          connectionTimeout: 120000, // ⏳ Dá 2 minutos de folga pro servidor da nuvem conectar com calma
+          connectionTimeout: 120000, // ⏳ Dá 2 minutos de folga para o servidor
         },
       });
 
       return interaction.editReply(`🎶 **${track.title}** adicionada à fila com sucesso!`);
     } catch (error) {
       console.error('[ERRO DE MÚSICA]', error);
-      return interaction.editReply('❌ Não consegui iniciar o áudio. O servidor da nuvem demorou para responder.');
+      return interaction.editReply('❌ Não consegui iniciar o áudio. Verifique se eu tenho permissão de entrar e falar na call.');
     }
   },
 };
-// forçando rebuild KKKKKK

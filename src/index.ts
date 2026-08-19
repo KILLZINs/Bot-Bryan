@@ -1,12 +1,6 @@
 import 'dotenv/config';
 
-// 🛠️ FIX 1: OBRIGATÓRIO PARA O ÁUDIO FUNCIONAR NO RAILWAY
-const ffmpegPath = require('ffmpeg-static');
-if (ffmpegPath) {
-  process.env.FFMPEG_PATH = ffmpegPath;
-}
-
-// 🌐 FIX 2: BLINDAGEM DE REDE
+// 🌐 FIX: BLINDAGEM DE REDE (Mantida para não dar erro de DNS)
 import { setDefaultResultOrder } from 'dns';
 setDefaultResultOrder('ipv4first');
 
@@ -53,7 +47,7 @@ client.cooldowns = new Collection<
   Collection<string, number>
 >();
 
-// 🚀 FIX: Inicializa o Player v7 (ytdlOptions foi removido na v7, a qualidade máxima agora é automática)
+// 🚀 Inicializa o Player v7 usando o FFmpeg nativo do Railway
 const player = new Player(client);
 
 player.events.on('error', (queue, error) => {
@@ -125,7 +119,7 @@ process.on('unhandledRejection', (error) => console.error('Unhandled rejection:'
 process.on('uncaughtException', (error) => console.error('Uncaught exception:', error));
 
 async function start() {
-  // 🚀 ATUALIZAÇÃO v7: Nova API de Extração de Áudio
+  // 🚀 ATUALIZAÇÃO v7: Nova API de Extração de Áudio com DAVE
   try {
     await player.extractors.loadMulti(DefaultExtractors);
     console.log('🎧 Extratores de Áudio v7 (DAVE Support) carregados!');

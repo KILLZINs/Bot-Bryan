@@ -68,7 +68,11 @@ export default {
           leaveOnEmpty: true,
           leaveOnEmptyCooldown: 300000,
           leaveOnEnd: false,
-          connectionTimeout: 120000, // ⏳ Dá 2 minutos de folga para o servidor
+          connectionTimeout: 120000,
+          // 💡 O PULO DO GATO:
+          // Colocando 99, forçamos o "skipFFmpeg" a virar FALSE.
+          // Com o FFmpeg ligado, a criptografia DAVE atua e a música sai na call!
+          volume: 99 
         },
       });
 

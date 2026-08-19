@@ -57,25 +57,23 @@ export default {
         const isGlobalAfk = commandName === 'afk';
 
         // 🚀 OTIMIZAÇÃO: Busca no banco Global e Local ao mesmo tempo!
-        // Se precisar de alguma checagem global (AFK ou Kill Switch de Módulos), ele já puxa.
         const fetchGlobal = isGlobalAfk || !!requiredFeature;
-        const fetchGuild = interaction.guildId && !!requiredFeature;
+        const fetchGuild = !!interaction.guildId && !!requiredFeature;
 
         const [globalConfig, guildConfig] = await Promise.all([
           fetchGlobal ? prisma.botConfig.findUnique({ where: { id: 'global' } }) : Promise.resolve(null),
-          fetchGuild ? prisma.guildConfig.findUnique({ where: { guildId: interaction.guildId } }) : Promise.resolve(null)
+          // FIX DO TYPESCRIPT AQUI: Transformando em String garantida
+          fetchGuild ? prisma.guildConfig.findUnique({ where: { guildId: String(interaction.guildId) } }) : Promise.resolve(null)
         ]);
 
         // 1. Bloqueios Globais (Kill Switches do Bryan)
         if (globalConfig) {
-          // Trava específica do AFK
           if (isGlobalAfk && globalConfig.featAfk === false) {
             return interaction.reply({
               embeds: [errorEmbed('Módulo Desativado', 'O sistema AFK foi **desativado globalmente** pela administração.')],
               ephemeral: true
             });
           }
-          // Trava de todos os outros módulos (RPG, Música, Level, etc)
           if (requiredFeature && (globalConfig as any)[requiredFeature] === false) {
             return interaction.reply({
               embeds: [errorEmbed('Manutenção Global', '🚧 Este sistema foi **desativado globalmente** pela administração para manutenção.\nVolte mais tarde!')],

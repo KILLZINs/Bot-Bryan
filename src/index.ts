@@ -1,7 +1,6 @@
 import 'dotenv/config';
 
 // 🛠️ FIX 1: OBRIGATÓRIO PARA O ÁUDIO FUNCIONAR NO RAILWAY
-// Garante que o motor de áudio nunca seja pulado ("skipFFmpeg: true")
 const ffmpegPath = require('ffmpeg-static');
 if (ffmpegPath) {
   process.env.FFMPEG_PATH = ffmpegPath;
@@ -18,6 +17,7 @@ import {
   Partials,
 } from 'discord.js';
 import { Player } from 'discord-player';
+import { DefaultExtractors } from '@discord-player/extractor'; // 👈 IMPORT NOVO AQUI
 import { readdirSync } from 'fs';
 import { join } from 'path';
 import {
@@ -37,7 +37,7 @@ const client = new Client({
     GatewayIntentBits.GuildModeration,
     GatewayIntentBits.MessageContent,
     GatewayIntentBits.DirectMessages,
-    GatewayIntentBits.GuildVoiceStates,
+    GatewayIntentBits.GuildVoiceStates, // Essencial para áudio
   ],
   partials: [
     Partials.Message,
@@ -53,6 +53,7 @@ client.cooldowns = new Collection<
   Collection<string, number>
 >();
 
+// Inicializa o Player v7
 const player = new Player(client, {
   ytdlOptions: {
     quality: 'highestaudio',
@@ -129,18 +130,18 @@ process.on('unhandledRejection', (error) => console.error('Unhandled rejection:'
 process.on('uncaughtException', (error) => console.error('Uncaught exception:', error));
 
 async function start() {
-  const loaded = await player.extractors.loadDefault(
-    (extractor) => extractor !== 'YouTubeExtractor',
-  );
-
-  if (!loaded.success) {
-    throw loaded.error;
+  // 🚀 ATUALIZAÇÃO v7: Nova API de Extração de Áudio
+  try {
+    await player.extractors.loadMulti(DefaultExtractors);
+    console.log('🎧 Extratores de Áudio v7 (DAVE Support) carregados!');
+  } catch (error) {
+    console.error('❌ Falha ao carregar os extratores de áudio:', error);
   }
 
   startDashboard();
   await client.login(process.env.DISCORD_TOKEN);
   console.log('🤖 Bot conectado ao Discord!');
-  console.log('🎵 Sistema de música pronto para busca por nome e links.');
+  console.log('🎵 Sistema de música pronto para operar com a criptografia E2EE.');
 }
 
 start().catch((error) => {

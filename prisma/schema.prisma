@@ -701,19 +701,19 @@ model BotConfig {
   featAfk       Boolean  @default(true)
   featWelcomeDm Boolean  @default(true)
 
-
-
-
-
-
-
-
-
-
-
-
-
-
+  // 🌍 MASTER SWITCHES GLOBAIS (Kill Switches do Bryan)
+  featLeveling      Boolean  @default(true)
+  featRpg           Boolean  @default(true)
+  featTickets       Boolean  @default(true)
+  featPolls         Boolean  @default(true)
+  featGiveaways     Boolean  @default(true)
+  featSelfRole      Boolean  @default(true)
+  featMissions      Boolean  @default(true)
+  featSocial        Boolean  @default(true)
+  featEconomy       Boolean  @default(true)
+  featMod           Boolean  @default(true)
+  featAnnouncements Boolean  @default(true)
+  featMusic         Boolean  @default(true)
 
   updatedAt     DateTime @updatedAt @default(now())
 

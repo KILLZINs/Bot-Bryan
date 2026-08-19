@@ -17,7 +17,7 @@ import {
   Partials,
 } from 'discord.js';
 import { Player } from 'discord-player';
-import { DefaultExtractors } from '@discord-player/extractor'; // 👈 IMPORT NOVO AQUI
+import { DefaultExtractors } from '@discord-player/extractor';
 import { readdirSync } from 'fs';
 import { join } from 'path';
 import {
@@ -53,13 +53,8 @@ client.cooldowns = new Collection<
   Collection<string, number>
 >();
 
-// Inicializa o Player v7
-const player = new Player(client, {
-  ytdlOptions: {
-    quality: 'highestaudio',
-    highWaterMark: 1 << 25,
-  },
-});
+// 🚀 FIX: Inicializa o Player v7 (ytdlOptions foi removido na v7, a qualidade máxima agora é automática)
+const player = new Player(client);
 
 player.events.on('error', (queue, error) => {
   console.log(`[ERRO NA FILA] ${error.message}`);

@@ -104,7 +104,7 @@ player.events.on('playerStart', (queue, track) => {
   );
 });
 
-player.events.on('audioTrackEnd', (queue, track) => {
+player.events.on('playerFinish', (queue, track) => {
   console.log(
     `[ÁUDIO FINALIZADO] ${track.title} | Guild: ${queue.guild.id}`,
   );

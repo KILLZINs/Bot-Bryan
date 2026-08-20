@@ -15,7 +15,7 @@
   },
   "dependencies": {
     "@discord-player/extractor": "^7.2.0",
-    "@discordjs/voice": "^0.17.0",
+    "@discordjs/voice": "^0.18.0",
     "@napi-rs/canvas": "^0.1.65",
     "@prisma/client": "^5.7.0",
     "axios": "^1.6.2",

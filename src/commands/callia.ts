@@ -17,11 +17,11 @@ import {
   stopCalliaSession,
 } from '../voice/calliaVoice';
 
-export const data = new SlashCommandBuilder()
+const data = new SlashCommandBuilder()
   .setName('callia')
   .setDescription('Entra na call com Bryan ou Suki');
 
-export async function execute(
+async function execute(
   interaction: ChatInputCommandInteraction,
 ): Promise<void> {
   const member = interaction.member as GuildMember;
@@ -150,3 +150,9 @@ export async function handleCalliaButton(
 
   return true;
 }
+
+// O SEGREDO ESTÁ AQUI: Isso faz o bot reconhecer o arquivo!
+export default {
+  data,
+  execute,
+};

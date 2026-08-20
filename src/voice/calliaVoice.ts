@@ -7,7 +7,7 @@ import {
   createAudioPlayer,
   createAudioResource,
   joinVoiceChannel,
-} from 'discord-voip'; // 💡 O SEGREDO ESTÁ AQUI: Trocamos o pacote!
+} from '@discordjs/voice';
 import { GuildMember, VoiceBasedChannel } from 'discord.js';
 import prism from 'prism-media';
 import { Readable } from 'node:stream';

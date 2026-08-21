@@ -139,13 +139,16 @@ async function synthesize(
     persona === 'bryan'
       ? process.env.BRYAN_EDGE_VOICE ?? 'pt-BR-AntonioNeural'
       : process.env.SUKI_EDGE_VOICE ?? 'pt-BR-FranciscaNeural';
+
   const audio = await tts(text.slice(0, 1200), {
     voice,
     rate: persona === 'bryan' ? '-3%' : '+5%',
     pitch: persona === 'bryan' ? '-5Hz' : '+3Hz',
   });
+
   return Buffer.from(audio);
-}
+
+class CalliaSession implements SessionLike {
   const apiKey = requireElevenLabs();
   const voiceId = getVoiceId(persona);
 

@@ -11,6 +11,7 @@ import {
 import { GuildMember, VoiceBasedChannel } from 'discord.js';
 import prism from 'prism-media';
 import { Readable } from 'node:stream';
+import { tts } from 'edge-tts';
 
 export type CalliaPersona = 'bryan' | 'suki';
 
@@ -134,6 +135,17 @@ async function synthesize(
   text: string,
   persona: CalliaPersona,
 ): Promise<Buffer> {
+  const voice =
+    persona === 'bryan'
+      ? process.env.BRYAN_EDGE_VOICE ?? 'pt-BR-AntonioNeural'
+      : process.env.SUKI_EDGE_VOICE ?? 'pt-BR-FranciscaNeural';
+  const audio = await tts(text.slice(0, 1200), {
+    voice,
+    rate: persona === 'bryan' ? '-3%' : '+5%',
+    pitch: persona === 'bryan' ? '-5Hz' : '+3Hz',
+  });
+  return Buffer.from(audio);
+}
   const apiKey = requireElevenLabs();
   const voiceId = getVoiceId(persona);
 

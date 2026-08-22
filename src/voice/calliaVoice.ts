@@ -11,8 +11,6 @@ import {
 import { GuildMember, VoiceBasedChannel } from 'discord.js';
 import prism from 'prism-media';
 import { Readable } from 'node:stream';
-import WebSocket from 'ws';
-import { randomBytes } from 'node:crypto';
 
 export type CalliaPersona = 'bryan' | 'suki';
 
@@ -48,6 +46,7 @@ type SessionLike = {
 };
 
 const sessions = new Map<string, SessionLike>();
+
 const ELEVENLABS_API_KEY = process.env.ELEVENLABS_API_KEY;
 
 function requireElevenLabs(): string {
@@ -79,7 +78,7 @@ function pcmToWav(pcm: Buffer, sampleRate = 48_000, channels = 2): Buffer {
   return Buffer.concat([header, pcm]);
 }
 
-// 🎤 O BOT OUVE PELA ELEVENLABS (Perfeito e nativo)
+// 🎤 O BOT OUVE PELA ELEVENLABS
 async function transcribe(wav: Buffer): Promise<string> {
   const apiKey = requireElevenLabs();
   const form = new FormData();
@@ -103,58 +102,34 @@ async function transcribe(wav: Buffer): Promise<string> {
   return data.text?.trim() ?? '';
 }
 
-// 🤖 O BOT FALA PELA MICROSOFT EDGE (Com disfarce anti-403)
+// 🤖 O BOT FALA PELO GOOGLE TRADUTOR (100% Gratuito e Infinito)
 async function synthesize(text: string, persona: CalliaPersona): Promise<Buffer> {
-  return new Promise((resolve, reject) => {
-    const voice =
-      persona === 'bryan'
-        ? process.env.BRYAN_EDGE_VOICE ?? 'pt-BR-AntonioNeural'
-        : process.env.SUKI_EDGE_VOICE ?? 'pt-BR-FranciscaNeural';
+  // O Google só aceita pedaços de ~200 caracteres. Vamos picotar o texto da IA!
+  const chunks = text.match(/.{1,200}(\s|$|[.?!])/g) || [text];
+  const audioBuffers: Buffer[] = [];
 
-    const pitch = persona === 'bryan' ? '-5Hz' : '+3Hz';
-    const rate = persona === 'bryan' ? '-3%' : '+5%';
-    const safeText = text.slice(0, 1200).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  for (const chunk of chunks) {
+    if (!chunk.trim()) continue;
 
-    // 💡 O SEGREDO ESTÁ AQUI: Passamos os Headers fingindo ser o Navegador Edge!
-    const ws = new WebSocket('wss://speech.platform.bing.com/consumer/speech/synthesize/readaloud/edge/v1?TrustedClientToken=6A5AA1D4EAFF4E9FB37E23D68491D6F4', {
+    const url = `https://translate.google.com/translate_tts?ie=UTF-8&client=tw-ob&tl=pt-BR&q=${encodeURIComponent(chunk.trim())}`;
+
+    const response = await fetch(url, {
       headers: {
-        'Origin': 'chrome-extension://jdiccldimpdaibmpdkjnbmckianbfold',
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 Edg/120.0.0.0'
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
       }
     });
 
-    const reqId = randomBytes(16).toString('hex');
-    const audioChunks: Buffer[] = [];
+    if (!response.ok) {
+      console.error('[CALLIA] Erro ao baixar voz do Google:', response.statusText);
+      continue;
+    }
 
-    ws.on('open', () => {
-      ws.send(`X-Timestamp:${new Date().toUTCString()}\r\nContent-Type:application/json; charset=utf-8\r\nPath:speech.config\r\n\r\n{"context":{"synthesis":{"audio":{"metadataoptions":{"sentenceBoundaryEnabled":"false","wordBoundaryEnabled":"false"},"outputFormat":"audio-24khz-48kbitrate-mono-mp3"}}}}`);
-      
-      const ssml = `<speak version='1.0' xmlns='http://www.w3.org/2001/10/synthesis' xml:lang='pt-BR'><voice name='${voice}'><prosody pitch='${pitch}' rate='${rate}'>${safeText}</prosody></voice></speak>`;
-      ws.send(`X-RequestId:${reqId}\r\nContent-Type:application/ssml+xml\r\nPath:ssml\r\n\r\n${ssml}`);
-    });
+    const arrayBuffer = await response.arrayBuffer();
+    audioBuffers.push(Buffer.from(arrayBuffer));
+  }
 
-    ws.on('message', (data: any, isBinary: boolean) => {
-      if (isBinary) {
-        const buffer = data as Buffer;
-        const headerLength = buffer.readUInt16BE(0);
-        const audioData = buffer.subarray(2 + headerLength);
-        if (audioData.length > 0) {
-          audioChunks.push(audioData);
-        }
-      } else {
-        const str = data.toString();
-        if (str.includes('Path:turn.end')) {
-          ws.close();
-          resolve(Buffer.concat(audioChunks));
-        }
-      }
-    });
-
-    ws.on('error', (err) => {
-      ws.close();
-      reject(err);
-    });
-  });
+  // Junta todos os pedacinhos de áudio em um só MP3 e devolve pro bot tocar
+  return Buffer.concat(audioBuffers);
 }
 
 class CalliaSession implements SessionLike {

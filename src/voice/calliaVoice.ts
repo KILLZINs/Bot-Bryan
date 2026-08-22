@@ -11,7 +11,6 @@ import {
 import { GuildMember, VoiceBasedChannel } from 'discord.js';
 import prism from 'prism-media';
 import { Readable } from 'node:stream';
-import { tts } from 'edge-tts';
 
 export type CalliaPersona = 'bryan' | 'suki';
 
@@ -115,11 +114,13 @@ async function transcribe(wav: Buffer): Promise<string> {
   return data.text?.trim() ?? '';
 }
 
-// 🚀 Função sintetizadora corrigida (fechada com as chaves certas!)
 async function synthesize(
   text: string,
   persona: CalliaPersona,
 ): Promise<Buffer> {
+  // 💡 O TRUQUE: Import dinâmico para burlar o crash do servidor
+  const { tts } = await import('edge-tts');
+
   const voice =
     persona === 'bryan'
       ? process.env.BRYAN_EDGE_VOICE ?? 'pt-BR-AntonioNeural'

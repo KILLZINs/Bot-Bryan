@@ -102,37 +102,66 @@ async function transcribe(wav: Buffer): Promise<string> {
   return data.text?.trim() ?? '';
 }
 
-// 🤖 O BOT FALA PELA STREAMELEMENTS (Amazon Polly - 100% Grátis, 2 Vozes)
+// 🤖 O BOT FALA: STREAMELEMENTS (Plano A) + GOOGLE TRADUTOR (Plano B)
 async function synthesize(text: string, persona: CalliaPersona): Promise<Buffer> {
-  // Ricardo é a voz masculina, Vitoria é a voz feminina
   const voice = persona === 'bryan' ? 'Ricardo' : 'Vitoria';
-
-  // A API aceita textos médios. Vamos picotar o texto da IA caso ela escreva um textão.
-  const chunks = text.match(/.{1,350}(\s|$|[.?!])/g) || [text];
+  const chunks = text.match(/.{1,200}(\s|$|[.?!])/g) || [text];
+  
   const audioBuffers: Buffer[] = [];
+  let streamElementsFailed = false;
+
+  // TENTA O PLANO A: STREAMELEMENTS (Duas vozes)
+  for (const chunk of chunks) {
+    if (!chunk.trim()) continue;
+
+    try {
+      const url = `https://api.streamelements.com/kappa/v2/speech?voice=${voice}&text=${encodeURIComponent(chunk.trim())}`;
+      
+      // Removemos o disfarce de navegador para o Cloudflare não achar que somos um bot invasor
+      const response = await fetch(url);
+      const contentType = response.headers.get('content-type');
+
+      // Proteção contra a falha "Invisível" do HTML
+      if (!response.ok || !contentType?.includes('audio')) {
+        console.error(`[CALLIA] Bloqueio na StreamElements. Content-Type recebido: ${contentType}`);
+        streamElementsFailed = true;
+        break;
+      }
+
+      const arrayBuffer = await response.arrayBuffer();
+      audioBuffers.push(Buffer.from(arrayBuffer));
+    } catch (e) {
+      console.error('[CALLIA] Falha de conexão com a StreamElements:', e);
+      streamElementsFailed = true;
+      break;
+    }
+  }
+
+  if (!streamElementsFailed && audioBuffers.length > 0) {
+    return Buffer.concat(audioBuffers);
+  }
+
+  // 🚨 PLANO B: GOOGLE TRADUTOR (Se a StreamElements der erro, ele assume na hora)
+  console.log('[CALLIA] Ativando Plano B: Voz do Google Tradutor...');
+  const fallbackBuffers: Buffer[] = [];
 
   for (const chunk of chunks) {
     if (!chunk.trim()) continue;
 
-    const url = `https://api.streamelements.com/kappa/v2/speech?voice=${voice}&text=${encodeURIComponent(chunk.trim())}`;
-
+    const url = `https://translate.google.com/translate_tts?ie=UTF-8&client=tw-ob&tl=pt-BR&q=${encodeURIComponent(chunk.trim())}`;
     const response = await fetch(url, {
       headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko)',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
       }
     });
 
-    if (!response.ok) {
-      console.error('[CALLIA] Erro ao baixar voz da StreamElements:', response.statusText);
-      continue;
+    if (response.ok) {
+      const arrayBuffer = await response.arrayBuffer();
+      fallbackBuffers.push(Buffer.from(arrayBuffer));
     }
-
-    const arrayBuffer = await response.arrayBuffer();
-    audioBuffers.push(Buffer.from(arrayBuffer));
   }
 
-  // Junta todos os pedaços e devolve o áudio final
-  return Buffer.concat(audioBuffers);
+  return Buffer.concat(fallbackBuffers);
 }
 
 class CalliaSession implements SessionLike {
@@ -244,6 +273,7 @@ class CalliaSession implements SessionLike {
 
       await this.status(`${this.persona === 'bryan' ? 'Bryan' : 'Suki'} está falando...`);
 
+      // GERAÇÃO DO ÁUDIO PROTEGIDA CONTRA HTML FALSO
       const audio = await synthesize(response, this.persona);
       const resource = createAudioResource(Readable.from(audio), { inputType: StreamType.Arbitrary });
 

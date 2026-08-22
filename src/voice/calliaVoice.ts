@@ -118,8 +118,8 @@ async function synthesize(
   text: string,
   persona: CalliaPersona,
 ): Promise<Buffer> {
-  // 💡 O TRUQUE: Import dinâmico para burlar o crash do servidor
-  const { tts } = await import('edge-tts');
+  // 🚨 O HACK MÁXIMO: Usa 'eval' para forçar o ESM nativo do Node e cegar o TypeScript!
+  const { tts } = await eval(`import('edge-tts')`);
 
   const voice =
     persona === 'bryan'

@@ -78,7 +78,7 @@ function pcmToWav(pcm: Buffer, sampleRate = 48_000, channels = 2): Buffer {
   return Buffer.concat([header, pcm]);
 }
 
-// 🎤 O BOT OUVE PELA ELEVENLABS
+// 🎤 O BOT OUVE PELA ELEVENLABS (Gasta pouquíssimo crédito)
 async function transcribe(wav: Buffer): Promise<string> {
   const apiKey = requireElevenLabs();
   const form = new FormData();
@@ -102,25 +102,28 @@ async function transcribe(wav: Buffer): Promise<string> {
   return data.text?.trim() ?? '';
 }
 
-// 🤖 O BOT FALA PELO GOOGLE TRADUTOR (100% Gratuito e Infinito)
+// 🤖 O BOT FALA PELA STREAMELEMENTS (Amazon Polly - 100% Grátis, 2 Vozes)
 async function synthesize(text: string, persona: CalliaPersona): Promise<Buffer> {
-  // O Google só aceita pedaços de ~200 caracteres. Vamos picotar o texto da IA!
-  const chunks = text.match(/.{1,200}(\s|$|[.?!])/g) || [text];
+  // Ricardo é a voz masculina, Vitoria é a voz feminina
+  const voice = persona === 'bryan' ? 'Ricardo' : 'Vitoria';
+
+  // A API aceita textos médios. Vamos picotar o texto da IA caso ela escreva um textão.
+  const chunks = text.match(/.{1,350}(\s|$|[.?!])/g) || [text];
   const audioBuffers: Buffer[] = [];
 
   for (const chunk of chunks) {
     if (!chunk.trim()) continue;
 
-    const url = `https://translate.google.com/translate_tts?ie=UTF-8&client=tw-ob&tl=pt-BR&q=${encodeURIComponent(chunk.trim())}`;
+    const url = `https://api.streamelements.com/kappa/v2/speech?voice=${voice}&text=${encodeURIComponent(chunk.trim())}`;
 
     const response = await fetch(url, {
       headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko)',
       }
     });
 
     if (!response.ok) {
-      console.error('[CALLIA] Erro ao baixar voz do Google:', response.statusText);
+      console.error('[CALLIA] Erro ao baixar voz da StreamElements:', response.statusText);
       continue;
     }
 
@@ -128,7 +131,7 @@ async function synthesize(text: string, persona: CalliaPersona): Promise<Buffer>
     audioBuffers.push(Buffer.from(arrayBuffer));
   }
 
-  // Junta todos os pedacinhos de áudio em um só MP3 e devolve pro bot tocar
+  // Junta todos os pedaços e devolve o áudio final
   return Buffer.concat(audioBuffers);
 }
 

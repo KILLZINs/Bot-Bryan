@@ -52,7 +52,7 @@ const ELEVENLABS_API_KEY = process.env.ELEVENLABS_API_KEY;
 
 function requireElevenLabs(): string {
   if (!ELEVENLABS_API_KEY?.trim()) {
-    throw new Error('ELEVENLABS_API_KEY não está configurada para a transcrição.');
+    throw new Error('ELEVENLABS_API_KEY não está configurada para transcrição.');
   }
 
   return ELEVENLABS_API_KEY.trim();
@@ -128,10 +128,10 @@ async function synthesize(
       ? process.env.BRYAN_EDGE_VOICE ?? 'pt-BR-AntonioNeural'
       : process.env.SUKI_EDGE_VOICE ?? 'pt-BR-FranciscaNeural';
 
-  // Configura a voz e a qualidade do MP3
+  // Configura a voz e a qualidade (MP3 de 48kHz para ficar perfeito no Discord)
   await tts.setMetadata(voice, OUTPUT_FORMAT.AUDIO_48KHZ_192KBITRATE_MONO_MP3);
 
-  // Gera o stream de áudio do texto da IA
+  // Gera o stream de áudio e transforma em Buffer
   const stream = tts.toStream(text.slice(0, 1200));
 
   const chunks: Buffer[] = [];

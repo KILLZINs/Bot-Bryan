@@ -11,6 +11,7 @@ import {
 import { GuildMember, VoiceBasedChannel } from 'discord.js';
 import prism from 'prism-media';
 import { Readable } from 'node:stream';
+import { MsEdgeTTS, OUTPUT_FORMAT } from 'msedge-tts';
 
 export type CalliaPersona = 'bryan' | 'suki';
 
@@ -51,7 +52,7 @@ const ELEVENLABS_API_KEY = process.env.ELEVENLABS_API_KEY;
 
 function requireElevenLabs(): string {
   if (!ELEVENLABS_API_KEY?.trim()) {
-    throw new Error('ELEVENLABS_API_KEY não está configurada.');
+    throw new Error('ELEVENLABS_API_KEY não está configurada para a transcrição.');
   }
 
   return ELEVENLABS_API_KEY.trim();
@@ -79,6 +80,7 @@ function pcmToWav(pcm: Buffer, sampleRate = 48_000, channels = 2): Buffer {
   return Buffer.concat([header, pcm]);
 }
 
+// 🎤 O BOT OUVE PELA ELEVENLABS
 async function transcribe(wav: Buffer): Promise<string> {
   const apiKey = requireElevenLabs();
   const form = new FormData();
@@ -114,25 +116,30 @@ async function transcribe(wav: Buffer): Promise<string> {
   return data.text?.trim() ?? '';
 }
 
+// 🤖 O BOT FALA PELA MICROSOFT EDGE TTS
 async function synthesize(
   text: string,
   persona: CalliaPersona,
 ): Promise<Buffer> {
-  // 🚨 O HACK MÁXIMO: Usa 'eval' para forçar o ESM nativo do Node e cegar o TypeScript!
-  const { tts } = await eval(`import('edge-tts')`);
+  const tts = new MsEdgeTTS();
 
   const voice =
     persona === 'bryan'
       ? process.env.BRYAN_EDGE_VOICE ?? 'pt-BR-AntonioNeural'
       : process.env.SUKI_EDGE_VOICE ?? 'pt-BR-FranciscaNeural';
 
-  const audio = await tts(text.slice(0, 1200), {
-    voice,
-    rate: persona === 'bryan' ? '-3%' : '+5%',
-    pitch: persona === 'bryan' ? '-5Hz' : '+3Hz',
-  });
+  // Configura a voz e a qualidade do MP3
+  await tts.setMetadata(voice, OUTPUT_FORMAT.AUDIO_48KHZ_192KBITRATE_MONO_MP3);
 
-  return Buffer.from(audio);
+  // Gera o stream de áudio do texto da IA
+  const stream = tts.toStream(text.slice(0, 1200));
+
+  const chunks: Buffer[] = [];
+  for await (const chunk of stream) {
+    chunks.push(chunk as Buffer);
+  }
+
+  return Buffer.concat(chunks);
 }
 
 class CalliaSession implements SessionLike {

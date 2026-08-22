@@ -103,7 +103,7 @@ async function transcribe(wav: Buffer): Promise<string> {
   return data.text?.trim() ?? '';
 }
 
-// 🤖 O BOT FALA PELA MICROSOFT EDGE (Hacker Mode via WebSocket)
+// 🤖 O BOT FALA PELA MICROSOFT EDGE (Com disfarce anti-403)
 async function synthesize(text: string, persona: CalliaPersona): Promise<Buffer> {
   return new Promise((resolve, reject) => {
     const voice =
@@ -113,12 +113,16 @@ async function synthesize(text: string, persona: CalliaPersona): Promise<Buffer>
 
     const pitch = persona === 'bryan' ? '-5Hz' : '+3Hz';
     const rate = persona === 'bryan' ? '-3%' : '+5%';
-
-    // Remove caracteres que quebram o XML da Microsoft
     const safeText = text.slice(0, 1200).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
-    // Abre uma linha direta com a Microsoft usando a chave universal do Edge
-    const ws = new WebSocket('wss://speech.platform.bing.com/consumer/speech/synthesize/readaloud/edge/v1?TrustedClientToken=6A5AA1D4EAFF4E9FB37E23D68491D6F4');
+    // 💡 O SEGREDO ESTÁ AQUI: Passamos os Headers fingindo ser o Navegador Edge!
+    const ws = new WebSocket('wss://speech.platform.bing.com/consumer/speech/synthesize/readaloud/edge/v1?TrustedClientToken=6A5AA1D4EAFF4E9FB37E23D68491D6F4', {
+      headers: {
+        'Origin': 'chrome-extension://jdiccldimpdaibmpdkjnbmckianbfold',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 Edg/120.0.0.0'
+      }
+    });
+
     const reqId = randomBytes(16).toString('hex');
     const audioChunks: Buffer[] = [];
 

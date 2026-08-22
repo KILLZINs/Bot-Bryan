@@ -49,22 +49,6 @@ type SessionLike = {
 const sessions = new Map<string, SessionLike>();
 
 const ELEVENLABS_API_KEY = process.env.ELEVENLABS_API_KEY;
-const BRYAN_VOICE_ID = process.env.BRYAN_VOICE_ID;
-const SUKI_VOICE_ID = process.env.SUKI_VOICE_ID;
-
-function getVoiceId(persona: CalliaPersona): string {
-  const voiceId = persona === 'bryan' ? BRYAN_VOICE_ID : SUKI_VOICE_ID;
-
-  if (!voiceId?.trim()) {
-    throw new Error(
-      `A voz de ${persona === 'bryan' ? 'Bryan' : 'Suki'} não foi configurada. Defina ${
-        persona === 'bryan' ? 'BRYAN_VOICE_ID' : 'SUKI_VOICE_ID'
-      }.`,
-    );
-  }
-
-  return voiceId.trim();
-}
 
 function requireElevenLabs(): string {
   if (!ELEVENLABS_API_KEY?.trim()) {
@@ -131,6 +115,7 @@ async function transcribe(wav: Buffer): Promise<string> {
   return data.text?.trim() ?? '';
 }
 
+// 🚀 Função sintetizadora corrigida (fechada com as chaves certas!)
 async function synthesize(
   text: string,
   persona: CalliaPersona,
@@ -147,44 +132,6 @@ async function synthesize(
   });
 
   return Buffer.from(audio);
-
-class CalliaSession implements SessionLike {
-  const apiKey = requireElevenLabs();
-  const voiceId = getVoiceId(persona);
-
-  const response = await fetch(
-    `https://api.elevenlabs.io/v1/text-to-speech/${encodeURIComponent(
-      voiceId,
-    )}`,
-    {
-      method: 'POST',
-      headers: {
-        Accept: 'audio/mpeg',
-        'Content-Type': 'application/json',
-        'xi-api-key': apiKey,
-      },
-      body: JSON.stringify({
-        text: text.slice(0, 1200),
-        model_id: 'eleven_multilingual_v2',
-        output_format: 'mp3_44100_128',
-        voice_settings: {
-          stability: 0.45,
-          similarity_boost: 0.8,
-          style: 0.25,
-          use_speaker_boost: true,
-        },
-      }),
-    },
-  );
-
-  if (!response.ok) {
-    const body = await response.text();
-    throw new Error(
-      `ElevenLabs TTS ${response.status}: ${body.slice(0, 500)}`,
-    );
-  }
-
-  return Buffer.from(await response.arrayBuffer());
 }
 
 class CalliaSession implements SessionLike {

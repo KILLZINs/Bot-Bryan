@@ -32,7 +32,7 @@ export default {
   category: 'sistema',
   data: new SlashCommandBuilder()
     .setName('config')
-    .setDescription('⚙️ Painel Central: configure canais, tickets, RPG, cargos e módulos do servidor')
+    .setDescription('⚙️ Painel Central: configure canais, tickets, cargos e módulos do servidor')
     .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
     .setDMPermission(false),
 
@@ -101,8 +101,8 @@ export default {
             inline: true,
           },
           {
-            name: '⚔️ RPG & Leveling (XP)',
-            value: `**Canal de Level Up:** ${formatChan(c.levelUpChannelId)}\n**Taxa de XP:** \`${c.xpMin} ~ ${c.xpMax} XP\` (Cooldown: \`${c.xpCooldown}s\`)`,
+            name: '⚔️ RPG & Leveling',
+            value: `**Canal de Level Up:** ${formatChan(c.levelUpChannelId)}\n**Sistema de XP:** 🌐 Global (Padronizado)`,
             inline: false,
           },
           {
@@ -137,13 +137,13 @@ export default {
               .setEmoji('🎫')
               .setValue('cat_tickets'),
             new StringSelectMenuOptionBuilder()
-              .setLabel('RPG & Leveling (XP)')
-              .setDescription('Configurar canal de Level Up, XP mínimo/máximo e Cooldown')
-              .setEmoji('⚔️')
+              .setLabel('Level Up & Anúncios de Nível')
+              .setDescription('Configurar canal ou fórum de notificações de Level Up')
+              .setEmoji('⭐')
               .setValue('cat_rpg_leveling'),
             new StringSelectMenuOptionBuilder()
               .setLabel('Canais do Servidor')
-              .setDescription('Configurar canais de boas-vindas, logs, anúncios, sugestões, etc.')
+              .setDescription('Configurar canais de boas-vindas, logs, anúncios, fóruns, sugestões, etc.')
               .setEmoji('📢')
               .setValue('cat_channels'),
             new StringSelectMenuOptionBuilder()
@@ -227,32 +227,31 @@ export default {
             return;
           }
 
-          // --- Categoria: RPG & Leveling (XP) ---
+          // --- Categoria: Level Up ---
           if (selectedCategory === 'cat_rpg_leveling') {
             const levelUpChan = new ActionRowBuilder<ChannelSelectMenuBuilder>().addComponents(
               new ChannelSelectMenuBuilder()
                 .setCustomId('cfg_set_chan_levelUpChannelId')
-                .setPlaceholder('Selecione o Canal de Anúncios de Level Up...')
-                .setChannelTypes(ChannelType.GuildText)
+                .setPlaceholder('Selecione o Canal ou Fórum de Level Up...')
+                .setChannelTypes(
+                  ChannelType.GuildText,
+                  ChannelType.GuildAnnouncement,
+                  ChannelType.GuildForum
+                )
             );
 
-            const xpControls = new ActionRowBuilder<ButtonBuilder>().addComponents(
-              new ButtonBuilder()
-                .setCustomId('cfg_btn_edit_xp_modal')
-                .setLabel(`Editar Taxa de XP (${cfg.xpMin}-${cfg.xpMax} XP / ${cfg.xpCooldown}s)`)
-                .setEmoji('⚡')
-                .setStyle(ButtonStyle.Primary),
+            const controls = new ActionRowBuilder<ButtonBuilder>().addComponents(
               new ButtonBuilder()
                 .setCustomId('cfg_reset_field_levelUpChannelId')
                 .setLabel('Limpar Canal Level Up')
                 .setStyle(ButtonStyle.Danger),
-              new ButtonBuilder().setCustomId('cfg_btn_back').setLabel('Voltar').setStyle(ButtonStyle.Secondary)
+              new ButtonBuilder().setCustomId('cfg_btn_back').setLabel('Voltar ao Painel').setStyle(ButtonStyle.Secondary)
             );
 
             await i.update({
-              content: `⚔️ **Configurações de RPG & Leveling:**\n• XP por Mensagem: **${cfg.xpMin} a ${cfg.xpMax} XP**\n• Intervalo (Cooldown): **${cfg.xpCooldown} segundos**\n• Canal de Level Up: ${cfg.levelUpChannelId ? `<#${cfg.levelUpChannelId}>` : '`Não definido`'}`,
+              content: `⭐ **Configuração do Canal de Level Up:**\n• Canal/Fórum atual: ${cfg.levelUpChannelId ? `<#${cfg.levelUpChannelId}>` : '`Não definido`'}\n• _O sistema de ganho de XP e RPG é global e padronizado._`,
               embeds: [],
-              components: [levelUpChan, xpControls],
+              components: [levelUpChan, controls],
             });
             return;
           }
@@ -374,69 +373,7 @@ export default {
         }
 
         // ==========================================
-        // 2. MODAL DE XP (Leveling / RPG)
-        // ==========================================
-        if (i.customId === 'cfg_btn_edit_xp_modal' && i.isButton()) {
-          const modal = new ModalBuilder()
-            .setCustomId('modal_set_xp_values')
-            .setTitle('⚙️ Configuração de XP do Servidor');
-
-          const minInput = new TextInputBuilder()
-            .setCustomId('xp_min_val')
-            .setLabel('XP Mínimo por Mensagem')
-            .setValue(String(cfg.xpMin))
-            .setStyle(TextInputStyle.Short)
-            .setRequired(true);
-
-          const maxInput = new TextInputBuilder()
-            .setCustomId('xp_max_val')
-            .setLabel('XP Máximo por Mensagem')
-            .setValue(String(cfg.xpMax))
-            .setStyle(TextInputStyle.Short)
-            .setRequired(true);
-
-          const cooldownInput = new TextInputBuilder()
-            .setCustomId('xp_cooldown_val')
-            .setLabel('Tempo de Cooldown em Segundos')
-            .setValue(String(cfg.xpCooldown))
-            .setStyle(TextInputStyle.Short)
-            .setRequired(true);
-
-          modal.addComponents(
-            new ActionRowBuilder<TextInputBuilder>().addComponents(minInput),
-            new ActionRowBuilder<TextInputBuilder>().addComponents(maxInput),
-            new ActionRowBuilder<TextInputBuilder>().addComponents(cooldownInput)
-          );
-
-          await i.showModal(modal);
-
-          const submitted = await i.awaitModalSubmit({
-            time: 60000,
-            filter: (sub) => sub.customId === 'modal_set_xp_values' && sub.user.id === interaction.user.id,
-          }).catch(() => null);
-
-          if (submitted) {
-            const min = parseInt(submitted.fields.getTextInputValue('xp_min_val'), 10) || 15;
-            const max = parseInt(submitted.fields.getTextInputValue('xp_max_val'), 10) || 25;
-            const cd = parseInt(submitted.fields.getTextInputValue('xp_cooldown_val'), 10) || 60;
-
-            cfg = await prisma.guildConfig.update({
-              where: { guildId },
-              data: { xpMin: min, xpMax: max, xpCooldown: cd },
-            });
-
-            await submitted.deferUpdate();
-            await interaction.editReply({
-              content: `✅ Valores de XP atualizados: **${min}~${max} XP** a cada **${cd}s**.`,
-              embeds: [buildMainEmbed(cfg)],
-              components: [buildMainMenuRow()],
-            });
-          }
-          return;
-        }
-
-        // ==========================================
-        // 3. MODAL DE BOAS-VINDAS
+        // 2. MODAL DE BOAS-VINDAS
         // ==========================================
         if (i.customId === 'cfg_btn_edit_welcome_msg' && i.isButton()) {
           const modal = new ModalBuilder()
@@ -478,7 +415,7 @@ export default {
         }
 
         // ==========================================
-        // 4. EXIBIR SELETOR DE CANAIS
+        // 3. EXIBIR SELETOR DE CANAIS GERAIS (COM FÓRUM)
         // ==========================================
         if (i.customId === 'cfg_select_chan_type' && i.isStringSelectMenu()) {
           const channelKey = i.values[0];
@@ -486,8 +423,12 @@ export default {
           const channelPicker = new ActionRowBuilder<ChannelSelectMenuBuilder>().addComponents(
             new ChannelSelectMenuBuilder()
               .setCustomId(`cfg_set_chan_${channelKey}`)
-              .setPlaceholder('Selecione o canal no servidor...')
-              .setChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement)
+              .setPlaceholder('Selecione o canal ou fórum no servidor...')
+              .setChannelTypes(
+                ChannelType.GuildText,
+                ChannelType.GuildAnnouncement,
+                ChannelType.GuildForum
+              )
           );
 
           const controls = new ActionRowBuilder<ButtonBuilder>().addComponents(
@@ -499,14 +440,14 @@ export default {
           );
 
           await i.update({
-            content: `📢 Selecione o novo canal para o campo **${channelKey}**:`,
+            content: `📢 Selecione o novo canal/fórum para o campo **${channelKey}**:`,
             components: [channelPicker, controls],
           });
           return;
         }
 
         // ==========================================
-        // 5. EXIBIR SELETOR DE CARGOS
+        // 4. EXIBIR SELETOR DE CARGOS
         // ==========================================
         if (i.customId === 'cfg_select_role_type' && i.isStringSelectMenu()) {
           const roleKey = i.values[0];
@@ -533,21 +474,21 @@ export default {
         }
 
         // ==========================================
-        // 6. APLICAÇÃO E SEGURANÇA DE CANAIS / CATEGORIAS
+        // 5. APLICAÇÃO E SEGURANÇA DE CANAIS / CATEGORIAS / FÓRUNS
         // ==========================================
         if (i.customId.startsWith('cfg_set_chan_') && i.isChannelSelectMenu()) {
           const channelField = i.customId.replace('cfg_set_chan_', '');
           const chosenChannelId = i.values[0];
 
-          // Segurança: Verifica permissão do bot no canal de texto selecionado
+          // Segurança: Verifica se o bot consegue ver o canal selecionado
           const targetChannel = interaction.guild?.channels.cache.get(chosenChannelId);
           const botMember = interaction.guild?.members.me;
 
-          if (targetChannel && botMember && targetChannel.isTextBased()) {
+          if (targetChannel && botMember && targetChannel.type !== ChannelType.GuildCategory) {
             const permissions = targetChannel.permissionsFor(botMember);
-            if (!permissions?.has([PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.EmbedLinks])) {
+            if (!permissions?.has(PermissionFlagsBits.ViewChannel)) {
               await i.reply({
-                embeds: [errorEmbed('Permissão Insuficiente', `O bot precisa das permissões de **Ver Canal**, **Enviar Mensagens** e **Inserir Links** em <#${chosenChannelId}>.`)],
+                embeds: [errorEmbed('Permissão Insuficiente', `O bot não possui permissão de **Ver Canal** em <#${chosenChannelId}>.`)],
                 ephemeral: true,
               });
               return;
@@ -568,7 +509,7 @@ export default {
         }
 
         // ==========================================
-        // 7. APLICAÇÃO E SEGURANÇA DE CARGOS
+        // 6. APLICAÇÃO E SEGURANÇA DE CARGOS
         // ==========================================
         if (i.customId.startsWith('cfg_set_role_') && i.isRoleSelectMenu()) {
           const roleField = i.customId.replace('cfg_set_role_', '');
@@ -616,7 +557,7 @@ export default {
         }
 
         // ==========================================
-        // 8. ALTERNAÇÃO DE MÓDULOS (FEATURES)
+        // 7. ALTERNAÇÃO DE MÓDULOS (FEATURES)
         // ==========================================
         if (i.customId === 'cfg_select_feature_toggle' && i.isStringSelectMenu()) {
           const featureField = i.values[0] as keyof GuildConfig;
@@ -636,7 +577,7 @@ export default {
         }
 
         // ==========================================
-        // 9. TOGGLES DE SEGURANÇA (Anti-Spam / Anti-Links)
+        // 8. TOGGLES DE SEGURANÇA (Anti-Spam / Anti-Links)
         // ==========================================
         if (i.customId === 'cfg_toggle_antiSpam' && i.isButton()) {
           cfg = await prisma.guildConfig.update({
@@ -689,7 +630,7 @@ export default {
         }
 
         // ==========================================
-        // 10. RESETAR / LIMPAR CAMPO
+        // 9. RESETAR / LIMPAR CAMPO
         // ==========================================
         if (i.customId.startsWith('cfg_reset_field_') && i.isButton()) {
           const fieldToReset = i.customId.replace('cfg_reset_field_', '');
@@ -708,7 +649,7 @@ export default {
         }
 
         // ==========================================
-        // 11. VOLTAR AO MENU PRINCIPAL
+        // 10. VOLTAR AO MENU PRINCIPAL
         // ==========================================
         if (i.customId === 'cfg_btn_back' && i.isButton()) {
           await i.update({

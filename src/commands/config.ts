@@ -15,7 +15,6 @@ import {
   ModalBuilder,
   TextInputBuilder,
   TextInputStyle,
-  ModalSubmitInteraction,
 } from 'discord.js';
 import { PrismaClient, GuildConfig } from '@prisma/client';
 import { Command } from '../types';
@@ -426,7 +425,8 @@ export default {
               data: { xpMin: min, xpMax: max, xpCooldown: cd },
             });
 
-            await submitted.update({
+            await submitted.deferUpdate();
+            await interaction.editReply({
               content: `✅ Valores de XP atualizados: **${min}~${max} XP** a cada **${cd}s**.`,
               embeds: [buildMainEmbed(cfg)],
               components: [buildMainMenuRow()],
@@ -467,7 +467,8 @@ export default {
               data: { welcomeMessage: msg },
             });
 
-            await submitted.update({
+            await submitted.deferUpdate();
+            await interaction.editReply({
               content: '✅ Mensagem de boas-vindas atualizada com sucesso!',
               embeds: [buildMainEmbed(cfg)],
               components: [buildMainMenuRow()],

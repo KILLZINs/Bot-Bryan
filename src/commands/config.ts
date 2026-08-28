@@ -12,6 +12,10 @@ import {
   StringSelectMenuOptionBuilder,
   ChannelType,
   GuildMember,
+  ModalBuilder,
+  TextInputBuilder,
+  TextInputStyle,
+  ModalSubmitInteraction,
 } from 'discord.js';
 import { PrismaClient, GuildConfig } from '@prisma/client';
 import { Command } from '../types';
@@ -29,7 +33,7 @@ export default {
   category: 'sistema',
   data: new SlashCommandBuilder()
     .setName('config')
-    .setDescription('⚙️ Painel de configuração das funções e módulos do servidor')
+    .setDescription('⚙️ Painel Central: configure canais, tickets, RPG, cargos e módulos do servidor')
     .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
     .setDMPermission(false),
 
@@ -71,7 +75,7 @@ export default {
       });
     }
 
-    // Embed Principal do Dashboard
+    // Função de Renderização da Embed do Painel Geral
     const buildMainEmbed = (c: GuildConfig): EmbedBuilder => {
       const formatChan = (id: string | null) => (id ? `<#${id}>` : '`Não definido`');
       const formatRole = (id: string | null) => (id ? `<@&${id}>` : '`Não definido`');
@@ -79,17 +83,27 @@ export default {
 
       return new EmbedBuilder()
         .setColor(0x5865F2)
-        .setTitle(`⚙️ Painel de Controle — ${guildName}`)
-        .setDescription('Configure todos os canais, cargos e módulos funcionais do bot para este servidor.')
+        .setTitle(`⚙️ Painel de Controle Geral — ${guildName}`)
+        .setDescription('Configure e gerencie todas as funções, sistemas e módulos ativos neste servidor.')
         .addFields(
           {
-            name: '📢 Canais Principais',
-            value: `**Boas-Vindas:** ${formatChan(c.welcomeChannelId)}\n**Anúncios:** ${formatChan(c.announcementChannelId)}\n**Logs Gerais:** ${formatChan(c.logChannelId)}\n**Logs Tickets:** ${formatChan(c.ticketLogChannelId)}\n**Level Up:** ${formatChan(c.levelUpChannelId)}\n**Sugestões:** ${formatChan(c.suggestionChannelId)}\n**Feedback:** ${formatChan(c.feedbackChannelId)}`,
+            name: '🎫 Sistema de Suporte & Tickets',
+            value: `**Categoria dos Tickets:** ${formatChan(c.ticketCategoryId)}\n**Canal de Logs de Tickets:** ${formatChan(c.ticketLogChannelId)}`,
             inline: false,
+          },
+          {
+            name: '📢 Canais Principais',
+            value: `**Boas-Vindas:** ${formatChan(c.welcomeChannelId)}\n**Anúncios:** ${formatChan(c.announcementChannelId)}\n**Logs Gerais:** ${formatChan(c.logChannelId)}\n**Sugestões:** ${formatChan(c.suggestionChannelId)}\n**Feedback:** ${formatChan(c.feedbackChannelId)}`,
+            inline: true,
           },
           {
             name: '🛡️ Cargos do Sistema',
             value: `**Admin:** ${formatRole(c.adminRoleId)}\n**Moderador:** ${formatRole(c.modRoleId)}\n**Membro:** ${formatRole(c.memberRoleId)}\n**Silenciado:** ${formatRole(c.mutedRoleId)}\n**Auto-Role:** ${formatRole(c.autoRoleId)}`,
+            inline: true,
+          },
+          {
+            name: '⚔️ RPG & Leveling (XP)',
+            value: `**Canal de Level Up:** ${formatChan(c.levelUpChannelId)}\n**Taxa de XP:** \`${c.xpMin} ~ ${c.xpMax} XP\` (Cooldown: \`${c.xpCooldown}s\`)`,
             inline: false,
           },
           {
@@ -99,7 +113,7 @@ export default {
           },
           {
             name: '🧩 Módulos do Bot',
-            value: 
+            value:
               `Leveling: ${formatBool(c.featLeveling)} | RPG: ${formatBool(c.featRpg)} | Tickets: ${formatBool(c.featTickets)}\n` +
               `Sorteios: ${formatBool(c.featGiveaways)} | Enquetes: ${formatBool(c.featPolls)} | Auto-Cargos: ${formatBool(c.featSelfRole)}\n` +
               `Missões: ${formatBool(c.featMissions)} | Social: ${formatBool(c.featSocial)} | Economia: ${formatBool(c.featEconomy)}\n` +
@@ -116,8 +130,18 @@ export default {
       return new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(
         new StringSelectMenuBuilder()
           .setCustomId('cfg_menu_category')
-          .setPlaceholder('Escolha a categoria que deseja configurar...')
+          .setPlaceholder('Escolha o módulo que deseja configurar...')
           .addOptions(
+            new StringSelectMenuOptionBuilder()
+              .setLabel('Sistema de Tickets')
+              .setDescription('Configurar Categoria onde abrem os tickets e canal de logs')
+              .setEmoji('🎫')
+              .setValue('cat_tickets'),
+            new StringSelectMenuOptionBuilder()
+              .setLabel('RPG & Leveling (XP)')
+              .setDescription('Configurar canal de Level Up, XP mínimo/máximo e Cooldown')
+              .setEmoji('⚔️')
+              .setValue('cat_rpg_leveling'),
             new StringSelectMenuOptionBuilder()
               .setLabel('Canais do Servidor')
               .setDescription('Configurar canais de boas-vindas, logs, anúncios, sugestões, etc.')
@@ -130,12 +154,12 @@ export default {
               .setValue('cat_roles'),
             new StringSelectMenuOptionBuilder()
               .setLabel('Segurança & Auto-Mod')
-              .setDescription('Ativar/Desativar Anti-Spam e Anti-Links')
+              .setDescription('Ativar ou desativar proteções de Anti-Spam e Anti-Links')
               .setEmoji('🔒')
               .setValue('cat_security'),
             new StringSelectMenuOptionBuilder()
               .setLabel('Módulos & Sistemas')
-              .setDescription('Ativar ou desativar sistemas (RPG, Leveling, Tickets, Sorteios, etc.)')
+              .setDescription('Ligar ou desligar os 12 sistemas funcionais do bot')
               .setEmoji('🧩')
               .setValue('cat_features')
           )
@@ -152,7 +176,7 @@ export default {
     });
 
     collector.on('collect', async (i) => {
-      // 4. Camada de Segurança: Isolamento do painel por usuário
+      // 4. Camada de Segurança: Isolamento de Sessão por Usuário
       if (i.user.id !== interaction.user.id) {
         await i.reply({
           embeds: [errorEmbed('Ação Não Permitida', 'Apenas o autor do comando pode interagir com este painel.')],
@@ -168,7 +192,73 @@ export default {
         if (i.customId === 'cfg_menu_category' && i.isStringSelectMenu()) {
           const selectedCategory = i.values[0];
 
-          // --- Categoria 1: Canais ---
+          // --- Categoria: Tickets ---
+          if (selectedCategory === 'cat_tickets') {
+            const catSelect = new ActionRowBuilder<ChannelSelectMenuBuilder>().addComponents(
+              new ChannelSelectMenuBuilder()
+                .setCustomId('cfg_set_chan_ticketCategoryId')
+                .setPlaceholder('Selecione a Categoria onde os tickets serão criados...')
+                .setChannelTypes(ChannelType.GuildCategory)
+            );
+
+            const logSelect = new ActionRowBuilder<ChannelSelectMenuBuilder>().addComponents(
+              new ChannelSelectMenuBuilder()
+                .setCustomId('cfg_set_chan_ticketLogChannelId')
+                .setPlaceholder('Selecione o Canal de Logs de Tickets...')
+                .setChannelTypes(ChannelType.GuildText)
+            );
+
+            const buttons = new ActionRowBuilder<ButtonBuilder>().addComponents(
+              new ButtonBuilder()
+                .setCustomId('cfg_reset_field_ticketCategoryId')
+                .setLabel('Limpar Categoria')
+                .setStyle(ButtonStyle.Danger),
+              new ButtonBuilder()
+                .setCustomId('cfg_reset_field_ticketLogChannelId')
+                .setLabel('Limpar Logs')
+                .setStyle(ButtonStyle.Danger),
+              new ButtonBuilder().setCustomId('cfg_btn_back').setLabel('Voltar ao Painel').setStyle(ButtonStyle.Secondary)
+            );
+
+            await i.update({
+              content: '🎫 **Configuração do Sistema de Tickets:**\nEscolha a categoria das salas e o canal de histórico:',
+              embeds: [],
+              components: [catSelect, logSelect, buttons],
+            });
+            return;
+          }
+
+          // --- Categoria: RPG & Leveling (XP) ---
+          if (selectedCategory === 'cat_rpg_leveling') {
+            const levelUpChan = new ActionRowBuilder<ChannelSelectMenuBuilder>().addComponents(
+              new ChannelSelectMenuBuilder()
+                .setCustomId('cfg_set_chan_levelUpChannelId')
+                .setPlaceholder('Selecione o Canal de Anúncios de Level Up...')
+                .setChannelTypes(ChannelType.GuildText)
+            );
+
+            const xpControls = new ActionRowBuilder<ButtonBuilder>().addComponents(
+              new ButtonBuilder()
+                .setCustomId('cfg_btn_edit_xp_modal')
+                .setLabel(`Editar Taxa de XP (${cfg.xpMin}-${cfg.xpMax} XP / ${cfg.xpCooldown}s)`)
+                .setEmoji('⚡')
+                .setStyle(ButtonStyle.Primary),
+              new ButtonBuilder()
+                .setCustomId('cfg_reset_field_levelUpChannelId')
+                .setLabel('Limpar Canal Level Up')
+                .setStyle(ButtonStyle.Danger),
+              new ButtonBuilder().setCustomId('cfg_btn_back').setLabel('Voltar').setStyle(ButtonStyle.Secondary)
+            );
+
+            await i.update({
+              content: `⚔️ **Configurações de RPG & Leveling:**\n• XP por Mensagem: **${cfg.xpMin} a ${cfg.xpMax} XP**\n• Intervalo (Cooldown): **${cfg.xpCooldown} segundos**\n• Canal de Level Up: ${cfg.levelUpChannelId ? `<#${cfg.levelUpChannelId}>` : '`Não definido`'}`,
+              embeds: [],
+              components: [levelUpChan, xpControls],
+            });
+            return;
+          }
+
+          // --- Categoria: Canais Gerais ---
           if (selectedCategory === 'cat_channels') {
             const channelTypeMenu = new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(
               new StringSelectMenuBuilder()
@@ -178,26 +268,29 @@ export default {
                   { label: 'Boas-Vindas', value: 'welcomeChannelId', emoji: '👋' },
                   { label: 'Anúncios', value: 'announcementChannelId', emoji: '📢' },
                   { label: 'Logs Gerais', value: 'logChannelId', emoji: '📋' },
-                  { label: 'Logs de Tickets', value: 'ticketLogChannelId', emoji: '🎫' },
-                  { label: 'Canal de Level Up', value: 'levelUpChannelId', emoji: '⭐' },
                   { label: 'Canal de Sugestões', value: 'suggestionChannelId', emoji: '💡' },
                   { label: 'Canal de Feedback', value: 'feedbackChannelId', emoji: '📝' }
                 )
             );
 
-            const backRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
+            const welcomeMsgBtn = new ActionRowBuilder<ButtonBuilder>().addComponents(
+              new ButtonBuilder()
+                .setCustomId('cfg_btn_edit_welcome_msg')
+                .setLabel('Editar Mensagem de Boas-Vindas')
+                .setEmoji('💬')
+                .setStyle(ButtonStyle.Primary),
               new ButtonBuilder().setCustomId('cfg_btn_back').setLabel('Voltar ao Painel').setStyle(ButtonStyle.Secondary)
             );
 
             await i.update({
-              content: '📢 **Configuração de Canais:** Escolha qual canal deseja alterar:',
+              content: '📢 **Configuração de Canais Gerais:** Escolha qual canal deseja alterar:',
               embeds: [],
-              components: [channelTypeMenu, backRow],
+              components: [channelTypeMenu, welcomeMsgBtn],
             });
             return;
           }
 
-          // --- Categoria 2: Cargos ---
+          // --- Categoria: Cargos ---
           if (selectedCategory === 'cat_roles') {
             const roleTypeMenu = new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(
               new StringSelectMenuBuilder()
@@ -224,7 +317,7 @@ export default {
             return;
           }
 
-          // --- Categoria 3: Segurança & Auto-Mod ---
+          // --- Categoria: Segurança & Auto-Mod ---
           if (selectedCategory === 'cat_security') {
             const toggleButtons = new ActionRowBuilder<ButtonBuilder>().addComponents(
               new ButtonBuilder()
@@ -239,14 +332,14 @@ export default {
             );
 
             await i.update({
-              content: '🔒 **Configuração de Segurança:** Clique nos botões para ativar ou desativar proteções:',
+              content: '🔒 **Configuração de Segurança:** Clique nos botões para ligar ou desligar as proteções:',
               embeds: [],
               components: [toggleButtons],
             });
             return;
           }
 
-          // --- Categoria 4: Módulos & Sistemas ---
+          // --- Categoria: Módulos do Bot ---
           if (selectedCategory === 'cat_features') {
             const moduleSelect = new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(
               new StringSelectMenuBuilder()
@@ -273,7 +366,7 @@ export default {
             );
 
             await i.update({
-              content: '🧩 **Ativação de Módulos:** Selecione um sistema para alternar o estado:',
+              content: '🧩 **Ativação de Módulos:** Selecione um sistema para alternar seu estado:',
               embeds: [],
               components: [moduleSelect, backRow],
             });
@@ -282,14 +375,116 @@ export default {
         }
 
         // ==========================================
-        // 2. EXIBIR SELETOR DE CANAL ESPECÍFICO
+        // 2. MODAL DE XP (Leveling / RPG)
+        // ==========================================
+        if (i.customId === 'cfg_btn_edit_xp_modal' && i.isButton()) {
+          const modal = new ModalBuilder()
+            .setCustomId('modal_set_xp_values')
+            .setTitle('⚙️ Configuração de XP do Servidor');
+
+          const minInput = new TextInputBuilder()
+            .setCustomId('xp_min_val')
+            .setLabel('XP Mínimo por Mensagem')
+            .setValue(String(cfg.xpMin))
+            .setStyle(TextInputStyle.Short)
+            .setRequired(true);
+
+          const maxInput = new TextInputBuilder()
+            .setCustomId('xp_max_val')
+            .setLabel('XP Máximo por Mensagem')
+            .setValue(String(cfg.xpMax))
+            .setStyle(TextInputStyle.Short)
+            .setRequired(true);
+
+          const cooldownInput = new TextInputBuilder()
+            .setCustomId('xp_cooldown_val')
+            .setLabel('Tempo de Cooldown em Segundos')
+            .setValue(String(cfg.xpCooldown))
+            .setStyle(TextInputStyle.Short)
+            .setRequired(true);
+
+          modal.addComponents(
+            new ActionRowBuilder<TextInputBuilder>().addComponents(minInput),
+            new ActionRowBuilder<TextInputBuilder>().addComponents(maxInput),
+            new ActionRowBuilder<TextInputBuilder>().addComponents(cooldownInput)
+          );
+
+          await i.showModal(modal);
+
+          const submitted = await i.awaitModalSubmit({
+            time: 60000,
+            filter: (sub) => sub.customId === 'modal_set_xp_values' && sub.user.id === interaction.user.id,
+          }).catch(() => null);
+
+          if (submitted) {
+            const min = parseInt(submitted.fields.getTextInputValue('xp_min_val'), 10) || 15;
+            const max = parseInt(submitted.fields.getTextInputValue('xp_max_val'), 10) || 25;
+            const cd = parseInt(submitted.fields.getTextInputValue('xp_cooldown_val'), 10) || 60;
+
+            cfg = await prisma.guildConfig.update({
+              where: { guildId },
+              data: { xpMin: min, xpMax: max, xpCooldown: cd },
+            });
+
+            await submitted.update({
+              content: `✅ Valores de XP atualizados: **${min}~${max} XP** a cada **${cd}s**.`,
+              embeds: [buildMainEmbed(cfg)],
+              components: [buildMainMenuRow()],
+            });
+          }
+          return;
+        }
+
+        // ==========================================
+        // 3. MODAL DE BOAS-VINDAS
+        // ==========================================
+        if (i.customId === 'cfg_btn_edit_welcome_msg' && i.isButton()) {
+          const modal = new ModalBuilder()
+            .setCustomId('modal_set_welcome_msg')
+            .setTitle('👋 Mensagem de Boas-Vindas');
+
+          const textInput = new TextInputBuilder()
+            .setCustomId('welcome_text_val')
+            .setLabel('Mensagem (Use {user} e {guild})')
+            .setValue(cfg.welcomeMessage || 'Olá {user}, seja muito bem-vindo(a) ao {guild}!')
+            .setStyle(TextInputStyle.Paragraph)
+            .setRequired(true);
+
+          modal.addComponents(new ActionRowBuilder<TextInputBuilder>().addComponents(textInput));
+
+          await i.showModal(modal);
+
+          const submitted = await i.awaitModalSubmit({
+            time: 60000,
+            filter: (sub) => sub.customId === 'modal_set_welcome_msg' && sub.user.id === interaction.user.id,
+          }).catch(() => null);
+
+          if (submitted) {
+            const msg = submitted.fields.getTextInputValue('welcome_text_val');
+
+            cfg = await prisma.guildConfig.update({
+              where: { guildId },
+              data: { welcomeMessage: msg },
+            });
+
+            await submitted.update({
+              content: '✅ Mensagem de boas-vindas atualizada com sucesso!',
+              embeds: [buildMainEmbed(cfg)],
+              components: [buildMainMenuRow()],
+            });
+          }
+          return;
+        }
+
+        // ==========================================
+        // 4. EXIBIR SELETOR DE CANAIS
         // ==========================================
         if (i.customId === 'cfg_select_chan_type' && i.isStringSelectMenu()) {
           const channelKey = i.values[0];
 
           const channelPicker = new ActionRowBuilder<ChannelSelectMenuBuilder>().addComponents(
             new ChannelSelectMenuBuilder()
-              .setCustomId(`cfg_apply_chan_${channelKey}`)
+              .setCustomId(`cfg_set_chan_${channelKey}`)
               .setPlaceholder('Selecione o canal no servidor...')
               .setChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement)
           );
@@ -310,14 +505,14 @@ export default {
         }
 
         // ==========================================
-        // 3. EXIBIR SELETOR DE CARGO ESPECÍFICO
+        // 5. EXIBIR SELETOR DE CARGOS
         // ==========================================
         if (i.customId === 'cfg_select_role_type' && i.isStringSelectMenu()) {
           const roleKey = i.values[0];
 
           const rolePicker = new ActionRowBuilder<RoleSelectMenuBuilder>().addComponents(
             new RoleSelectMenuBuilder()
-              .setCustomId(`cfg_apply_role_${roleKey}`)
+              .setCustomId(`cfg_set_role_${roleKey}`)
               .setPlaceholder('Selecione o cargo no servidor...')
           );
 
@@ -337,13 +532,13 @@ export default {
         }
 
         // ==========================================
-        // 4. APLICAÇÃO E SEGURANÇA DE CANAL
+        // 6. APLICAÇÃO E SEGURANÇA DE CANAIS / CATEGORIAS
         // ==========================================
-        if (i.customId.startsWith('cfg_apply_chan_') && i.isChannelSelectMenu()) {
-          const channelField = i.customId.replace('cfg_apply_chan_', '');
+        if (i.customId.startsWith('cfg_set_chan_') && i.isChannelSelectMenu()) {
+          const channelField = i.customId.replace('cfg_set_chan_', '');
           const chosenChannelId = i.values[0];
 
-          // Segurança: Verifica permissão do bot no canal escolhido
+          // Segurança: Verifica permissão do bot no canal de texto selecionado
           const targetChannel = interaction.guild?.channels.cache.get(chosenChannelId);
           const botMember = interaction.guild?.members.me;
 
@@ -372,10 +567,10 @@ export default {
         }
 
         // ==========================================
-        // 5. APLICAÇÃO E SEGURANÇA DE CARGO
+        // 7. APLICAÇÃO E SEGURANÇA DE CARGOS
         // ==========================================
-        if (i.customId.startsWith('cfg_apply_role_') && i.isRoleSelectMenu()) {
-          const roleField = i.customId.replace('cfg_apply_role_', '');
+        if (i.customId.startsWith('cfg_set_role_') && i.isRoleSelectMenu()) {
+          const roleField = i.customId.replace('cfg_set_role_', '');
           const chosenRoleId = i.values[0];
           const targetRole = interaction.guild?.roles.cache.get(chosenRoleId);
           const botMember = interaction.guild?.members.me;
@@ -420,7 +615,7 @@ export default {
         }
 
         // ==========================================
-        // 6. ALTERNAÇÃO DE MÓDULOS (FEATURES)
+        // 8. ALTERNAÇÃO DE MÓDULOS (FEATURES)
         // ==========================================
         if (i.customId === 'cfg_select_feature_toggle' && i.isStringSelectMenu()) {
           const featureField = i.values[0] as keyof GuildConfig;
@@ -440,7 +635,7 @@ export default {
         }
 
         // ==========================================
-        // 7. TOGGLES DE SEGURANÇA (Anti-Spam / Anti-Links)
+        // 9. TOGGLES DE SEGURANÇA (Anti-Spam / Anti-Links)
         // ==========================================
         if (i.customId === 'cfg_toggle_antiSpam' && i.isButton()) {
           cfg = await prisma.guildConfig.update({
@@ -461,7 +656,7 @@ export default {
           );
 
           await i.update({
-            content: '🔒 **Configuração de Segurança:** Clique nos botões para ativar ou desativar proteções:',
+            content: '🔒 **Configuração de Segurança:** Clique nos botões para ligar ou desligar as proteções:',
             components: [toggleButtons],
           });
           return;
@@ -486,14 +681,14 @@ export default {
           );
 
           await i.update({
-            content: '🔒 **Configuração de Segurança:** Clique nos botões para ativar ou desativar proteções:',
+            content: '🔒 **Configuração de Segurança:** Clique nos botões para ligar ou desligar as proteções:',
             components: [toggleButtons],
           });
           return;
         }
 
         // ==========================================
-        // 8. RESETAR / LIMPAR CAMPO
+        // 10. RESETAR / LIMPAR CAMPO
         // ==========================================
         if (i.customId.startsWith('cfg_reset_field_') && i.isButton()) {
           const fieldToReset = i.customId.replace('cfg_reset_field_', '');
@@ -512,7 +707,7 @@ export default {
         }
 
         // ==========================================
-        // 9. VOLTAR AO MENU PRINCIPAL
+        // 11. VOLTAR AO MENU PRINCIPAL
         // ==========================================
         if (i.customId === 'cfg_btn_back' && i.isButton()) {
           await i.update({

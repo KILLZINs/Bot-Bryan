@@ -828,3 +828,23 @@ model AiMemory {
   @@index([createdAt])
   @@map("ai_memory")
 }
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model GuildConfig {
+  guildId           String   @id @unique
+  welcomeChannelId  String?
+  logsChannelId     String?
+  giveawayChannelId String?
+  autoRoleId        String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@map("guild_configs")
+}

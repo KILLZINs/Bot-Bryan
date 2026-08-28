@@ -838,13 +838,44 @@ generator client {
 }
 
 model GuildConfig {
-  guildId           String   @id @unique
-  welcomeChannelId  String?
-  logsChannelId     String?
-  giveawayChannelId String?
-  autoRoleId        String?
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  id                    String   @id @default(cuid())
+  guildId               String   @unique
+  logChannelId          String?
+  welcomeChannelId      String?
+  announcementChannelId String?
+  ticketCategoryId      String?
+  ticketLogChannelId    String?
+  adminRoleId           String?
+  modRoleId             String?
+  memberRoleId          String?
+  mutedRoleId           String?
+  levelUpChannelId      String?
+  suggestionChannelId   String?
+  feedbackChannelId     String?
+  autoRoleId            String?
+  welcomeMessage        String?
+  xpMin                 Int      @default(15)
+  xpMax                 Int      @default(25)
+  xpCooldown            Int      @default(60)
+  antiSpam              Boolean  @default(false)
+  antiLinks             Boolean  @default(false)
 
-  @@map("guild_configs")
+  // 🧩 Módulos Dinâmicos (Ativados no Dashboard)
+  featLeveling      Boolean  @default(true)
+  featRpg           Boolean  @default(true)
+  featTickets       Boolean  @default(true)
+  featPolls         Boolean  @default(true)
+  featGiveaways     Boolean  @default(true)
+  featSelfRole      Boolean  @default(true)
+  featMissions      Boolean  @default(true)
+  featSocial        Boolean  @default(true)
+  featEconomy       Boolean  @default(true)
+  featMod           Boolean  @default(true)
+  featAnnouncements Boolean  @default(true)
+  featMusic         Boolean  @default(true)
+
+  logFlags  Int      @default(31)
+  updatedAt DateTime @updatedAt @default(now())
+
+  @@map("guild_config")
 }

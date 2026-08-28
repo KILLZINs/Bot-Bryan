@@ -320,10 +320,6 @@ model LevelReward {
   @@map("level_rewards")
 }
 
-// ═══════════════════════════════════════════════════════════════════════
-// RPG MODELS
-// ═══════════════════════════════════════════════════════════════════════
-
 model RpgCharacter {
   discordId       String   @id
   username        String
@@ -390,15 +386,13 @@ model RpgCharacter {
   classMissions   RpgClassMission[]
   fishingSession  RpgFishingSession?
 
-  // Sistema de Pets
   activePetLevel Int @default(1)
   activePetXp    Int @default(0)
 
-  // 🎨 COSMÉTICOS
-  activeTitle         String?   // O título que está equipado agora
-  activeBackground    String?   // O fundo que está equipado agora
-  unlockedTitles      String    @default("") // Lista separada por vírgula dos títulos comprados
-  unlockedBackgrounds String    @default("") // Lista separada por vírgula dos fundos comprados
+  activeTitle         String?
+  activeBackground    String?
+  unlockedTitles      String    @default("")
+  unlockedBackgrounds String    @default("")
 
   @@map("rpg_characters")
 }
@@ -689,9 +683,6 @@ model AllianceEmbed {
   @@map("alliance_embeds")
 }
 
-// ==========================================
-// 👑 GLOBAL BOT CONFIGURATION
-// ==========================================
 model BotConfig {
   id            String   @id @default("global")
   footerText    String   @default("⚔️ Aliança Skyline")
@@ -701,7 +692,6 @@ model BotConfig {
   featAfk       Boolean  @default(true)
   featWelcomeDm Boolean  @default(true)
 
-  // 🌍 MASTER SWITCHES GLOBAIS (Kill Switches do Bryan)
   featLeveling      Boolean  @default(true)
   featRpg           Boolean  @default(true)
   featTickets       Boolean  @default(true)
@@ -778,12 +768,12 @@ model VipConfig {
 }
 
 model VipGuildConfig {
-  id                     String   @id @default(cuid())
-  guildId                String   @unique
+  id                       String   @id @default(cuid())
+  guildId                  String   @unique
   gradientTicketCategoryId String?
   defaultFavoriteLimit     Int      @default(3)
-  createdAt              DateTime @default(now())
-  updatedAt              DateTime @updatedAt
+  createdAt                DateTime @default(now())
+  updatedAt                DateTime @updatedAt
 
   @@map("vip_guild_configs")
 }
@@ -827,55 +817,4 @@ model AiMemory {
   @@index([userId, guildId, character])
   @@index([createdAt])
   @@map("ai_memory")
-}
-datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
-}
-
-generator client {
-  provider = "prisma-client-js"
-}
-
-model GuildConfig {
-  id                    String   @id @default(cuid())
-  guildId               String   @unique
-  logChannelId          String?
-  welcomeChannelId      String?
-  announcementChannelId String?
-  ticketCategoryId      String?
-  ticketLogChannelId    String?
-  adminRoleId           String?
-  modRoleId             String?
-  memberRoleId          String?
-  mutedRoleId           String?
-  levelUpChannelId      String?
-  suggestionChannelId   String?
-  feedbackChannelId     String?
-  autoRoleId            String?
-  welcomeMessage        String?
-  xpMin                 Int      @default(15)
-  xpMax                 Int      @default(25)
-  xpCooldown            Int      @default(60)
-  antiSpam              Boolean  @default(false)
-  antiLinks             Boolean  @default(false)
-
-  // 🧩 Módulos Dinâmicos (Ativados no Dashboard)
-  featLeveling      Boolean  @default(true)
-  featRpg           Boolean  @default(true)
-  featTickets       Boolean  @default(true)
-  featPolls         Boolean  @default(true)
-  featGiveaways     Boolean  @default(true)
-  featSelfRole      Boolean  @default(true)
-  featMissions      Boolean  @default(true)
-  featSocial        Boolean  @default(true)
-  featEconomy       Boolean  @default(true)
-  featMod           Boolean  @default(true)
-  featAnnouncements Boolean  @default(true)
-  featMusic         Boolean  @default(true)
-
-  logFlags  Int      @default(31)
-  updatedAt DateTime @updatedAt @default(now())
-
-  @@map("guild_config")
 }

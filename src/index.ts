@@ -165,6 +165,46 @@ try {
   // Eventos carregados
 }
 
+// ═════════════════════════════════════════════════════════════════════════════
+// 📸 SISTEMA DE FEED SOCIAL / INSTAGRAM
+// ═════════════════════════════════════════════════════════════════════════════
+
+function buildPostActionRow(
+  postId: string,
+  authorId: string,
+  likesCount: number,
+  commentsCount: number,
+  isLiked: boolean = false
+): ActionRowBuilder<ButtonBuilder> {
+  return new ActionRowBuilder<ButtonBuilder>().addComponents(
+    new ButtonBuilder()
+      .setCustomId(`insta:like:${postId}`)
+      .setLabel(String(likesCount))
+      .setEmoji('💜')
+      .setStyle(isLiked ? ButtonStyle.Primary : ButtonStyle.Secondary),
+    new ButtonBuilder()
+      .setCustomId(`insta:comment:${postId}`)
+      .setLabel('Comentar')
+      .setEmoji('💬')
+      .setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder()
+      .setCustomId(`insta:view:${postId}`)
+      .setLabel(`Comentários (${commentsCount})`)
+      .setEmoji('👥')
+      .setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder()
+      .setCustomId(`insta:follow:${authorId}`)
+      .setLabel('Seguir')
+      .setEmoji('🔔')
+      .setStyle(ButtonStyle.Primary),
+    new ButtonBuilder()
+      .setCustomId(`insta:delete:${postId}`)
+      .setLabel('Apagar')
+      .setEmoji('🗑️')
+      .setStyle(ButtonStyle.Danger)
+  );
+}
+
 const postCooldowns = new Map<string, number>();
 const INVITE_REGEX = /(discord\.(gg|io|me|li)|discordapp\.com\/invite|discord\.com\/invite)\/[a-zA-Z0-9]+/i;
 const PHISHING_REGEX = /(grabify|iplogger|leak|nitro-free|steam-gift)/i;
@@ -181,10 +221,12 @@ client.on('messageCreate', async (message) => {
       return;
     }
 
+    const channel = message.channel as TextChannel;
     const attachment = message.attachments.first();
+
     if (!attachment) {
       await message.delete().catch(() => null);
-      const warn = await message.channel.send({
+      const warn = await channel.send({
         content: `⚠️ ${message.author}, o canal do **Feed/Instagram** aceita apenas publicações com fotos ou vídeos anexados!`,
       });
       setTimeout(() => warn.delete().catch(() => null), 5000);
@@ -202,7 +244,7 @@ client.on('messageCreate', async (message) => {
     if (now - userCd < 60000) {
       const rest = Math.ceil((60000 - (now - userCd)) / 1000);
       await message.delete().catch(() => null);
-      const warn = await message.channel.send({
+      const warn = await channel.send({
         content: `⏳ ${message.author}, aguarde **${rest}s** para postar novamente no Feed.`,
       });
       setTimeout(() => warn.delete().catch(() => null), 5000);
@@ -212,7 +254,7 @@ client.on('messageCreate', async (message) => {
     const caption = message.content.trim();
     if (INVITE_REGEX.test(caption) || PHISHING_REGEX.test(caption)) {
       await message.delete().catch(() => null);
-      const warn = await message.channel.send({
+      const warn = await channel.send({
         content: `❌ ${message.author}, convites e links suspeitos não são permitidos no Feed.`,
       });
       setTimeout(() => warn.delete().catch(() => null), 5000);
@@ -242,15 +284,9 @@ client.on('messageCreate', async (message) => {
       .setFooter({ text: '📸 Instagram Skyline • Clique nos botões para interagir' })
       .setTimestamp();
 
-    const placeholderRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
-      new ButtonBuilder().setCustomId('insta:like:new').setLabel('0').setEmoji('💜').setStyle(ButtonStyle.Secondary),
-      new ButtonBuilder().setCustomId('insta:comment:new').setLabel('Comentar').setEmoji('💬').setStyle(ButtonStyle.Secondary),
-      new ButtonBuilder().setCustomId('insta:view:new').setLabel('Comentários (0)').setEmoji('👥').setStyle(ButtonStyle.Secondary),
-      new ButtonBuilder().setCustomId(`insta:follow:${message.author.id}`).setLabel('Seguir').setEmoji('🔔').setStyle(ButtonStyle.Primary),
-      new ButtonBuilder().setCustomId('insta:delete:new').setLabel('Apagar').setEmoji('🗑️').setStyle(ButtonStyle.Danger)
-    );
+    const placeholderRow = buildPostActionRow('new', message.author.id, 0, 0, false);
 
-    const sentMessage = await (message.channel as TextChannel).send({
+    const sentMessage = await channel.send({
       embeds: [postEmbed],
       components: [placeholderRow],
     });
@@ -258,7 +294,7 @@ client.on('messageCreate', async (message) => {
     const savedPost = await prisma.socialPost.create({
       data: {
         guildId: message.guildId,
-        channelId: message.channel.id,
+        channelId: channel.id,
         messageId: sentMessage.id,
         authorId: message.author.id,
         authorName: message.author.displayName || message.author.username,
@@ -268,14 +304,7 @@ client.on('messageCreate', async (message) => {
       },
     });
 
-    const realRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
-      new ButtonBuilder().setCustomId(`insta:like:${savedPost.id}`).setLabel('0').setEmoji('💜').setStyle(ButtonStyle.Secondary),
-      new ButtonBuilder().setCustomId(`insta:comment:${savedPost.id}`).setLabel('Comentar').setEmoji('💬').setStyle(ButtonStyle.Secondary),
-      new ButtonBuilder().setCustomId(`insta:view:${savedPost.id}`).setLabel('Comentários (0)').setEmoji('👥').setStyle(ButtonStyle.Secondary),
-      new ButtonBuilder().setCustomId(`insta:follow:${message.author.id}`).setLabel('Seguir').setEmoji('🔔').setStyle(ButtonStyle.Primary),
-      new ButtonBuilder().setCustomId(`insta:delete:${savedPost.id}`).setLabel('Apagar').setEmoji('🗑️').setStyle(ButtonStyle.Danger)
-    );
-
+    const realRow = buildPostActionRow(savedPost.id, message.author.id, 0, 0, false);
     await sentMessage.edit({ components: [realRow] }).catch(() => null);
 
     const followers = await prisma.socialFollow.findMany({
@@ -313,34 +342,32 @@ client.on('interactionCreate', async (interaction) => {
     if (interaction.isButton() && interaction.customId.startsWith('insta:like:')) {
       const postId = interaction.customId.replace('insta:like:', '');
       const post = await prisma.socialPost.findUnique({ where: { id: postId } });
-      if (!post) return interaction.reply({ content: '❌ Publicação não encontrada.', ephemeral: true });
+      if (!post) {
+        await interaction.reply({ content: '❌ Publicação não encontrada.', ephemeral: true });
+        return;
+      }
 
       const existingLike = await prisma.socialLike.findUnique({
         where: { postId_userId: { postId, userId: interaction.user.id } },
       });
 
       let count = post.likesCount;
+      let isLiked = false;
+
       if (existingLike) {
         await prisma.socialLike.delete({ where: { id: existingLike.id } });
         count = Math.max(0, count - 1);
+        isLiked = false;
         await prisma.socialPost.update({ where: { id: postId }, data: { likesCount: count } });
       } else {
         await prisma.socialLike.create({ data: { postId, userId: interaction.user.id } });
         count += 1;
+        isLiked = true;
         await prisma.socialPost.update({ where: { id: postId }, data: { likesCount: count } });
       }
 
-      const row = interaction.message.components[0];
-      const buttons = row.components.map((c) => {
-        const btn = ButtonBuilder.from(c as any);
-        if (c.customId?.startsWith('insta:like:')) {
-          btn.setLabel(String(count));
-          btn.setStyle(existingLike ? ButtonStyle.Secondary : ButtonStyle.Primary);
-        }
-        return btn;
-      });
-
-      await interaction.update({ components: [new ActionRowBuilder<ButtonBuilder>().addComponents(buttons)] });
+      const updatedRow = buildPostActionRow(postId, post.authorId, count, post.commentsCount, isLiked);
+      await interaction.update({ components: [updatedRow] });
       return;
     }
 
@@ -366,7 +393,10 @@ client.on('interactionCreate', async (interaction) => {
       const postId = interaction.customId.replace('insta_modal_comment:', '');
       const comment = interaction.fields.getTextInputValue('comment_text').trim();
       const post = await prisma.socialPost.findUnique({ where: { id: postId } });
-      if (!post) return interaction.reply({ content: '❌ Publicação não encontrada.', ephemeral: true });
+      if (!post) {
+        await interaction.reply({ content: '❌ Publicação não encontrada.', ephemeral: true });
+        return;
+      }
 
       await prisma.socialComment.create({
         data: {
@@ -381,15 +411,11 @@ client.on('interactionCreate', async (interaction) => {
       await prisma.socialPost.update({ where: { id: postId }, data: { commentsCount: newCommentsCount } });
 
       if (interaction.message) {
-        const row = interaction.message.components[0];
-        const buttons = row.components.map((c) => {
-          const btn = ButtonBuilder.from(c as any);
-          if (c.customId?.startsWith('insta:view:')) {
-            btn.setLabel(`Comentários (${newCommentsCount})`);
-          }
-          return btn;
+        const hasLiked = await prisma.socialLike.findUnique({
+          where: { postId_userId: { postId, userId: interaction.user.id } }
         });
-        await interaction.message.edit({ components: [new ActionRowBuilder<ButtonBuilder>().addComponents(buttons)] }).catch(() => null);
+        const updatedRow = buildPostActionRow(postId, post.authorId, post.likesCount, newCommentsCount, !!hasLiked);
+        await interaction.message.edit({ components: [updatedRow] }).catch(() => null);
       }
 
       await interaction.reply({ content: `✅ Comentário enviado com sucesso: *"${comment}"*`, ephemeral: true });
@@ -418,7 +444,8 @@ client.on('interactionCreate', async (interaction) => {
       });
 
       if (comments.length === 0) {
-        return interaction.reply({ content: '💭 Esta foto ainda não tem comentários.', ephemeral: true });
+        await interaction.reply({ content: '💭 Esta foto ainda não tem comentários.', ephemeral: true });
+        return;
       }
 
       const list = comments
@@ -432,7 +459,8 @@ client.on('interactionCreate', async (interaction) => {
         .setFooter({ text: 'Exibindo comentários mais recentes' })
         .setTimestamp();
 
-      return interaction.reply({ embeds: [commEmbed], ephemeral: true });
+      await interaction.reply({ embeds: [commEmbed], ephemeral: true });
+      return;
     }
 
     if (interaction.isButton() && interaction.customId.startsWith('insta:follow:')) {
@@ -441,7 +469,8 @@ client.on('interactionCreate', async (interaction) => {
       const guildId = interaction.guildId!;
 
       if (targetUserId === followerUserId) {
-        return interaction.reply({ content: '❌ Você não pode seguir a si mesmo!', ephemeral: true });
+        await interaction.reply({ content: '❌ Você não pode seguir a si mesmo!', ephemeral: true });
+        return;
       }
 
       const existingFollow = await prisma.socialFollow.findUnique({
@@ -453,11 +482,12 @@ client.on('interactionCreate', async (interaction) => {
 
       if (existingFollow) {
         await prisma.socialFollow.delete({ where: { id: existingFollow.id } });
-        return interaction.reply({ content: `🔕 Você deixou de seguir **${targetName}**.`, ephemeral: true });
+        await interaction.reply({ content: `🔕 Você deixou de seguir **${targetName}**.`, ephemeral: true });
       } else {
         await prisma.socialFollow.create({ data: { guildId, targetUserId, followerUserId } });
-        return interaction.reply({ content: `🔔 Você agora está seguindo **${targetName}**! Será avisado no PV sempre que houver novas fotos.`, ephemeral: true });
+        await interaction.reply({ content: `🔔 Você agora está seguindo **${targetName}**! Será avisado no PV sempre que houver novas fotos.`, ephemeral: true });
       }
+      return;
     }
 
     if (interaction.isButton() && interaction.customId.startsWith('insta:delete:')) {
@@ -465,18 +495,23 @@ client.on('interactionCreate', async (interaction) => {
       const member = interaction.member as GuildMember;
       const post = await prisma.socialPost.findUnique({ where: { id: postId } });
 
-      if (!post) return interaction.reply({ content: '❌ Publicação não encontrada.', ephemeral: true });
+      if (!post) {
+        await interaction.reply({ content: '❌ Publicação não encontrada.', ephemeral: true });
+        return;
+      }
 
       const isAuthor = post.authorId === interaction.user.id;
       const isStaff = member.permissions.has(PermissionFlagsBits.ManageMessages) || member.permissions.has(PermissionFlagsBits.Administrator);
 
       if (!isAuthor && !isStaff) {
-        return interaction.reply({ content: '❌ Segurança: Apenas o autor ou Moderadores podem apagar esta foto.', ephemeral: true });
+        await interaction.reply({ content: '❌ Segurança: Apenas o autor ou Moderadores podem apagar esta foto.', ephemeral: true });
+        return;
       }
 
       await prisma.socialPost.delete({ where: { id: postId } });
       await interaction.message.delete().catch(() => null);
-      return interaction.reply({ content: '🗑️ Foto apagada com sucesso!', ephemeral: true });
+      await interaction.reply({ content: '🗑️ Foto apagada com sucesso!', ephemeral: true });
+      return;
     }
   } catch (err) {
     console.error('[ERRO INTERACTION FEED]:', err);

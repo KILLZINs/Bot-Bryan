@@ -464,4 +464,38 @@ client.on('interactionCreate', async (interaction) => {
     // COMENTÁRIO + NOTIFICAÇÃO AO CRIADOR
     if (interaction.isModalSubmit() && interaction.customId.startsWith('insta_modal_comment:')) {
       const postId = interaction.customId.replace('insta_modal_comment:', '');
-      const comment = interaction.fields.getTextInputValue
+      const comment = interaction.fields.getTextInputValue('comment_text').trim();
+      const post = await prisma.socialPost.findUnique({ where: { id: postId } });
+      if (!post) {
+        await interaction.reply({ content: '❌ Publicação não encontrada.', ephemeral: true });
+        return;
+      }
+
+      await prisma.socialComment.create({
+        data: {
+          postId,
+          userId: interaction.user.id,
+          userName: interaction.user.displayName || interaction.user.username,
+          content: comment,
+        },
+      });
+
+      const newCommentsCount = post.commentsCount + 1;
+      await prisma.socialPost.update({ where: { id: postId }, data: { commentsCount: newCommentsCount } });
+
+      if (interaction.message) {
+        const hasLiked = await prisma.socialLike.findUnique({
+          where: { postId_userId: { postId, userId: interaction.user.id } }
+        });
+        const updatedRow = buildPostActionRow(postId, post.authorId, post.likesCount, newCommentsCount, !!hasLiked, customEmojis);
+        await interaction.message.edit({ components: [updatedRow] }).catch(() => null);
+      }
+
+      await interaction.reply({ content: `✅ Comentário enviado com sucesso: *"${comment}"*`, ephemeral: true });
+
+      // NOTIFICA O AUTOR NO PV COM O COMENTÁRIO
+      if (post.authorId !== interaction.user.id) {
+        const author = await client.users.fetch(post.authorId).catch(() => null);
+        if (author) {
+          const commEmbed = new EmbedBuilder()
+            .setColor(cfg?.feedEmb

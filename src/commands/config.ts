@@ -16,7 +16,7 @@ import {
   TextInputBuilder,
   TextInputStyle,
 } from 'discord.js';
-import { PrismaClient, GuildConfig } from '@prisma/client';
+import { PrismaClient } from '@prisma/client';
 import { Command } from '../types';
 import { errorEmbed } from '../utils/embeds';
 import { getBotConfig, intToHex, BotConfigData } from '../utils/botConfig';
@@ -56,7 +56,7 @@ export default {
 
     await interaction.deferReply({ ephemeral: true });
 
-    let cfg: GuildConfig;
+    let cfg: any;
     try {
       cfg = await prisma.guildConfig.upsert({
         where: { guildId },
@@ -70,10 +70,11 @@ export default {
       });
     }
 
-    const buildMainEmbed = (c: GuildConfig): EmbedBuilder => {
+    const buildMainEmbed = (c: any): EmbedBuilder => {
       const formatChan = (id: string | null) => (id ? `<#${id}>` : '`Não definido`');
       const formatRole = (id: string | null) => (id ? `<@&${id}>` : '`Não definido`');
       const formatBool = (val: boolean) => (val ? '🟢 `Ativo`' : '🔴 `Desativado`');
+      const formatHex = (color: number | null) => (color ? `#${color.toString(16).toUpperCase().padStart(6, '0')}` : '`#E1306C (Padrão)`');
 
       return new EmbedBuilder()
         .setColor(0x5865F2)
@@ -81,13 +82,18 @@ export default {
         .setDescription('Configure e gerencie todas as funções, sistemas e módulos ativos neste servidor.')
         .addFields(
           {
+            name: '📸 Feed Social / Instagram',
+            value: `**Canal:** ${formatChan(c.feedChannelId)}\n**Cor:** ${formatHex(c.feedEmbedColor)}\n**Emojis:** Curtir: \`${c.feedLikeEmoji || '💜'}\` | Seguir: \`${c.feedFollowEmoji || '🔔'}\` | Comentar: \`${c.feedCommentEmoji || '💬'}\``,
+            inline: false,
+          },
+          {
             name: '🎫 Sistema de Suporte & Tickets',
             value: `**Categoria dos Tickets:** ${formatChan(c.ticketCategoryId)}\n**Canal de Logs de Tickets:** ${formatChan(c.ticketLogChannelId)}`,
             inline: false,
           },
           {
             name: '📢 Canais Principais',
-            value: `**Feed/Instagram:** ${formatChan(c.feedChannelId)}\n**Boas-Vindas:** ${formatChan(c.welcomeChannelId)}\n**Anúncios:** ${formatChan(c.announcementChannelId)}\n**Logs Gerais:** ${formatChan(c.logChannelId)}\n**Sugestões:** ${formatChan(c.suggestionChannelId)}\n**Feedback:** ${formatChan(c.feedbackChannelId)}`,
+            value: `**Boas-Vindas:** ${formatChan(c.welcomeChannelId)}\n**Anúncios:** ${formatChan(c.announcementChannelId)}\n**Logs Gerais:** ${formatChan(c.logChannelId)}\n**Sugestões:** ${formatChan(c.suggestionChannelId)}\n**Feedback:** ${formatChan(c.feedbackChannelId)}`,
             inline: true,
           },
           {
@@ -126,6 +132,11 @@ export default {
           .setPlaceholder('Escolha o módulo que deseja configurar...')
           .addOptions(
             new StringSelectMenuOptionBuilder()
+              .setLabel('Feed / Instagram')
+              .setDescription('Personalizar canal, cor do embed, emojis e rodapé do feed')
+              .setEmoji('📸')
+              .setValue('cat_feed_insta'),
+            new StringSelectMenuOptionBuilder()
               .setLabel('Sistema de Tickets')
               .setDescription('Configurar Categoria onde abrem os tickets e canal de logs')
               .setEmoji('🎫')
@@ -137,7 +148,7 @@ export default {
               .setValue('cat_rpg_leveling'),
             new StringSelectMenuOptionBuilder()
               .setLabel('Canais do Servidor')
-              .setDescription('Configurar Feed/Instagram, boas-vindas, logs, anúncios, sugestões, etc.')
+              .setDescription('Configurar boas-vindas, logs, anúncios, sugestões, etc.')
               .setEmoji('📢')
               .setValue('cat_channels'),
             new StringSelectMenuOptionBuilder()
@@ -180,6 +191,35 @@ export default {
       try {
         if (i.customId === 'cfg_menu_category' && i.isStringSelectMenu()) {
           const selectedCategory = i.values[0];
+
+          if (selectedCategory === 'cat_feed_insta') {
+            const feedChanSelect = new ActionRowBuilder<ChannelSelectMenuBuilder>().addComponents(
+              new ChannelSelectMenuBuilder()
+                .setCustomId('cfg_set_chan_feedChannelId')
+                .setPlaceholder('Selecione o Canal do Feed / Instagram...')
+                .setChannelTypes(ChannelType.GuildText)
+            );
+
+            const customizeButtons = new ActionRowBuilder<ButtonBuilder>().addComponents(
+              new ButtonBuilder()
+                .setCustomId('cfg_btn_modal_feed_custom')
+                .setLabel('Personalizar Cor & Emojis')
+                .setEmoji('🎨')
+                .setStyle(ButtonStyle.Primary),
+              new ButtonBuilder()
+                .setCustomId('cfg_reset_field_feedChannelId')
+                .setLabel('Desativar Feed')
+                .setStyle(ButtonStyle.Danger),
+              new ButtonBuilder().setCustomId('cfg_btn_back').setLabel('Voltar ao Painel').setStyle(ButtonStyle.Secondary)
+            );
+
+            await i.update({
+              content: '📸 **Personalização do Feed Social / Instagram:**\nDefina o canal das publicações ou personalize a cor e os emojis dos botões:',
+              embeds: [],
+              components: [feedChanSelect, customizeButtons],
+            });
+            return;
+          }
 
           if (selectedCategory === 'cat_tickets') {
             const catSelect = new ActionRowBuilder<ChannelSelectMenuBuilder>().addComponents(
@@ -250,7 +290,6 @@ export default {
                 .setCustomId('cfg_select_chan_type')
                 .setPlaceholder('Qual canal você deseja definir?')
                 .addOptions(
-                  { label: 'Feed / Instagram', value: 'feedChannelId', emoji: '📸' },
                   { label: 'Boas-Vindas', value: 'welcomeChannelId', emoji: '👋' },
                   { label: 'Anúncios', value: 'announcementChannelId', emoji: '📢' },
                   { label: 'Logs Gerais', value: 'logChannelId', emoji: '📋' },
@@ -355,6 +394,93 @@ export default {
             });
             return;
           }
+        }
+
+        // MODAL DE PERSONALIZAÇÃO VISUAL DO FEED
+        if (i.customId === 'cfg_btn_modal_feed_custom' && i.isButton()) {
+          const modal = new ModalBuilder()
+            .setCustomId('modal_set_feed_custom')
+            .setTitle('🎨 Personalizar Feed / Instagram');
+
+          const colorInput = new TextInputBuilder()
+            .setCustomId('feed_color_hex')
+            .setLabel('Cor do Embed (HEX ex: #E1306C)')
+            .setValue(cfg.feedEmbedColor ? `#${cfg.feedEmbedColor.toString(16).padStart(6, '0')}` : '#E1306C')
+            .setStyle(TextInputStyle.Short)
+            .setRequired(false);
+
+          const likeEmojiInput = new TextInputBuilder()
+            .setCustomId('feed_like_emoji')
+            .setLabel('Emoji do Botão Curtir')
+            .setValue(cfg.feedLikeEmoji || '❤️')
+            .setStyle(TextInputStyle.Short)
+            .setRequired(false);
+
+          const followEmojiInput = new TextInputBuilder()
+            .setCustomId('feed_follow_emoji')
+            .setLabel('Emoji do Botão Seguir')
+            .setValue(cfg.feedFollowEmoji || '🔔')
+            .setStyle(TextInputStyle.Short)
+            .setRequired(false);
+
+          const commentEmojiInput = new TextInputBuilder()
+            .setCustomId('feed_comment_emoji')
+            .setLabel('Emoji do Botão Comentar')
+            .setValue(cfg.feedCommentEmoji || '💬')
+            .setStyle(TextInputStyle.Short)
+            .setRequired(false);
+
+          const footerInput = new TextInputBuilder()
+            .setCustomId('feed_footer_text')
+            .setLabel('Texto do Rodapé do Post')
+            .setValue(cfg.feedFooterText || '📸 Instagram Skyline')
+            .setStyle(TextInputStyle.Short)
+            .setRequired(false);
+
+          modal.addComponents(
+            new ActionRowBuilder<TextInputBuilder>().addComponents(colorInput),
+            new ActionRowBuilder<TextInputBuilder>().addComponents(likeEmojiInput),
+            new ActionRowBuilder<TextInputBuilder>().addComponents(followEmojiInput),
+            new ActionRowBuilder<TextInputBuilder>().addComponents(commentEmojiInput),
+            new ActionRowBuilder<TextInputBuilder>().addComponents(footerInput)
+          );
+
+          await i.showModal(modal);
+
+          const submitted = await i.awaitModalSubmit({
+            time: 60000,
+            filter: (sub) => sub.customId === 'modal_set_feed_custom' && sub.user.id === interaction.user.id,
+          }).catch(() => null);
+
+          if (submitted) {
+            const rawHex = submitted.fields.getTextInputValue('feed_color_hex').replace('#', '').trim();
+            const parsedColor = parseInt(rawHex, 16);
+            const colorVal = isNaN(parsedColor) ? 0xE1306C : parsedColor;
+
+            const likeEmoji = submitted.fields.getTextInputValue('feed_like_emoji').trim() || '❤️';
+            const followEmoji = submitted.fields.getTextInputValue('feed_follow_emoji').trim() || '🔔';
+            const commentEmoji = submitted.fields.getTextInputValue('feed_comment_emoji').trim() || '💬';
+            const footerText = submitted.fields.getTextInputValue('feed_footer_text').trim() || '📸 Instagram Skyline';
+
+            cfg = await prisma.guildConfig.update({
+              where: { guildId },
+              data: {
+                feedEmbedColor: colorVal,
+                feedLikeEmoji: likeEmoji,
+                feedFollowEmoji: followEmoji,
+                feedCommentEmoji: commentEmoji,
+                feedFooterText: footerText,
+              },
+            });
+
+            await submitted.deferUpdate();
+            await interaction.editReply({
+              content: '✅ Configurações visuais do Feed atualizadas com sucesso!',
+              embeds: [buildMainEmbed(cfg)],
+              components: [buildMainMenuRow()],
+            });
+          }
+          return;
         }
 
         if (i.customId === 'cfg_btn_edit_welcome_msg' && i.isButton()) {
@@ -524,7 +650,7 @@ export default {
         }
 
         if (i.customId === 'cfg_select_feature_toggle' && i.isStringSelectMenu()) {
-          const featureField = i.values[0] as keyof GuildConfig;
+          const featureField = i.values[0] as keyof any;
           const currentVal = Boolean(cfg[featureField]);
 
           cfg = await prisma.guildConfig.update({

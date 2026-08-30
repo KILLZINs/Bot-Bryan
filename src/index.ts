@@ -499,3 +499,4 @@ client.on('interactionCreate', async (interaction) => {
         if (author) {
           const commEmbed = new EmbedBuilder()
             .setColor(cfg?.feedEmb
+)

@@ -61,10 +61,6 @@ client.cooldowns = new Collection<
   Collection<string, number>
 >();
 
-/*
- * O ffmpeg-static já está instalado no package.json,
- * mas ele precisa ser informado explicitamente ao Discord Player.
- */
 const player = new Player(client, {
   ffmpegPath: ffmpegPath ?? undefined,
   skipFFmpeg: false,
@@ -111,7 +107,6 @@ player.events.on('emptyQueue', (queue) => {
   console.log(`[FILA VAZIA] Guild: ${queue.guild.id}`);
 });
 
-// ─── CARREGAMENTO DE COMANDOS SLASH ─────────────────────────────────────────
 const commandsPath = join(__dirname, 'commands');
 
 for (const entry of readdirSync(commandsPath, { withFileTypes: true })) {
@@ -136,7 +131,6 @@ for (const entry of readdirSync(commandsPath, { withFileTypes: true })) {
   }
 }
 
-// ─── CARREGAMENTO DE COMANDOS DE PREFIXO ────────────────────────────────────
 const prefixCommandsPath = join(__dirname, 'prefix-commands');
 
 try {
@@ -149,10 +143,9 @@ try {
     }
   }
 } catch {
-  // Pasta de comandos de prefixo opcional
+  // Pasta opcional
 }
 
-// ─── CARREGAMENTO DE EVENTOS ────────────────────────────────────────────────
 const eventsPath = join(__dirname, 'events');
 
 try {
@@ -169,18 +162,13 @@ try {
     }
   }
 } catch {
-  // Pasta de eventos carregada
+  // Eventos carregados
 }
-
-// ═════════════════════════════════════════════════════════════════════════════
-// 📸 SISTEMA DE FEED SOCIAL / INSTAGRAM (COM NOTIFICAÇÃO NO PV)
-// ═════════════════════════════════════════════════════════════════════════════
 
 const postCooldowns = new Map<string, number>();
 const INVITE_REGEX = /(discord\.(gg|io|me|li)|discordapp\.com\/invite|discord\.com\/invite)\/[a-zA-Z0-9]+/i;
 const PHISHING_REGEX = /(grabify|iplogger|leak|nitro-free|steam-gift)/i;
 
-// 1. Mensagens no canal do Feed
 client.on('messageCreate', async (message) => {
   if (message.author.bot || !message.guild || !message.guildId) return;
 
@@ -209,7 +197,6 @@ client.on('messageCreate', async (message) => {
       return;
     }
 
-    // Cooldown de 60s
     const now = Date.now();
     const userCd = postCooldowns.get(message.author.id) ?? 0;
     if (now - userCd < 60000) {
@@ -222,7 +209,6 @@ client.on('messageCreate', async (message) => {
       return;
     }
 
-    // Filtro anti-invite/links maliciosos
     const caption = message.content.trim();
     if (INVITE_REGEX.test(caption) || PHISHING_REGEX.test(caption)) {
       await message.delete().catch(() => null);
@@ -292,7 +278,6 @@ client.on('messageCreate', async (message) => {
 
     await sentMessage.edit({ components: [realRow] }).catch(() => null);
 
-    // NOTIFICAÇÃO NO PV DE QUEM SEGUE O AUTOR
     const followers = await prisma.socialFollow.findMany({
       where: { guildId: message.guildId, targetUserId: message.author.id },
     });
@@ -307,3 +292,232 @@ client.on('messageCreate', async (message) => {
           `[👉 Clique aqui para ver e curtir a foto](${sentMessage.url})`
         )
         .setThumbnail(message.author.displayAvatarURL({ forceStatic: false }))
+        .setImage(attachment.url)
+        .setTimestamp();
+
+      for (const f of followers) {
+        if (f.followerUserId === message.author.id) continue;
+        const followerUser = await client.users.fetch(f.followerUserId).catch(() => null);
+        if (followerUser) {
+          await followerUser.send({ embeds: [dmEmbed] }).catch(() => null);
+        }
+      }
+    }
+  } catch (err) {
+    console.error('[ERRO FEED MESSAGE]:', err);
+  }
+});
+
+client.on('interactionCreate', async (interaction) => {
+  try {
+    if (interaction.isButton() && interaction.customId.startsWith('insta:like:')) {
+      const postId = interaction.customId.replace('insta:like:', '');
+      const post = await prisma.socialPost.findUnique({ where: { id: postId } });
+      if (!post) return interaction.reply({ content: '❌ Publicação não encontrada.', ephemeral: true });
+
+      const existingLike = await prisma.socialLike.findUnique({
+        where: { postId_userId: { postId, userId: interaction.user.id } },
+      });
+
+      let count = post.likesCount;
+      if (existingLike) {
+        await prisma.socialLike.delete({ where: { id: existingLike.id } });
+        count = Math.max(0, count - 1);
+        await prisma.socialPost.update({ where: { id: postId }, data: { likesCount: count } });
+      } else {
+        await prisma.socialLike.create({ data: { postId, userId: interaction.user.id } });
+        count += 1;
+        await prisma.socialPost.update({ where: { id: postId }, data: { likesCount: count } });
+      }
+
+      const row = interaction.message.components[0];
+      const buttons = row.components.map((c) => {
+        const btn = ButtonBuilder.from(c as any);
+        if (c.customId?.startsWith('insta:like:')) {
+          btn.setLabel(String(count));
+          btn.setStyle(existingLike ? ButtonStyle.Secondary : ButtonStyle.Primary);
+        }
+        return btn;
+      });
+
+      await interaction.update({ components: [new ActionRowBuilder<ButtonBuilder>().addComponents(buttons)] });
+      return;
+    }
+
+    if (interaction.isButton() && interaction.customId.startsWith('insta:comment:')) {
+      const postId = interaction.customId.replace('insta:comment:', '');
+      const modal = new ModalBuilder()
+        .setCustomId(`insta_modal_comment:${postId}`)
+        .setTitle('💬 Comentar na Foto');
+
+      const text = new TextInputBuilder()
+        .setCustomId('comment_text')
+        .setLabel('Escreva seu comentário:')
+        .setMaxLength(300)
+        .setStyle(TextInputStyle.Paragraph)
+        .setRequired(true);
+
+      modal.addComponents(new ActionRowBuilder<TextInputBuilder>().addComponents(text));
+      await interaction.showModal(modal);
+      return;
+    }
+
+    if (interaction.isModalSubmit() && interaction.customId.startsWith('insta_modal_comment:')) {
+      const postId = interaction.customId.replace('insta_modal_comment:', '');
+      const comment = interaction.fields.getTextInputValue('comment_text').trim();
+      const post = await prisma.socialPost.findUnique({ where: { id: postId } });
+      if (!post) return interaction.reply({ content: '❌ Publicação não encontrada.', ephemeral: true });
+
+      await prisma.socialComment.create({
+        data: {
+          postId,
+          userId: interaction.user.id,
+          userName: interaction.user.displayName || interaction.user.username,
+          content: comment,
+        },
+      });
+
+      const newCommentsCount = post.commentsCount + 1;
+      await prisma.socialPost.update({ where: { id: postId }, data: { commentsCount: newCommentsCount } });
+
+      if (interaction.message) {
+        const row = interaction.message.components[0];
+        const buttons = row.components.map((c) => {
+          const btn = ButtonBuilder.from(c as any);
+          if (c.customId?.startsWith('insta:view:')) {
+            btn.setLabel(`Comentários (${newCommentsCount})`);
+          }
+          return btn;
+        });
+        await interaction.message.edit({ components: [new ActionRowBuilder<ButtonBuilder>().addComponents(buttons)] }).catch(() => null);
+      }
+
+      await interaction.reply({ content: `✅ Comentário enviado com sucesso: *"${comment}"*`, ephemeral: true });
+
+      if (post.authorId !== interaction.user.id) {
+        const author = await client.users.fetch(post.authorId).catch(() => null);
+        if (author) {
+          const commEmbed = new EmbedBuilder()
+            .setColor(0xE1306C)
+            .setTitle('💬 Novo comentário na sua foto!')
+            .setDescription(`**${interaction.user.displayName}** comentou:\n> *"${comment}"*`)
+            .setThumbnail(interaction.user.displayAvatarURL({ forceStatic: false }))
+            .setTimestamp();
+          await author.send({ embeds: [commEmbed] }).catch(() => null);
+        }
+      }
+      return;
+    }
+
+    if (interaction.isButton() && interaction.customId.startsWith('insta:view:')) {
+      const postId = interaction.customId.replace('insta:view:', '');
+      const comments = await prisma.socialComment.findMany({
+        where: { postId },
+        orderBy: { createdAt: 'desc' },
+        take: 10,
+      });
+
+      if (comments.length === 0) {
+        return interaction.reply({ content: '💭 Esta foto ainda não tem comentários.', ephemeral: true });
+      }
+
+      const list = comments
+        .map((c, idx) => `**${idx + 1}. ${c.userName}** (<t:${Math.floor(c.createdAt.getTime() / 1000)}:R>):\n> ${c.content}`)
+        .join('\n\n');
+
+      const commEmbed = new EmbedBuilder()
+        .setColor(0xE1306C)
+        .setTitle('💬 Comentários da Publicação')
+        .setDescription(list)
+        .setFooter({ text: 'Exibindo comentários mais recentes' })
+        .setTimestamp();
+
+      return interaction.reply({ embeds: [commEmbed], ephemeral: true });
+    }
+
+    if (interaction.isButton() && interaction.customId.startsWith('insta:follow:')) {
+      const targetUserId = interaction.customId.replace('insta:follow:', '');
+      const followerUserId = interaction.user.id;
+      const guildId = interaction.guildId!;
+
+      if (targetUserId === followerUserId) {
+        return interaction.reply({ content: '❌ Você não pode seguir a si mesmo!', ephemeral: true });
+      }
+
+      const existingFollow = await prisma.socialFollow.findUnique({
+        where: { guildId_targetUserId_followerUserId: { guildId, targetUserId, followerUserId } },
+      });
+
+      const targetUser = await client.users.fetch(targetUserId).catch(() => null);
+      const targetName = targetUser?.displayName || 'este criador';
+
+      if (existingFollow) {
+        await prisma.socialFollow.delete({ where: { id: existingFollow.id } });
+        return interaction.reply({ content: `🔕 Você deixou de seguir **${targetName}**.`, ephemeral: true });
+      } else {
+        await prisma.socialFollow.create({ data: { guildId, targetUserId, followerUserId } });
+        return interaction.reply({ content: `🔔 Você agora está seguindo **${targetName}**! Será avisado no PV sempre que houver novas fotos.`, ephemeral: true });
+      }
+    }
+
+    if (interaction.isButton() && interaction.customId.startsWith('insta:delete:')) {
+      const postId = interaction.customId.replace('insta:delete:', '');
+      const member = interaction.member as GuildMember;
+      const post = await prisma.socialPost.findUnique({ where: { id: postId } });
+
+      if (!post) return interaction.reply({ content: '❌ Publicação não encontrada.', ephemeral: true });
+
+      const isAuthor = post.authorId === interaction.user.id;
+      const isStaff = member.permissions.has(PermissionFlagsBits.ManageMessages) || member.permissions.has(PermissionFlagsBits.Administrator);
+
+      if (!isAuthor && !isStaff) {
+        return interaction.reply({ content: '❌ Segurança: Apenas o autor ou Moderadores podem apagar esta foto.', ephemeral: true });
+      }
+
+      await prisma.socialPost.delete({ where: { id: postId } });
+      await interaction.message.delete().catch(() => null);
+      return interaction.reply({ content: '🗑️ Foto apagada com sucesso!', ephemeral: true });
+    }
+  } catch (err) {
+    console.error('[ERRO INTERACTION FEED]:', err);
+  }
+});
+
+async function shutdown() {
+  console.log('Desligando o bot...');
+  await prisma.$disconnect();
+  client.destroy();
+  process.exit(0);
+}
+
+process.on('SIGTERM', shutdown);
+process.on('SIGINT', shutdown);
+
+process.on('unhandledRejection', (error) => {
+  console.error('[PROMISE NÃO TRATADA]', error);
+});
+
+process.on('uncaughtException', (error) => {
+  console.error('[EXCEÇÃO NÃO TRATADA]', error);
+});
+
+async function start() {
+  try {
+    await player.extractors.loadMulti(DefaultExtractors);
+    console.log('🎧 Extratores de áudio carregados com sucesso!');
+    console.log(`🎛️ FFmpeg configurado em: ${ffmpegPath ?? 'não encontrado'}`);
+  } catch (error) {
+    console.error('❌ Falha ao carregar os extratores de áudio:', error);
+  }
+
+  startDashboard();
+
+  await client.login(process.env.DISCORD_TOKEN);
+  console.log('🤖 Bot conectado ao Discord!');
+  console.log('🎵 Sistema de música pronto para operar!');
+}
+
+start().catch((error) => {
+  console.error('[INICIALIZAÇÃO] Não foi possível iniciar o bot:', error);
+  process.exitCode = 1;
+});

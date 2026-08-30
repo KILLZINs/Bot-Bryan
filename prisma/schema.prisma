@@ -270,7 +270,13 @@ model WeeklyMission {
 model GuildConfig {
   id                    String   @id @default(cuid())
   guildId               String   @unique
-  feedChannelId         String?  // <-- CANAL DO FEED / INSTAGRAM
+  feedChannelId         String?
+  feedEmbedColor        Int?     @default(14757996)
+  feedLikeEmoji         String   @default("❤️")
+  feedFollowEmoji       String   @default("🔔")
+  feedCommentEmoji      String   @default("💬")
+  feedFooterText        String   @default("📸 Instagram Skyline")
+
   logChannelId          String?
   welcomeChannelId      String?
   announcementChannelId String?
@@ -310,26 +316,22 @@ model GuildConfig {
   @@map("guild_config")
 }
 
-// ==========================================
-// 📸 MODELOS DO FEED SOCIAL / INSTAGRAM
-// ==========================================
-
 model SocialPost {
-  id           String          @id @default(cuid())
-  guildId      String
-  channelId    String
-  messageId    String          @unique
-  authorId     String
-  authorName   String
-  authorAvatar String?
-  caption      String?         @db.Text
-  mediaUrl     String
-  likesCount   Int             @default(0)
-  commentsCount Int            @default(0)
-  createdAt    DateTime        @default(now())
+  id            String          @id @default(cuid())
+  guildId       String
+  channelId     String
+  messageId     String          @unique
+  authorId      String
+  authorName    String
+  authorAvatar  String?
+  caption       String?         @db.Text
+  mediaUrl      String
+  likesCount    Int             @default(0)
+  commentsCount Int             @default(0)
+  createdAt     DateTime        @default(now())
 
-  likes        SocialLike[]
-  comments     SocialComment[]
+  likes         SocialLike[]
+  comments      SocialComment[]
 
   @@map("social_posts")
 }
@@ -362,8 +364,8 @@ model SocialComment {
 model SocialFollow {
   id             String   @id @default(cuid())
   guildId        String
-  targetUserId   String   // Quem está sendo seguido
-  followerUserId String   // Quem seguiu
+  targetUserId   String
+  followerUserId String
   createdAt      DateTime @default(now())
 
   @@unique([guildId, targetUserId, followerUserId])

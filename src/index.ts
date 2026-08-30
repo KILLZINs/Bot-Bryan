@@ -166,7 +166,7 @@ try {
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
-// 📸 SISTEMA DE FEED SOCIAL / INSTAGRAM
+// 📸 SISTEMA DE FEED SOCIAL / INSTAGRAM (COM ANEXO FIXO E NOTIFICAÇÕES COMPLETAS)
 // ═════════════════════════════════════════════════════════════════════════════
 
 function buildPostActionRow(
@@ -174,18 +174,23 @@ function buildPostActionRow(
   authorId: string,
   likesCount: number,
   commentsCount: number,
-  isLiked: boolean = false
+  isLiked: boolean = false,
+  customEmojis: { like?: string; follow?: string; comment?: string } = {}
 ): ActionRowBuilder<ButtonBuilder> {
+  const likeEmoji = customEmojis.like || '💜';
+  const followEmoji = customEmojis.follow || '🔔';
+  const commentEmoji = customEmojis.comment || '💬';
+
   return new ActionRowBuilder<ButtonBuilder>().addComponents(
     new ButtonBuilder()
       .setCustomId(`insta:like:${postId}`)
       .setLabel(String(likesCount))
-      .setEmoji('💜')
+      .setEmoji(likeEmoji)
       .setStyle(isLiked ? ButtonStyle.Primary : ButtonStyle.Secondary),
     new ButtonBuilder()
       .setCustomId(`insta:comment:${postId}`)
       .setLabel('Comentar')
-      .setEmoji('💬')
+      .setEmoji(commentEmoji)
       .setStyle(ButtonStyle.Secondary),
     new ButtonBuilder()
       .setCustomId(`insta:view:${postId}`)
@@ -195,7 +200,7 @@ function buildPostActionRow(
     new ButtonBuilder()
       .setCustomId(`insta:follow:${authorId}`)
       .setLabel('Seguir')
-      .setEmoji('🔔')
+      .setEmoji(followEmoji)
       .setStyle(ButtonStyle.Primary),
     new ButtonBuilder()
       .setCustomId(`insta:delete:${postId}`)
@@ -213,7 +218,7 @@ client.on('messageCreate', async (message) => {
   if (message.author.bot || !message.guild || !message.guildId) return;
 
   try {
-    const cfg = await prisma.guildConfig.findUnique({
+    const cfg: any = await prisma.guildConfig.findUnique({
       where: { guildId: message.guildId },
     });
 
@@ -262,32 +267,47 @@ client.on('messageCreate', async (message) => {
     }
 
     postCooldowns.set(message.author.id, now);
+
+    const mediaUrl = attachment.url;
+    const extension = attachment.name?.split('.').pop() || 'png';
+    const filename = `insta_media_${Date.now()}.${extension}`;
+
+    // Apaga a mensagem crua
     await message.delete().catch(() => null);
 
     const followersCount = await prisma.socialFollow.count({
       where: { guildId: message.guildId, targetUserId: message.author.id },
     });
 
+    const embedColor = cfg.feedEmbedColor || 0xE1306C;
+    const footerText = cfg.feedFooterText || '📸 Instagram Skyline • Clique nos botões para interagir';
+
     const postEmbed = new EmbedBuilder()
-      .setColor(0xE1306C)
+      .setColor(embedColor)
       .setAuthor({
         name: `${message.author.displayName} (@${message.author.username})`,
         iconURL: message.author.displayAvatarURL({ forceStatic: false }),
       })
-      .setImage(attachment.url)
+      .setImage(`attachment://${filename}`)
       .setDescription(caption.length > 0 ? caption : null)
       .addFields({
         name: '👥 Seguidores',
         value: `\`${followersCount}\` seguidores`,
         inline: true,
       })
-      .setFooter({ text: '📸 Instagram Skyline • Clique nos botões para interagir' })
+      .setFooter({ text: footerText })
       .setTimestamp();
 
-    const placeholderRow = buildPostActionRow('new', message.author.id, 0, 0, false);
+    const placeholderRow = buildPostActionRow('new', message.author.id, 0, 0, false, {
+      like: cfg.feedLikeEmoji,
+      follow: cfg.feedFollowEmoji,
+      comment: cfg.feedCommentEmoji,
+    });
 
+    // Re-anexa o arquivo para a imagem NUNCA expirar
     const sentMessage = await channel.send({
       embeds: [postEmbed],
+      files: [{ attachment: mediaUrl, name: filename }],
       components: [placeholderRow],
     });
 
@@ -300,20 +320,26 @@ client.on('messageCreate', async (message) => {
         authorName: message.author.displayName || message.author.username,
         authorAvatar: message.author.displayAvatarURL({ forceStatic: false }),
         caption: caption.length > 0 ? caption : null,
-        mediaUrl: attachment.url,
+        mediaUrl: mediaUrl,
       },
     });
 
-    const realRow = buildPostActionRow(savedPost.id, message.author.id, 0, 0, false);
+    const realRow = buildPostActionRow(savedPost.id, message.author.id, 0, 0, false, {
+      like: cfg.feedLikeEmoji,
+      follow: cfg.feedFollowEmoji,
+      comment: cfg.feedCommentEmoji,
+    });
+
     await sentMessage.edit({ components: [realRow] }).catch(() => null);
 
+    // NOTIFICAÇÃO NO PV DE QUEM SEGUE O AUTOR
     const followers = await prisma.socialFollow.findMany({
       where: { guildId: message.guildId, targetUserId: message.author.id },
     });
 
     if (followers.length > 0) {
       const dmEmbed = new EmbedBuilder()
-        .setColor(0xE1306C)
+        .setColor(embedColor)
         .setTitle('📸 Nova foto de quem você segue!')
         .setDescription(
           `**${message.author.displayName}** acabou de postar uma foto no servidor **${message.guild.name}**!\n\n` +
@@ -321,7 +347,6 @@ client.on('messageCreate', async (message) => {
           `[👉 Clique aqui para ver e curtir a foto](${sentMessage.url})`
         )
         .setThumbnail(message.author.displayAvatarURL({ forceStatic: false }))
-        .setImage(attachment.url)
         .setTimestamp();
 
       for (const f of followers) {
@@ -339,6 +364,19 @@ client.on('messageCreate', async (message) => {
 
 client.on('interactionCreate', async (interaction) => {
   try {
+    if (!interaction.guildId) return;
+
+    const cfg: any = await prisma.guildConfig.findUnique({
+      where: { guildId: interaction.guildId },
+    });
+
+    const customEmojis = {
+      like: cfg?.feedLikeEmoji || '💜',
+      follow: cfg?.feedFollowEmoji || '🔔',
+      comment: cfg?.feedCommentEmoji || '💬',
+    };
+
+    // CURTIR / DESCURTIR + NOTIFICAÇÃO NO PV DO CRIADOR
     if (interaction.isButton() && interaction.customId.startsWith('insta:like:')) {
       const postId = interaction.customId.replace('insta:like:', '');
       const post = await prisma.socialPost.findUnique({ where: { id: postId } });
@@ -364,9 +402,26 @@ client.on('interactionCreate', async (interaction) => {
         count += 1;
         isLiked = true;
         await prisma.socialPost.update({ where: { id: postId }, data: { likesCount: count } });
+
+        // NOTIFICA O CRIADOR DA FOTO SE NÃO FOR ELE MESMO
+        if (post.authorId !== interaction.user.id) {
+          const authorUser = await client.users.fetch(post.authorId).catch(() => null);
+          if (authorUser) {
+            const likeNotify = new EmbedBuilder()
+              .setColor(cfg?.feedEmbedColor || 0xE1306C)
+              .setTitle(`${customEmojis.like} Nova curtida na sua foto!`)
+              .setDescription(
+                `**${interaction.user.displayName}** curtiu a sua publicação!\n\n` +
+                `[👉 Clique aqui para ver sua publicação](${interaction.message.url})`
+              )
+              .setThumbnail(interaction.user.displayAvatarURL({ forceStatic: false }))
+              .setTimestamp();
+            await authorUser.send({ embeds: [likeNotify] }).catch(() => null);
+          }
+        }
       }
 
-      const updatedRow = buildPostActionRow(postId, post.authorId, count, post.commentsCount, isLiked);
+      const updatedRow = buildPostActionRow(postId, post.authorId, count, post.commentsCount, isLiked, customEmojis);
       await interaction.update({ components: [updatedRow] });
       return;
     }
@@ -389,6 +444,7 @@ client.on('interactionCreate', async (interaction) => {
       return;
     }
 
+    // ENVIO DE COMENTÁRIO + NOTIFICAÇÃO NO PV DO CRIADOR
     if (interaction.isModalSubmit() && interaction.customId.startsWith('insta_modal_comment:')) {
       const postId = interaction.customId.replace('insta_modal_comment:', '');
       const comment = interaction.fields.getTextInputValue('comment_text').trim();
@@ -414,19 +470,23 @@ client.on('interactionCreate', async (interaction) => {
         const hasLiked = await prisma.socialLike.findUnique({
           where: { postId_userId: { postId, userId: interaction.user.id } }
         });
-        const updatedRow = buildPostActionRow(postId, post.authorId, post.likesCount, newCommentsCount, !!hasLiked);
+        const updatedRow = buildPostActionRow(postId, post.authorId, post.likesCount, newCommentsCount, !!hasLiked, customEmojis);
         await interaction.message.edit({ components: [updatedRow] }).catch(() => null);
       }
 
       await interaction.reply({ content: `✅ Comentário enviado com sucesso: *"${comment}"*`, ephemeral: true });
 
+      // NOTIFICA O CRIADOR NO PV COM O COMENTÁRIO E LINK
       if (post.authorId !== interaction.user.id) {
         const author = await client.users.fetch(post.authorId).catch(() => null);
         if (author) {
           const commEmbed = new EmbedBuilder()
-            .setColor(0xE1306C)
-            .setTitle('💬 Novo comentário na sua foto!')
-            .setDescription(`**${interaction.user.displayName}** comentou:\n> *"${comment}"*`)
+            .setColor(cfg?.feedEmbedColor || 0xE1306C)
+            .setTitle(`${customEmojis.comment} Novo comentário na sua foto!`)
+            .setDescription(
+              `**${interaction.user.displayName}** comentou na sua foto:\n> *"${comment}"*\n\n` +
+              `[👉 Clique aqui para responder na publicação](${interaction.message?.url || ''})`
+            )
             .setThumbnail(interaction.user.displayAvatarURL({ forceStatic: false }))
             .setTimestamp();
           await author.send({ embeds: [commEmbed] }).catch(() => null);
@@ -453,7 +513,7 @@ client.on('interactionCreate', async (interaction) => {
         .join('\n\n');
 
       const commEmbed = new EmbedBuilder()
-        .setColor(0xE1306C)
+        .setColor(cfg?.feedEmbedColor || 0xE1306C)
         .setTitle('💬 Comentários da Publicação')
         .setDescription(list)
         .setFooter({ text: 'Exibindo comentários mais recentes' })
@@ -463,6 +523,7 @@ client.on('interactionCreate', async (interaction) => {
       return;
     }
 
+    // SEGUIR / DEIXAR DE SEGUIR + NOTIFICAÇÃO AO CRIADOR
     if (interaction.isButton() && interaction.customId.startsWith('insta:follow:')) {
       const targetUserId = interaction.customId.replace('insta:follow:', '');
       const followerUserId = interaction.user.id;
@@ -486,6 +547,20 @@ client.on('interactionCreate', async (interaction) => {
       } else {
         await prisma.socialFollow.create({ data: { guildId, targetUserId, followerUserId } });
         await interaction.reply({ content: `🔔 Você agora está seguindo **${targetName}**! Será avisado no PV sempre que houver novas fotos.`, ephemeral: true });
+
+        // NOTIFICA O CRIADOR QUE GANHOU UM SEGUIDOR NOVO
+        if (targetUser) {
+          const followNotify = new EmbedBuilder()
+            .setColor(cfg?.feedEmbedColor || 0xE1306C)
+            .setTitle(`${customEmojis.follow} Você ganhou um novo seguidor!`)
+            .setDescription(
+              `**${interaction.user.displayName}** começou a seguir você no servidor **${interaction.guild?.name}**!\n` +
+              `Ele(a) será avisado(a) sempre que você postar uma foto nova no Feed.`
+            )
+            .setThumbnail(interaction.user.displayAvatarURL({ forceStatic: false }))
+            .setTimestamp();
+          await targetUser.send({ embeds: [followNotify] }).catch(() => null);
+        }
       }
       return;
     }

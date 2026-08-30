@@ -8,6 +8,16 @@ import {
   Collection,
   GatewayIntentBits,
   Partials,
+  EmbedBuilder,
+  ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle,
+  ModalBuilder,
+  TextInputBuilder,
+  TextInputStyle,
+  PermissionFlagsBits,
+  GuildMember,
+  TextChannel,
 } from 'discord.js';
 
 import { Player } from 'discord-player';
@@ -54,9 +64,6 @@ client.cooldowns = new Collection<
 /*
  * O ffmpeg-static já está instalado no package.json,
  * mas ele precisa ser informado explicitamente ao Discord Player.
- *
- * Também deixamos skipFFmpeg como false para garantir que o áudio
- * seja convertido para o formato aceito pelo Discord.
  */
 const player = new Player(client, {
   ffmpegPath: ffmpegPath ?? undefined,
@@ -66,9 +73,7 @@ const player = new Player(client, {
 
 player.events.on('error', (queue, error) => {
   console.error('[ERRO NA FILA]', error);
-
   const metadata = queue.metadata as any;
-
   if (metadata?.channel?.send) {
     metadata.channel
       .send(`❌ **Erro na fila de música:** \`${error.message}\``)
@@ -78,9 +83,7 @@ player.events.on('error', (queue, error) => {
 
 player.events.on('playerError', (queue, error) => {
   console.error('[ERRO DE ÁUDIO/STREAM]', error);
-
   const metadata = queue.metadata as any;
-
   if (metadata?.channel?.send) {
     metadata.channel
       .send(`❌ **O áudio falhou:** \`${error.message}\``)
@@ -93,169 +96,214 @@ player.events.on('debug', (queue, message) => {
 });
 
 player.events.on('audioTrackAdd', (queue, track) => {
-  console.log(
-    `[MÚSICA ADICIONADA] ${track.title} | Guild: ${queue.guild.id}`,
-  );
+  console.log(`[MÚSICA ADICIONADA] ${track.title} | Guild: ${queue.guild.id}`);
 });
 
 player.events.on('playerStart', (queue, track) => {
-  console.log(
-    `[ÁUDIO INICIADO] ${track.title} | Guild: ${queue.guild.id}`,
-  );
+  console.log(`[ÁUDIO INICIADO] ${track.title} | Guild: ${queue.guild.id}`);
 });
 
 player.events.on('playerFinish', (queue, track) => {
-  console.log(
-    `[ÁUDIO FINALIZADO] ${track.title} | Guild: ${queue.guild.id}`,
-  );
+  console.log(`[ÁUDIO FINALIZADO] ${track.title} | Guild: ${queue.guild.id}`);
 });
 
 player.events.on('emptyQueue', (queue) => {
   console.log(`[FILA VAZIA] Guild: ${queue.guild.id}`);
 });
 
+// ─── CARREGAMENTO DE COMANDOS SLASH ─────────────────────────────────────────
 const commandsPath = join(__dirname, 'commands');
 
-for (const entry of readdirSync(commandsPath, {
-  withFileTypes: true,
-})) {
+for (const entry of readdirSync(commandsPath, { withFileTypes: true })) {
   if (entry.isDirectory()) {
     const folderPath = join(commandsPath, entry.name);
-
     for (const file of readdirSync(folderPath).filter(
-      (fileName) =>
-        fileName.endsWith('.js') ||
-        fileName.endsWith('.ts'),
+      (fileName) => fileName.endsWith('.js') || fileName.endsWith('.ts'),
     )) {
-      const command: Command = require(
-        join(folderPath, file),
-      ).default;
-
-      if (
-        command?.data &&
-        typeof command.execute === 'function'
-      ) {
+      const command: Command = require(join(folderPath, file)).default;
+      if (command?.data && typeof command.execute === 'function') {
         client.commands.set(command.data.name, command);
       }
     }
   } else if (
     entry.isFile() &&
-    (entry.name.endsWith('.js') ||
-      entry.name.endsWith('.ts'))
+    (entry.name.endsWith('.js') || entry.name.endsWith('.ts'))
   ) {
-    const command: Command = require(
-      join(commandsPath, entry.name),
-    ).default;
-
-    if (
-      command?.data &&
-      typeof command.execute === 'function'
-    ) {
+    const command: Command = require(join(commandsPath, entry.name)).default;
+    if (command?.data && typeof command.execute === 'function') {
       client.commands.set(command.data.name, command);
     }
   }
 }
 
-const prefixCommandsPath = join(
-  __dirname,
-  'prefix-commands',
-);
+// ─── CARREGAMENTO DE COMANDOS DE PREFIXO ────────────────────────────────────
+const prefixCommandsPath = join(__dirname, 'prefix-commands');
 
 try {
   for (const file of readdirSync(prefixCommandsPath).filter(
-    (fileName) =>
-      fileName.endsWith('.js') ||
-      fileName.endsWith('.ts'),
+    (fileName) => fileName.endsWith('.js') || fileName.endsWith('.ts'),
   )) {
-    const command: PrefixCommand = require(
-      join(prefixCommandsPath, file),
-    ).default;
-
-    if (
-      command?.name &&
-      typeof command.execute === 'function'
-    ) {
+    const command: PrefixCommand = require(join(prefixCommandsPath, file)).default;
+    if (command?.name && typeof command.execute === 'function') {
       client.prefixCommands.set(command.name, command);
     }
   }
 } catch {
-  // A pasta de comandos de prefixo pode não existir no build.
+  // Pasta de comandos de prefixo opcional
 }
 
+// ─── CARREGAMENTO DE EVENTOS ────────────────────────────────────────────────
 const eventsPath = join(__dirname, 'events');
 
-for (const file of readdirSync(eventsPath).filter(
-  (fileName) =>
-    fileName.endsWith('.js') ||
-    fileName.endsWith('.ts'),
-)) {
-  const event = require(join(eventsPath, file)).default;
-
-  if (event.once) {
-    client.once(event.name, (...args: any[]) =>
-      event.execute(...args, client),
-    );
-  } else {
-    client.on(event.name, (...args: any[]) =>
-      event.execute(...args, client),
-    );
+try {
+  for (const file of readdirSync(eventsPath).filter(
+    (fileName) => fileName.endsWith('.js') || fileName.endsWith('.ts'),
+  )) {
+    const event = require(join(eventsPath, file)).default;
+    if (event && event.name) {
+      if (event.once) {
+        client.once(event.name, (...args: any[]) => event.execute(...args, client));
+      } else {
+        client.on(event.name, (...args: any[]) => event.execute(...args, client));
+      }
+    }
   }
+} catch {
+  // Pasta de eventos carregada
 }
 
-async function shutdown() {
-  console.log('Desligando o bot...');
+// ═════════════════════════════════════════════════════════════════════════════
+// 📸 SISTEMA DE FEED SOCIAL / INSTAGRAM (COM NOTIFICAÇÃO NO PV)
+// ═════════════════════════════════════════════════════════════════════════════
 
-  await prisma.$disconnect();
+const postCooldowns = new Map<string, number>();
+const INVITE_REGEX = /(discord\.(gg|io|me|li)|discordapp\.com\/invite|discord\.com\/invite)\/[a-zA-Z0-9]+/i;
+const PHISHING_REGEX = /(grabify|iplogger|leak|nitro-free|steam-gift)/i;
 
-  client.destroy();
+// 1. Mensagens no canal do Feed
+client.on('messageCreate', async (message) => {
+  if (message.author.bot || !message.guild || !message.guildId) return;
 
-  process.exit(0);
-}
-
-process.on('SIGTERM', shutdown);
-process.on('SIGINT', shutdown);
-
-process.on('unhandledRejection', (error) => {
-  console.error('[PROMISE NÃO TRATADA]', error);
-});
-
-process.on('uncaughtException', (error) => {
-  console.error('[EXCEÇÃO NÃO TRATADA]', error);
-});
-
-async function start() {
   try {
-    await player.extractors.loadMulti(DefaultExtractors);
+    const cfg = await prisma.guildConfig.findUnique({
+      where: { guildId: message.guildId },
+    });
 
-    console.log(
-      '🎧 Extratores de áudio carregados com sucesso!',
+    if (!cfg || !cfg.feedChannelId || message.channel.id !== cfg.feedChannelId) {
+      return;
+    }
+
+    const attachment = message.attachments.first();
+    if (!attachment) {
+      await message.delete().catch(() => null);
+      const warn = await message.channel.send({
+        content: `⚠️ ${message.author}, o canal do **Feed/Instagram** aceita apenas publicações com fotos ou vídeos anexados!`,
+      });
+      setTimeout(() => warn.delete().catch(() => null), 5000);
+      return;
+    }
+
+    const isMedia = attachment.contentType?.startsWith('image/') || attachment.contentType?.startsWith('video/');
+    if (!isMedia) {
+      await message.delete().catch(() => null);
+      return;
+    }
+
+    // Cooldown de 60s
+    const now = Date.now();
+    const userCd = postCooldowns.get(message.author.id) ?? 0;
+    if (now - userCd < 60000) {
+      const rest = Math.ceil((60000 - (now - userCd)) / 1000);
+      await message.delete().catch(() => null);
+      const warn = await message.channel.send({
+        content: `⏳ ${message.author}, aguarde **${rest}s** para postar novamente no Feed.`,
+      });
+      setTimeout(() => warn.delete().catch(() => null), 5000);
+      return;
+    }
+
+    // Filtro anti-invite/links maliciosos
+    const caption = message.content.trim();
+    if (INVITE_REGEX.test(caption) || PHISHING_REGEX.test(caption)) {
+      await message.delete().catch(() => null);
+      const warn = await message.channel.send({
+        content: `❌ ${message.author}, convites e links suspeitos não são permitidos no Feed.`,
+      });
+      setTimeout(() => warn.delete().catch(() => null), 5000);
+      return;
+    }
+
+    postCooldowns.set(message.author.id, now);
+    await message.delete().catch(() => null);
+
+    const followersCount = await prisma.socialFollow.count({
+      where: { guildId: message.guildId, targetUserId: message.author.id },
+    });
+
+    const postEmbed = new EmbedBuilder()
+      .setColor(0xE1306C)
+      .setAuthor({
+        name: `${message.author.displayName} (@${message.author.username})`,
+        iconURL: message.author.displayAvatarURL({ forceStatic: false }),
+      })
+      .setImage(attachment.url)
+      .setDescription(caption.length > 0 ? caption : null)
+      .addFields({
+        name: '👥 Seguidores',
+        value: `\`${followersCount}\` seguidores`,
+        inline: true,
+      })
+      .setFooter({ text: '📸 Instagram Skyline • Clique nos botões para interagir' })
+      .setTimestamp();
+
+    const placeholderRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
+      new ButtonBuilder().setCustomId('insta:like:new').setLabel('0').setEmoji('💜').setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId('insta:comment:new').setLabel('Comentar').setEmoji('💬').setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId('insta:view:new').setLabel('Comentários (0)').setEmoji('👥').setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId(`insta:follow:${message.author.id}`).setLabel('Seguir').setEmoji('🔔').setStyle(ButtonStyle.Primary),
+      new ButtonBuilder().setCustomId('insta:delete:new').setLabel('Apagar').setEmoji('🗑️').setStyle(ButtonStyle.Danger)
     );
 
-    console.log(
-      `🎛️ FFmpeg configurado em: ${
-        ffmpegPath ?? 'não encontrado'
-      }`,
+    const sentMessage = await (message.channel as TextChannel).send({
+      embeds: [postEmbed],
+      components: [placeholderRow],
+    });
+
+    const savedPost = await prisma.socialPost.create({
+      data: {
+        guildId: message.guildId,
+        channelId: message.channel.id,
+        messageId: sentMessage.id,
+        authorId: message.author.id,
+        authorName: message.author.displayName || message.author.username,
+        authorAvatar: message.author.displayAvatarURL({ forceStatic: false }),
+        caption: caption.length > 0 ? caption : null,
+        mediaUrl: attachment.url,
+      },
+    });
+
+    const realRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
+      new ButtonBuilder().setCustomId(`insta:like:${savedPost.id}`).setLabel('0').setEmoji('💜').setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId(`insta:comment:${savedPost.id}`).setLabel('Comentar').setEmoji('💬').setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId(`insta:view:${savedPost.id}`).setLabel('Comentários (0)').setEmoji('👥').setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId(`insta:follow:${message.author.id}`).setLabel('Seguir').setEmoji('🔔').setStyle(ButtonStyle.Primary),
+      new ButtonBuilder().setCustomId(`insta:delete:${savedPost.id}`).setLabel('Apagar').setEmoji('🗑️').setStyle(ButtonStyle.Danger)
     );
-  } catch (error) {
-    console.error(
-      '❌ Falha ao carregar os extratores de áudio:',
-      error,
-    );
-  }
 
-  startDashboard();
+    await sentMessage.edit({ components: [realRow] }).catch(() => null);
 
-  await client.login(process.env.DISCORD_TOKEN);
+    // NOTIFICAÇÃO NO PV DE QUEM SEGUE O AUTOR
+    const followers = await prisma.socialFollow.findMany({
+      where: { guildId: message.guildId, targetUserId: message.author.id },
+    });
 
-  console.log('🤖 Bot conectado ao Discord!');
-  console.log('🎵 Sistema de música pronto para operar!');
-}
-
-start().catch((error) => {
-  console.error(
-    '[INICIALIZAÇÃO] Não foi possível iniciar o bot:',
-    error,
-  );
-
-  process.exitCode = 1;
-});
+    if (followers.length > 0) {
+      const dmEmbed = new EmbedBuilder()
+        .setColor(0xE1306C)
+        .setTitle('📸 Nova foto de quem você segue!')
+        .setDescription(
+          `**${message.author.displayName}** acabou de postar uma foto no servidor **${message.guild.name}**!\n\n` +
+          (caption.length > 0 ? `> *"${caption.slice(0, 150)}..."*\n\n` : '') +
+          `[👉 Clique aqui para ver e curtir a foto](${sentMessage.url})`
+        )
+        .setThumbnail(message.author.displayAvatarURL({ forceStatic: false }))

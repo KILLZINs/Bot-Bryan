@@ -266,9 +266,11 @@ model WeeklyMission {
   @@map("weekly_missions")
 }
 
+// Adicione feedChannelId dentro do seu model GuildConfig:
 model GuildConfig {
   id                    String   @id @default(cuid())
   guildId               String   @unique
+  feedChannelId         String?  // <-- CANAL DO FEED / INSTAGRAM
   logChannelId          String?
   welcomeChannelId      String?
   announcementChannelId String?
@@ -289,24 +291,83 @@ model GuildConfig {
   antiSpam              Boolean  @default(false)
   antiLinks             Boolean  @default(false)
 
-  // 🧩 Módulos Dinâmicos (Ativados no Dashboard)
-  featLeveling      Boolean  @default(true)
-  featRpg           Boolean  @default(true)
-  featTickets       Boolean  @default(true)
-  featPolls         Boolean  @default(true)
-  featGiveaways     Boolean  @default(true)
-  featSelfRole      Boolean  @default(true)
-  featMissions      Boolean  @default(true)
-  featSocial        Boolean  @default(true)
-  featEconomy       Boolean  @default(true)
-  featMod           Boolean  @default(true)
-  featAnnouncements Boolean  @default(true)
-  featMusic         Boolean  @default(true)
+  featLeveling          Boolean  @default(true)
+  featRpg               Boolean  @default(true)
+  featTickets           Boolean  @default(true)
+  featPolls             Boolean  @default(true)
+  featGiveaways         Boolean  @default(true)
+  featSelfRole          Boolean  @default(true)
+  featMissions          Boolean  @default(true)
+  featSocial            Boolean  @default(true)
+  featEconomy           Boolean  @default(true)
+  featMod               Boolean  @default(true)
+  featAnnouncements     Boolean  @default(true)
+  featMusic             Boolean  @default(true)
 
-  logFlags  Int      @default(31)
-  updatedAt DateTime @updatedAt @default(now())
+  logFlags              Int      @default(31)
+  updatedAt             DateTime @updatedAt @default(now())
 
   @@map("guild_config")
+}
+
+// ==========================================
+// 📸 MODELOS DO FEED SOCIAL / INSTAGRAM
+// ==========================================
+
+model SocialPost {
+  id           String          @id @default(cuid())
+  guildId      String
+  channelId    String
+  messageId    String          @unique
+  authorId     String
+  authorName   String
+  authorAvatar String?
+  caption      String?         @db.Text
+  mediaUrl     String
+  likesCount   Int             @default(0)
+  commentsCount Int            @default(0)
+  createdAt    DateTime        @default(now())
+
+  likes        SocialLike[]
+  comments     SocialComment[]
+
+  @@map("social_posts")
+}
+
+model SocialLike {
+  id        String     @id @default(cuid())
+  postId    String
+  userId    String
+  createdAt DateTime   @default(now())
+
+  post      SocialPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@unique([postId, userId])
+  @@map("social_likes")
+}
+
+model SocialComment {
+  id        String     @id @default(cuid())
+  postId    String
+  userId    String
+  userName  String
+  content   String     @db.Text
+  createdAt DateTime   @default(now())
+
+  post      SocialPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@map("social_comments")
+}
+
+model SocialFollow {
+  id             String   @id @default(cuid())
+  guildId        String
+  targetUserId   String   // Quem está sendo seguido
+  followerUserId String   // Quem seguiu
+  createdAt      DateTime @default(now())
+
+  @@unique([guildId, targetUserId, followerUserId])
+  @@map("social_follows")
 }
 
 model LevelReward {

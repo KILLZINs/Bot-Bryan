@@ -33,7 +33,7 @@ const SERVER_CATEGORIES = [
       { id: 'featLeveling', name: '🎯 XP & Níveis', desc: 'Progressão por mensagens e ranking.' },
       { id: 'featGiveaways', name: '🎁 Sorteios', desc: 'Sorteios automatizados com participação via botão.' },
       { id: 'featPolls', name: '📊 Enquetes', desc: 'Ferramenta de criação de enquetes na comunidade.' },
-      { id: 'featSocial', name: '🤝 Roleplay Social', desc: 'Ações de RP como abraçar, bater, beijar.' },
+      { id: 'featSocial', name: '🤝 Roleplay Social & Feed', desc: 'Ações de RP e sistema de Feed / Instagram.' },
       { id: 'featAnnouncements', name: '📢 Anúncios', desc: 'Eventos globais e avisos do servidor.' },
       { id: 'featMusic', name: '🎵 Sistema de Música', desc: 'Permite que o bot toque músicas nos canais de voz.' }
     ]
@@ -60,7 +60,7 @@ const GLOBAL_CATEGORIES = [
       { id: 'featLeveling', name: '🎯 XP & Níveis', desc: 'Congela o ganho de XP em todos os servidores.' },
       { id: 'featGiveaways', name: '🎁 Sorteios', desc: 'Trava todos os sorteios atuais e futuros.' },
       { id: 'featPolls', name: '📊 Enquetes', desc: 'Desativa a ferramenta de enquetes.' },
-      { id: 'featSocial', name: '🤝 Roleplay Social', desc: 'Desliga interações como beijar, bater, abraçar.' },
+      { id: 'featSocial', name: '🤝 Roleplay Social & Feed', desc: 'Desliga interações como beijar, bater, abraçar e Feed.' },
       { id: 'featAnnouncements', name: '📢 Anúncios', desc: 'Bloqueia os comandos de eventos e avisos.' },
       { id: 'featMusic', name: '🎵 Sistema de Música', desc: 'Desliga o motor de áudio globalmente por segurança.' }
     ]
@@ -71,6 +71,17 @@ const GLOBAL_CATEGORIES = [
 // ⚙️ 2. CONFIGURAÇÕES AVANÇADAS (INPUTS: TEXT E NUMBER)
 // ==========================================
 const SERVER_SETTINGS = [
+  {
+    category: "📸 Feed Social / Instagram",
+    items: [
+      { id: 'feedChannelId', name: 'Canal do Feed (ID)', type: 'text', placeholder: 'ID do canal onde as fotos serão postadas' },
+      { id: 'feedEmbedColor', name: 'Cor do Embed (Número Decimal)', type: 'number', placeholder: 'Padrão: 14757996 (Rosa Instagram #E1306C)' },
+      { id: 'feedLikeEmoji', name: 'Emoji do Botão Curtir', type: 'text', placeholder: 'Ex: 💜' },
+      { id: 'feedFollowEmoji', name: 'Emoji do Botão Seguir', type: 'text', placeholder: 'Ex: 🔔' },
+      { id: 'feedCommentEmoji', name: 'Emoji do Botão Comentar', type: 'text', placeholder: 'Ex: 💬' },
+      { id: 'feedFooterText', name: 'Texto de Rodapé do Feed', type: 'text', placeholder: 'Ex: 📸 Instagram Skyline' }
+    ]
+  },
   {
     category: "📁 Canais e Categorias (IDs)",
     items: [
@@ -127,6 +138,15 @@ const GLOBAL_SETTINGS = [
   }
 ];
 
+// Helper de Segurança: Validação de Acesso ao Servidor
+async function validateGuildAccess(userId: string, guildId: string): Promise<boolean> {
+  if (userId === BOT_OWNER_ID) return true;
+  const access = await prisma.allianceServerMember.findFirst({
+    where: { userId, guildId }
+  });
+  return !!access;
+}
+
 // ==========================================
 // 🚀 INÍCIO DO SERVIDOR WEB
 // ==========================================
@@ -135,7 +155,6 @@ export function startDashboard() {
   app.use(cookieParser());
   app.use(express.json());
   
-  // Imagens da Skyline
   app.use(express.static(path.join(process.cwd(), 'public')));
   
   const port = Number(process.env.PORT) || 8080;
@@ -198,10 +217,14 @@ export function startDashboard() {
     } catch (error) { res.status(500).send('Erro na autenticação.'); }
   });
 
+  // 🛡️ SEGURANÇA: API /api/config com validação de permissão de acesso ao servidor
   app.get('/api/config', async (req, res) => {
     const { guildId } = req.query;
     const userId = req.cookies?.skyline_userid;
     if (!userId || !guildId) return res.status(401).json({ error: 'Não autorizado' });
+
+    const hasAccess = await validateGuildAccess(userId, String(guildId));
+    if (!hasAccess) return res.status(403).json({ error: 'Você não tem permissão para gerenciar este servidor.' });
 
     try {
       let serverConfig = await prisma.guildConfig.findUnique({ where: { guildId: String(guildId) } });
@@ -217,8 +240,22 @@ export function startDashboard() {
     } catch (error) { res.status(500).json({ error: 'Erro no BD' }); }
   });
 
+  // 🛡️ SEGURANÇA: API /api/toggle com validação de autenticação e permissão
   app.post('/api/toggle', async (req, res) => {
+    const userId = req.cookies?.skyline_userid;
+    if (!userId) return res.status(401).json({ error: 'Não autenticado' });
+
     const { type, guildId, feature, state } = req.body;
+
+    if (type === 'global' && userId !== BOT_OWNER_ID) {
+      return res.status(403).json({ error: 'Apenas o Dono pode alterar configurações globais.' });
+    }
+
+    if (type === 'server') {
+      const hasAccess = await validateGuildAccess(userId, guildId);
+      if (!hasAccess) return res.status(403).json({ error: 'Acesso negado para este servidor.' });
+    }
+
     try {
       if (type === 'server') await prisma.guildConfig.update({ where: { guildId }, data: { [feature]: state } });
       else if (type === 'global') await prisma.botConfig.update({ where: { id: 'global' }, data: { [feature]: state } });
@@ -226,8 +263,22 @@ export function startDashboard() {
     } catch (error) { res.status(500).json({ error: 'Erro ao salvar.' }); }
   });
 
+  // 🛡️ SEGURANÇA: API /api/update com tratamento correto de tipos e permissão
   app.post('/api/update', async (req, res) => {
+    const userId = req.cookies?.skyline_userid;
+    if (!userId) return res.status(401).json({ error: 'Não autenticado' });
+
     const { type, guildId, feature, value, valueType } = req.body;
+
+    if (type === 'global' && userId !== BOT_OWNER_ID) {
+      return res.status(403).json({ error: 'Apenas o Dono pode alterar configurações globais.' });
+    }
+
+    if (type === 'server') {
+      const hasAccess = await validateGuildAccess(userId, guildId);
+      if (!hasAccess) return res.status(403).json({ error: 'Acesso negado para este servidor.' });
+    }
+
     let finalValue: string | number | null = value;
 
     if (valueType === 'number') {
@@ -237,7 +288,8 @@ export function startDashboard() {
     if (value === "") finalValue = null;
 
     // 🛡️ Segurança: primaryColor é Int obrigatório no Prisma, não pode ser null.
-    if (feature === 'primaryColor' && finalValue === null) finalValue = 10180278; 
+    if (feature === 'primaryColor' && finalValue === null) finalValue = 10180278;
+    if (feature === 'feedEmbedColor' && finalValue === null) finalValue = 14757996; // Padrão #E1306C
 
     try {
       if (type === 'server') await prisma.guildConfig.update({ where: { guildId }, data: { [feature]: finalValue } });

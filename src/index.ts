@@ -167,7 +167,7 @@ try {
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
-// 📸 SISTEMA DE FEED SOCIAL / INSTAGRAM (COM BUFFER REAL E IMAGENS FIXAS)
+// 📸 SISTEMA DE FEED SOCIAL / INSTAGRAM (COM TRAVA MASTER APLICADA)
 // ═════════════════════════════════════════════════════════════════════════════
 
 function buildPostActionRow(
@@ -228,6 +228,16 @@ client.on('messageCreate', async (message) => {
     }
 
     const channel = message.channel as TextChannel;
+    
+    // 🛡️ TRAVA MASTER: Verifica se o sistema foi desligado no painel
+    const globalCfg = await prisma.botConfig.findUnique({ where: { id: 'global' } });
+    if ((globalCfg && globalCfg.featSocial === false) || cfg.featSocial === false) {
+      await message.delete().catch(() => null);
+      const warn = await channel.send({ content: `❌ ${message.author}, o sistema de Feed Social está **desativado** no momento.` });
+      setTimeout(() => warn.delete().catch(() => null), 5000);
+      return;
+    }
+
     const attachment = message.attachments.first();
 
     if (!attachment) {
@@ -270,7 +280,6 @@ client.on('messageCreate', async (message) => {
 
     postCooldowns.set(message.author.id, now);
 
-    // 1. BAIXA A IMAGEM NA MEMÓRIA ANTES QUE O DISCORD A DELETE
     const response = await fetch(attachment.url);
     if (!response.ok) {
       console.error('[ERRO AO BAIXAR MÍDIA DO FEED]');
@@ -283,7 +292,6 @@ client.on('messageCreate', async (message) => {
     const filename = `insta_media_${Date.now()}.${extension}`;
     const fileAttachment = new AttachmentBuilder(fileBuffer, { name: filename });
 
-    // 2. APAGA A MENSAGEM DO USUÁRIO
     await message.delete().catch(() => null);
 
     const followersCount = await prisma.socialFollow.count({
@@ -318,7 +326,6 @@ client.on('messageCreate', async (message) => {
       comment: cfg.feedCommentEmoji,
     });
 
-    // 3. ENVIA COM O ARQUIVO RE-HOSPEDADO NO DISCORD
     const sentMessage = await channel.send({
       embeds: [postEmbed],
       files: [fileAttachment],
@@ -348,7 +355,6 @@ client.on('messageCreate', async (message) => {
 
     await sentMessage.edit({ components: [realRow] }).catch(() => null);
 
-    // NOTIFICAÇÃO NO PV DE QUEM SEGUE O AUTOR
     const followers = await prisma.socialFollow.findMany({
       where: { guildId: message.guildId, targetUserId: message.author.id },
     });
@@ -383,6 +389,20 @@ client.on('interactionCreate', async (interaction) => {
   try {
     if (!interaction.guildId) return;
 
+    // 🛡️ TRAVA MASTER: Protege todas as interações do Insta se o módulo estiver desligado
+    if (interaction.customId && interaction.customId.startsWith('insta')) {
+      const globalCfg = await prisma.botConfig.findUnique({ where: { id: 'global' } });
+      if (globalCfg?.featSocial === false) {
+        await interaction.reply({ content: '❌ O sistema do Feed Social está **desativado globalmente** no momento.', ephemeral: true });
+        return;
+      }
+      const checkCfg: any = await prisma.guildConfig.findUnique({ where: { guildId: interaction.guildId } });
+      if (checkCfg?.featSocial === false) {
+        await interaction.reply({ content: '❌ O sistema do Feed Social está **desativado** neste servidor.', ephemeral: true });
+        return;
+      }
+    }
+
     const cfg: any = await prisma.guildConfig.findUnique({
       where: { guildId: interaction.guildId },
     });
@@ -393,7 +413,6 @@ client.on('interactionCreate', async (interaction) => {
       comment: cfg?.feedCommentEmoji || '💬',
     };
 
-    // CURTIR / DESCURTIR + NOTIFICAÇÃO AO CRIADOR
     if (interaction.isButton() && interaction.customId.startsWith('insta:like:')) {
       const postId = interaction.customId.replace('insta:like:', '');
       const post = await prisma.socialPost.findUnique({ where: { id: postId } });
@@ -420,7 +439,6 @@ client.on('interactionCreate', async (interaction) => {
         isLiked = true;
         await prisma.socialPost.update({ where: { id: postId }, data: { likesCount: count } });
 
-        // NOTIFICA O AUTOR NO PV SE OUTRA PESSOA CURTIU
         if (post.authorId !== interaction.user.id) {
           const authorUser = await client.users.fetch(post.authorId).catch(() => null);
           if (authorUser) {
@@ -461,7 +479,6 @@ client.on('interactionCreate', async (interaction) => {
       return;
     }
 
-    // COMENTÁRIO + NOTIFICAÇÃO AO CRIADOR
     if (interaction.isModalSubmit() && interaction.customId.startsWith('insta_modal_comment:')) {
       const postId = interaction.customId.replace('insta_modal_comment:', '');
       const comment = interaction.fields.getTextInputValue('comment_text').trim();
@@ -493,7 +510,6 @@ client.on('interactionCreate', async (interaction) => {
 
       await interaction.reply({ content: `✅ Comentário enviado com sucesso: *"${comment}"*`, ephemeral: true });
 
-      // NOTIFICA O AUTOR NO PV COM O COMENTÁRIO
       if (post.authorId !== interaction.user.id) {
         const author = await client.users.fetch(post.authorId).catch(() => null);
         if (author) {
@@ -540,7 +556,6 @@ client.on('interactionCreate', async (interaction) => {
       return;
     }
 
-    // SEGUIR + NOTIFICAÇÃO AO CRIADOR
     if (interaction.isButton() && interaction.customId.startsWith('insta:follow:')) {
       const targetUserId = interaction.customId.replace('insta:follow:', '');
       const followerUserId = interaction.user.id;
@@ -565,7 +580,6 @@ client.on('interactionCreate', async (interaction) => {
         await prisma.socialFollow.create({ data: { guildId, targetUserId, followerUserId } });
         await interaction.reply({ content: `🔔 Você agora está seguindo **${targetName}**! Será avisado no PV sempre que houver novas fotos.`, ephemeral: true });
 
-        // NOTIFICA O CRIADOR QUE ELE GANHOU UM SEGUIDOR
         if (targetUser) {
           const followNotify = new EmbedBuilder()
             .setColor(cfg?.feedEmbedColor || 0xE1306C)

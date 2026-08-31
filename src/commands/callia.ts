@@ -11,52 +11,47 @@ import {
 import { useQueue } from 'discord-player';
 import { prisma } from '../database/client';
 import { askBryan } from '../ai/bryan';
+import { askSuki, isSukiAllowed } from '../ai/suki';
 import { askCustomAi } from '../ai/customAi';
-import { startCalliaSession, stopCalliaSession } from '../voice/calliaVoice';
+import { startCalliaSession, stopCalliaSession, CalliaPersona } from '../voice/calliaVoice';
 
 const data = new SlashCommandBuilder()
   .setName('callia')
-  .setDescription('Entra na call com o Bryan ou a IA exclusiva deste servidor');
+  .setDescription('Entra na call com a IA (Bryan, Suki ou Assistente do Servidor)');
 
 async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
   const member = interaction.member as GuildMember;
   const channel = member.voice.channel;
 
   if (!channel) {
-    await interaction.reply({
-      content: '❌ Você precisa estar em um canal de voz primeiro.',
-      ephemeral: true,
-    });
+    await interaction.reply({ content: '❌ Você precisa estar em um canal de voz primeiro.', ephemeral: true });
     return;
   }
 
-  // Busca o nome do Bot Local configurado no painel
-  const cfg = await prisma.guildConfig.findUnique({ where: { guildId: interaction.guildId! } });
-  const customBotName = cfg?.aiCustomName || 'Assistente Local';
+  const isSuki = isSukiAllowed(interaction.guildId!);
+  
+  let customBotName = 'Assistente Local';
+  if (!isSuki) {
+    const cfg = await prisma.guildConfig.findUnique({ where: { guildId: interaction.guildId! } });
+    if (cfg?.aiCustomName) customBotName = cfg.aiCustomName;
+  }
+
+  const aiButton = isSuki
+    ? new ButtonBuilder().setCustomId('callia:choose:suki').setLabel('Chamar Suki').setEmoji('♀️').setStyle(ButtonStyle.Success)
+    : new ButtonBuilder().setCustomId('callia:choose:custom').setLabel(`Chamar ${customBotName}`).setEmoji('🤖').setStyle(ButtonStyle.Success);
 
   await interaction.reply({
     embeds: [
       new EmbedBuilder()
         .setColor(0x5865F2)
         .setTitle('🎙️ Escolha quem vai entrar na call')
-        .setDescription('O Bryan é global. A segunda opção é a inteligência exclusiva configurada no painel deste servidor!'),
+        .setDescription('Escolha a personalidade da IA. O Bryan é o guia global da aliança.'),
     ],
     components: [
       new ActionRowBuilder<ButtonBuilder>().addComponents(
-        new ButtonBuilder()
-          .setCustomId('callia:choose:bryan')
-          .setLabel('Chamar Bryan')
-          .setEmoji('🌌')
-          .setStyle(ButtonStyle.Primary),
-        new ButtonBuilder()
-          .setCustomId('callia:choose:custom')
-          .setLabel(`Chamar ${customBotName}`)
-          .setEmoji('🤖')
-          .setStyle(ButtonStyle.Success),
-        new ButtonBuilder()
-          .setCustomId('callia:stop')
-          .setLabel('Encerrar Call')
-          .setStyle(ButtonStyle.Danger),
+        new ButtonBuilder().setCustomId('callia:choose:bryan').setLabel('Chamar Bryan').setEmoji('🌌').setStyle(ButtonStyle.Primary),
+        aiButton,
+        new ButtonBuilder().setCustomId('callia:stop').setLabel('Encerrar').setStyle(ButtonStyle.Danger),
       ),
     ],
   });
@@ -95,41 +90,39 @@ export async function handleCalliaButton(interaction: ButtonInteraction): Promis
   const musicQueue = useQueue(interaction.guildId);
   musicQueue?.delete();
 
-  // Busca os dados da IA local no painel
-  const cfg = await prisma.guildConfig.findUnique({ where: { guildId: interaction.guildId } });
-  const customBotName = cfg?.aiCustomName || 'Assistente Local';
+  const isSuki = isSukiAllowed(interaction.guildId);
+  const selectedPersona = persona as CalliaPersona;
   
-  // O "persona" no handler da sessão de voz ('bryan' ou 'custom')
-  const selectedPersona = persona === 'bryan' ? 'bryan' : 'custom';
-  const label = selectedPersona === 'bryan' ? 'Bryan' : customBotName;
+  let label = 'Bryan';
+  if (selectedPersona === 'suki') {
+    label = 'Suki';
+  } else if (selectedPersona === 'custom') {
+    const cfg = await prisma.guildConfig.findUnique({ where: { guildId: interaction.guildId } });
+    label = cfg?.aiCustomName || 'Assistente Local';
+  }
 
   startCalliaSession({
     member,
     channel,
     persona: selectedPersona,
-    ai: { askBryan, askCustomAi },
+    ai: { askBryan, askSuki, askCustomAi },
     onStatus: async (message) => {
       await interaction.editReply({ content: `**${label}:** ${message}` }).catch(() => {});
     },
   });
 
+  const aiButton = isSuki
+    ? new ButtonBuilder().setCustomId('callia:choose:suki').setLabel('Trocar para Suki').setStyle(ButtonStyle.Success)
+    : new ButtonBuilder().setCustomId('callia:choose:custom').setLabel(`Trocar para ${label}`).setStyle(ButtonStyle.Success);
+
   await interaction.update({
-    content: `🎙️ **${label}** conectou na call! Fale normalmente.`,
+    content: `🎙️ **${label}** entrou na call! Fale normalmente.`,
     embeds: [],
     components: [
       new ActionRowBuilder<ButtonBuilder>().addComponents(
-        new ButtonBuilder()
-          .setCustomId('callia:choose:bryan')
-          .setLabel('Trocar para Bryan')
-          .setStyle(ButtonStyle.Primary),
-        new ButtonBuilder()
-          .setCustomId('callia:choose:custom')
-          .setLabel(`Trocar para ${customBotName}`)
-          .setStyle(ButtonStyle.Success),
-        new ButtonBuilder()
-          .setCustomId('callia:stop')
-          .setLabel('Encerrar Call')
-          .setStyle(ButtonStyle.Danger),
+        new ButtonBuilder().setCustomId('callia:choose:bryan').setLabel('Trocar para Bryan').setStyle(ButtonStyle.Primary),
+        aiButton,
+        new ButtonBuilder().setCustomId('callia:stop').setLabel('Encerrar Call').setStyle(ButtonStyle.Danger),
       ),
     ],
   });

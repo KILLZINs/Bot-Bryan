@@ -1,16 +1,11 @@
-# Let's construct the complete server.ts with:
-# 1. Full Dashboard & Settings (Categories, Color Pickers, Anti-Spam, Discord OAuth2)
-# 2. Complete AAA Landing Page (3 Buttons: Adicionar Bot, Jogar RPG, Painel Web)
-# 3. Complete Pixel Web RPG Hub (Character Profile, Real Cooldowns, Stat Distributor, Dynamic Battle Arena with Live Monster HP, Dungeon Combat Turns without locks, City, Shop, Forge, Inventory with Equip/Unequip/Use/Sell, Explore with Events, Train with Buffs, Fishing with Timers, Tavern with Full Menu & Dice Game, World Boss with Live Guild HP, Travel Map).
-
-complete_server_code = r'''import express from 'express';
+import express from 'express';
 import axios from 'axios';
 import cookieParser from 'cookie-parser';
 import path from 'path';
 import { prisma } from '../database/client';
 
 // ─── Importações Oficiais do RPG da Aliança Skyline ─────────────────────────
-import { getOrCreateCharacter, computeStats, distributeStatPoints, FullCharacter } from '../rpg/services/character';
+import { getOrCreateCharacter, computeStats, distributeStatPoints, FullCharacter, hpBar, xpBar } from '../rpg/services/character';
 import { doExplore } from '../rpg/panels/exploracao';
 import { doTrain } from '../rpg/panels/treinar';
 import { startMeditation, collectMeditation } from '../rpg/panels/meditar';
@@ -20,12 +15,16 @@ import { attackWorldBoss, getActiveBoss } from '../rpg/services/worldBoss';
 import { travelTo } from '../rpg/panels/travel';
 import { equipItem, unequipItem, useConsumable, sellItem, buyItem, getInventory } from '../rpg/services/inventory';
 import { getItem, ITEMS, ITEM_LIST, CRAFT_RECIPES } from '../rpg/constants/items';
-import { getLocation, LOCATION_LIST } from '../rpg/constants/locations';
-import { getClass, rpgXpForLevel, karmaLabel } from '../rpg/constants/classes';
+import { getLocation, LOCATION_LIST, ENV_EMOJI } from '../rpg/constants/locations';
+import { getClass, rpgXpForLevel, karmaLabel, CLASSES } from '../rpg/constants/classes';
 import { DIVINE_SKILLS, PASSIVE_TALENTS } from '../rpg/constants/skills';
-import { getEnemiesForLocation, getBossesForLocation, getEnemy } from '../rpg/constants/enemies';
+import { getEnemiesForLocation, getBossesForLocation, getEnemy, ENEMIES } from '../rpg/constants/enemies';
 import { startInteractiveCombat, takeCombatAction } from '../rpg/services/combat';
+import { activeExpeditions, startExpedition, processRandomDungeonEvent, finishExpedition } from '../rpg/panels/dungeon';
+import { getActiveBuffs, formatBuffList } from '../rpg/services/temp-buffs';
+import { getMarriage, getPartner } from '../rpg/services/marriage';
 import { craftItem } from '../rpg/panels/forja';
+import { claimClassMission } from '../rpg/services/class-missions';
 
 const BOT_OWNER_ID = '1195254699943796791';
 
@@ -267,9 +266,28 @@ export function startDashboard() {
       color: white; border: 1px solid rgba(255,255,255,0.25);
       box-shadow: 0 0 25px rgba(124, 58, 237, 0.5);
     }
+    .btn-primary:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 30px rgba(168, 85, 247, 0.8);
+    }
     .btn-invite {
       background: linear-gradient(135deg, #5865f2 0%, #4752c4 100%);
       color: white; border: 1px solid rgba(255,255,255,0.2);
+      box-shadow: 0 0 20px rgba(88, 101, 242, 0.4);
+    }
+    .btn-invite:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 30px rgba(88, 101, 242, 0.7);
+    }
+    .btn-secondary {
+      background: rgba(26, 20, 42, 0.7);
+      color: #e0c3fc; border: 1px solid var(--border);
+      backdrop-filter: blur(10px);
+    }
+    .btn-secondary:hover {
+      background: rgba(38, 28, 62, 0.95);
+      border-color: var(--primary);
+      transform: translateY(-2px);
     }
     .hero {
       text-align: center;
@@ -354,6 +372,12 @@ export function startDashboard() {
       border-color: rgba(192, 132, 252, 0.5);
       box-shadow: 0 18px 40px rgba(139, 92, 246, 0.25);
     }
+    .f-card::before {
+      content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px;
+      background: linear-gradient(90deg, transparent, var(--primary), transparent);
+      opacity: 0; transition: 0.3s;
+    }
+    .f-card:hover::before { opacity: 1; }
     .f-icon {
       width: 58px; height: 58px; border-radius: 16px;
       background: rgba(139, 92, 246, 0.2);
@@ -386,6 +410,12 @@ export function startDashboard() {
       text-align: center; color: #786b8c; font-size: 14px; background: #050408;
     }
     footer a { color: #c084fc; text-decoration: none; font-weight: 600; }
+    @media (max-width: 768px) {
+      nav { padding: 15px 5%; }
+      .hero { padding: 50px 5% 30px 5%; }
+      .features-grid { grid-template-columns: 1fr; }
+      .nav-btns .btn-invite { display: none; }
+    }
   </style>
 </head>
 <body>
@@ -409,7 +439,7 @@ export function startDashboard() {
     <div class="hero-actions">
       <a href="/rpg" class="btn btn-rpg" style="padding: 16px 28px; font-size: 12px;"><span>🎮 JOGAR RPG WEB</span></a>
       <a href="${botInviteUrl}" target="_blank" class="btn btn-invite" style="padding: 16px 32px; font-size: 15px;"><span>➕ Adicionar ao Discord</span></a>
-      <a href="/login" class="btn btn-primary" style="padding: 16px 32px; font-size: 15px;"><span>⚙️ Painel de Controle</span></a>
+      <a href="/login" class="btn btn-secondary" style="padding: 16px 32px; font-size: 15px;"><span>⚙️ Painel de Controle</span></a>
     </div>
   </section>
 
@@ -498,12 +528,13 @@ export function startDashboard() {
 
   <footer>
     <p>© 2026 <strong>Bryan Bot</strong> • Desenvolvido para a <strong>Aliança Skyline</strong>.</p>
+    <p style="margin-top: 6px; font-size: 13px;">Hospedado com alta performance no Railway & PostgreSQL.</p>
   </footer>
 </body>
 </html>`);
   });
 
-  // ─── TELA DO WEB RPG (PIXEL ART RETRO COM TODOS OS SISTEMAS) ──────────────
+  // ─── TELA DO WEB RPG (PIXEL ART RETRO COM ARENA DINÂMICA) ────────────────
   app.get('/rpg', async (req, res) => {
     if (req.cookies?.skyline_auth !== 'permitido') {
       return res.redirect('/login');
@@ -1726,4 +1757,3 @@ export function startDashboard() {
 
   app.listen(port, '0.0.0.0', () => console.log(`🌐 Dashboard Web rodando na porta ${port}`));
 }
-'''

@@ -178,7 +178,7 @@ function buildPostActionRow(
   isLiked: boolean = false,
   customEmojis: { like?: string; follow?: string; comment?: string } = {}
 ): ActionRowBuilder<ButtonBuilder> {
-  const likeEmoji = customEmojis.like || '💜';
+  const likeEmoji = customEmojis.like || '❤️';
   const followEmoji = customEmojis.follow || '🔔';
   const commentEmoji = customEmojis.comment || '💬';
 
@@ -388,7 +388,7 @@ client.on('interactionCreate', async (interaction) => {
     });
 
     const customEmojis = {
-      like: cfg?.feedLikeEmoji || '💜',
+      like: cfg?.feedLikeEmoji || '❤️',
       follow: cfg?.feedFollowEmoji || '🔔',
       comment: cfg?.feedCommentEmoji || '💬',
     };

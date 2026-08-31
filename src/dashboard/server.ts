@@ -1,4 +1,4 @@
-import express from 'express';
+server_code = '''import express from 'express';
 import axios from 'axios';
 import cookieParser from 'cookie-parser';
 import path from 'path';
@@ -20,20 +20,27 @@ const SERVER_CATEGORIES = [
     ]
   },
   {
-    category: "🛡️ Administração & Moderação",
+    category: "🛡️ Segurança & Moderação",
     features: [
-      { id: 'featMod', name: '🔨 Auto-Moderação', desc: 'Filtro anti-spam, links e punições automáticas.' },
-      { id: 'featTickets', name: '🎫 Tickets / Suporte', desc: 'Atendimento via canais privados.' },
-      { id: 'featSelfRole', name: '🎭 Registro de Cargos', desc: 'Menus interativos para auto-cargo.' }
+      { id: 'featMod', name: '🔨 Módulo de Moderação', desc: 'Comandos administrativos e punições.' },
+      { id: 'antiSpam', name: '⚡ Proteção Anti-Spam', desc: 'Detecta e bloqueia envio rápido e repetitivo de mensagens.' },
+      { id: 'antiLinks', name: '🔗 Filtro Anti-Links / Invites', desc: 'Bloqueia convites externos e links suspeitos.' }
+    ]
+  },
+  {
+    category: "🎫 Suporte & Cargos",
+    features: [
+      { id: 'featTickets', name: '🎫 Tickets / Atendimento', desc: 'Salas privadas de suporte com transcrições.' },
+      { id: 'featSelfRole', name: '🎭 Registro de Auto-Cargos', desc: 'Menus interativos para escolha de cargos.' }
     ]
   },
   {
     category: "🎉 Engajamento & Comunidade",
     features: [
+      { id: 'featSocial', name: '📸 Feed Social & Roleplay', desc: 'Instagram integrado no Discord e comandos sociais de RP.' },
       { id: 'featLeveling', name: '🎯 XP & Níveis', desc: 'Progressão por mensagens e ranking.' },
       { id: 'featGiveaways', name: '🎁 Sorteios', desc: 'Sorteios automatizados com participação via botão.' },
       { id: 'featPolls', name: '📊 Enquetes', desc: 'Ferramenta de criação de enquetes na comunidade.' },
-      { id: 'featSocial', name: '🤝 Roleplay Social & Feed', desc: 'Ações de RP e sistema de Feed / Instagram.' },
       { id: 'featAnnouncements', name: '📢 Anúncios', desc: 'Eventos globais e avisos do servidor.' },
       { id: 'featMusic', name: '🎵 Sistema de Música', desc: 'Permite que o bot toque músicas nos canais de voz.' }
     ]
@@ -60,7 +67,7 @@ const GLOBAL_CATEGORIES = [
       { id: 'featLeveling', name: '🎯 XP & Níveis', desc: 'Congela o ganho de XP em todos os servidores.' },
       { id: 'featGiveaways', name: '🎁 Sorteios', desc: 'Trava todos os sorteios atuais e futuros.' },
       { id: 'featPolls', name: '📊 Enquetes', desc: 'Desativa a ferramenta de enquetes.' },
-      { id: 'featSocial', name: '🤝 Roleplay Social & Feed', desc: 'Desliga interações como beijar, bater, abraçar e Feed.' },
+      { id: 'featSocial', name: '🤝 Roleplay Social & Feed', desc: 'Desliga o Feed e interações de RP.' },
       { id: 'featAnnouncements', name: '📢 Anúncios', desc: 'Bloqueia os comandos de eventos e avisos.' },
       { id: 'featMusic', name: '🎵 Sistema de Música', desc: 'Desliga o motor de áudio globalmente por segurança.' }
     ]
@@ -68,77 +75,68 @@ const GLOBAL_CATEGORIES = [
 ];
 
 // ==========================================
-// ⚙️ 2. CONFIGURAÇÕES AVANÇADAS (INPUTS: TEXT E NUMBER)
+// ⚙️ 2. CONFIGURAÇÕES AVANÇADAS (INPUTS)
 // ==========================================
 const SERVER_SETTINGS = [
   {
     category: "📸 Feed Social / Instagram",
     items: [
       { id: 'feedChannelId', name: 'Canal do Feed (ID)', type: 'text', placeholder: 'ID do canal onde as fotos serão postadas' },
-      { id: 'feedEmbedColor', name: 'Cor do Embed (Número Decimal)', type: 'number', placeholder: 'Padrão: 14757996 (Rosa Instagram #E1306C)' },
-      { id: 'feedLikeEmoji', name: 'Emoji do Botão Curtir', type: 'text', placeholder: 'Ex: 💜' },
-      { id: 'feedFollowEmoji', name: 'Emoji do Botão Seguir', type: 'text', placeholder: 'Ex: 🔔' },
-      { id: 'feedCommentEmoji', name: 'Emoji do Botão Comentar', type: 'text', placeholder: 'Ex: 💬' },
-      { id: 'feedFooterText', name: 'Texto de Rodapé do Feed', type: 'text', placeholder: 'Ex: 📸 Instagram Skyline' }
+      { id: 'feedEmbedColor', name: 'Cor do Embed das Postagens', type: 'color', placeholder: 'Escolha a cor do card' },
+      { id: 'feedLikeEmoji', name: 'Emoji de Curtir', type: 'text', placeholder: 'Padrão: 💜' },
+      { id: 'feedFollowEmoji', name: 'Emoji de Seguir', type: 'text', placeholder: 'Padrão: 🔔' },
+      { id: 'feedCommentEmoji', name: 'Emoji de Comentar', type: 'text', placeholder: 'Padrão: 💬' },
+      { id: 'feedFooterText', name: 'Texto de Rodapé do Post', type: 'text', placeholder: 'Ex: 📸 Instagram Skyline' }
     ]
   },
   {
-    category: "📁 Canais e Categorias (IDs)",
+    category: "📁 Canais do Servidor (IDs)",
     items: [
-      { id: 'logChannelId', name: 'Canal de Logs', type: 'text', placeholder: 'Onde os logs de moderação vão cair' },
       { id: 'welcomeChannelId', name: 'Canal de Boas-Vindas', type: 'text', placeholder: 'Canal para novas entradas' },
-      { id: 'announcementChannelId', name: 'Canal de Anúncios', type: 'text', placeholder: 'Canal para avisos globais/eventos' },
-      { id: 'suggestionChannelId', name: 'Canal de Sugestões', type: 'text', placeholder: 'Onde o /sugestao vai ser enviado' },
-      { id: 'feedbackChannelId', name: 'Canal de Feedback', type: 'text', placeholder: 'Onde o /feedback vai ser enviado' },
-      { id: 'levelUpChannelId', name: 'Canal de Level Up', type: 'text', placeholder: 'Avisa que o membro subiu de nível' }
+      { id: 'announcementChannelId', name: 'Canal de Anúncios', type: 'text', placeholder: 'Canal para avisos globais e eventos' },
+      { id: 'logChannelId', name: 'Canal de Logs Gerais', type: 'text', placeholder: 'Onde os logs de auditoria vão cair' },
+      { id: 'suggestionChannelId', name: 'Canal de Sugestões', type: 'text', placeholder: 'Onde o /sugestao é enviado' },
+      { id: 'feedbackChannelId', name: 'Canal de Feedback', type: 'text', placeholder: 'Onde o /feedback é enviado' },
+      { id: 'levelUpChannelId', name: 'Canal ou Fórum de Level Up', type: 'text', placeholder: 'Notificações de subida de nível' }
     ]
   },
   {
-    category: "🎫 Sistema de Tickets (IDs)",
+    category: "🎫 Atendimento & Tickets (IDs)",
     items: [
-      { id: 'ticketCategoryId', name: 'Categoria de Tickets', type: 'text', placeholder: 'Onde os tickets abrem' },
-      { id: 'ticketLogChannelId', name: 'Logs de Tickets (Transcripts)', type: 'text', placeholder: 'Salvar o histórico dos tickets' }
+      { id: 'ticketCategoryId', name: 'Categoria de Tickets (ID)', type: 'text', placeholder: 'Categoria onde as salas de ticket abrem' },
+      { id: 'ticketLogChannelId', name: 'Canal de Transcrições/Logs (ID)', type: 'text', placeholder: 'Onde o histórico de tickets fechados é salvo' }
     ]
   },
   {
-    category: "🛡️ Cargos de Permissão e Moderação (IDs)",
+    category: "🛡️ Cargos do Sistema (IDs)",
     items: [
-      { id: 'adminRoleId', name: 'Cargo de Administrador', type: 'text', placeholder: 'Cargo com passe livre no bot' },
-      { id: 'modRoleId', name: 'Cargo de Moderador', type: 'text', placeholder: 'Pode usar comandos de punição' },
-      { id: 'mutedRoleId', name: 'Cargo de Mutado', type: 'text', placeholder: 'Cargo dado ao tomar mute' },
-      { id: 'autoRoleId', name: 'Cargo Automático (Auto-Role)', type: 'text', placeholder: 'Dado ao membro quando entra' },
-      { id: 'memberRoleId', name: 'Cargo de Membro Registrado', type: 'text', placeholder: 'Cargo oficial da comunidade' }
+      { id: 'adminRoleId', name: 'Cargo de Administrador', type: 'text', placeholder: 'Passe livre nas configurações' },
+      { id: 'modRoleId', name: 'Cargo de Moderador', type: 'text', placeholder: 'Acesso a comandos de punição' },
+      { id: 'autoRoleId', name: 'Cargo Automático (Auto-Role)', type: 'text', placeholder: 'Entregue imediatamente ao novo membro' },
+      { id: 'memberRoleId', name: 'Cargo de Membro Registrado', type: 'text', placeholder: 'Cargo oficial da comunidade' },
+      { id: 'mutedRoleId', name: 'Cargo de Silenciado (Muted)', type: 'text', placeholder: 'Atribuído em punições de silenciamento' }
     ]
   },
   {
-    category: "🎯 Balanceamento de XP",
+    category: "💬 Mensagens de Boas-Vindas",
     items: [
-      { id: 'xpMin', name: 'XP Mínimo por Mensagem', type: 'number', placeholder: 'Ex: 15' },
-      { id: 'xpMax', name: 'XP Máximo por Mensagem', type: 'number', placeholder: 'Ex: 25' },
-      { id: 'xpCooldown', name: 'Cooldown de XP (Segundos)', type: 'number', placeholder: 'Ex: 60' }
-    ]
-  },
-  {
-    category: "💬 Mensagens Personalizadas",
-    items: [
-      { id: 'welcomeMessage', name: 'Mensagem de Recepção', type: 'text', placeholder: 'Ex: Bem-vindo(a) à Aliança, {user}!' }
+      { id: 'welcomeMessage', name: 'Mensagem de Recepção (Use {user} e {guild})', type: 'textarea', placeholder: 'Ex: Olá {user}, seja muito bem-vindo(a) ao servidor {guild}!' }
     ]
   }
 ];
 
 const GLOBAL_SETTINGS = [
   {
-    category: "🎨 Personalização Global do Bot",
+    category: "🎨 Identidade Visual Global",
     items: [
       { id: 'footerText', name: 'Texto de Rodapé Padrão', type: 'text', placeholder: 'Aparece na maioria das embeds' },
-      { id: 'rpFooterText', name: 'Rodapé Roleplay', type: 'text', placeholder: 'Aparece nos comandos de /rp' },
-      { id: 'botIconUrl', name: 'Ícone do Bot (Link da Imagem)', type: 'text', placeholder: 'Ex: https://i.imgur.com/foto.png' },
-      { id: 'primaryColor', name: 'Cor Primária (Número Decimal)', type: 'number', placeholder: 'Ex: 10180278' }
+      { id: 'rpFooterText', name: 'Rodapé dos Comandos /rp', type: 'text', placeholder: 'Ex: ⚔️ Aliança Skyline • /genero' },
+      { id: 'botIconUrl', name: 'URL do Ícone do Bot', type: 'text', placeholder: 'Ex: https://i.imgur.com/foto.png' },
+      { id: 'primaryColor', name: 'Cor Primária dos Embeds', type: 'color', placeholder: 'Escolha a cor principal' }
     ]
   }
 ];
 
-// Helper de Segurança: Validação de Acesso ao Servidor
 async function validateGuildAccess(userId: string, guildId: string): Promise<boolean> {
   if (userId === BOT_OWNER_ID) return true;
   const access = await prisma.allianceServerMember.findFirst({
@@ -147,9 +145,6 @@ async function validateGuildAccess(userId: string, guildId: string): Promise<boo
   return !!access;
 }
 
-// ==========================================
-// 🚀 INÍCIO DO SERVIDOR WEB
-// ==========================================
 export function startDashboard() {
   const app = express();
   app.use(cookieParser());
@@ -173,7 +168,7 @@ export function startDashboard() {
         <head>
           <meta charset="UTF-8">
           <meta name="viewport" content="width=device-width, initial-scale=1.0">
-          <title>Bryan Bot — O Ecossistema Definitivo para seu Discord</title>
+          <title>Bryan Bot — Ecossistema Discord & IA de Voz</title>
           <link rel="preconnect" href="https://fonts.googleapis.com">
           <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
           <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -195,9 +190,10 @@ export function startDashboard() {
               height: 100vh;
               z-index: -1;
               background: 
-                radial-gradient(circle at 20% 15%, rgba(123, 44, 191, 0.25) 0%, transparent 40%),
-                radial-gradient(circle at 80% 80%, rgba(157, 78, 221, 0.2) 0%, transparent 45%),
-                radial-gradient(circle at 50% 50%, rgba(225, 48, 108, 0.12) 0%, transparent 50%),
+                radial-gradient(circle at 15% 15%, rgba(123, 44, 191, 0.28) 0%, transparent 40%),
+                radial-gradient(circle at 85% 85%, rgba(157, 78, 221, 0.22) 0%, transparent 45%),
+                radial-gradient(circle at 50% 50%, rgba(225, 48, 108, 0.15) 0%, transparent 50%),
+                radial-gradient(circle at 75% 20%, rgba(0, 245, 212, 0.1) 0%, transparent 35%),
                 linear-gradient(180deg, #0b0914 0%, #06050a 100%);
             }
 
@@ -207,8 +203,8 @@ export function startDashboard() {
               align-items: center;
               padding: 20px 8%;
               backdrop-filter: blur(15px);
-              background: rgba(11, 9, 20, 0.7);
-              border-bottom: 1px solid rgba(157, 78, 221, 0.18);
+              background: rgba(11, 9, 20, 0.75);
+              border-bottom: 1px solid rgba(157, 78, 221, 0.2);
               position: sticky;
               top: 0;
               z-index: 100;
@@ -290,7 +286,7 @@ export function startDashboard() {
 
             .hero {
               text-align: center;
-              padding: 90px 8% 60px 8%;
+              padding: 80px 8% 50px 8%;
               max-width: 1200px;
               margin: 0 auto;
             }
@@ -298,35 +294,35 @@ export function startDashboard() {
               display: inline-flex;
               align-items: center;
               gap: 8px;
-              padding: 8px 20px;
-              background: rgba(123, 44, 191, 0.2);
+              padding: 8px 22px;
+              background: rgba(123, 44, 191, 0.25);
               border: 1px solid rgba(179, 136, 235, 0.4);
               border-radius: 50px;
               font-size: 13px;
               font-weight: 700;
               color: #e0c3fc;
-              margin-bottom: 30px;
-              box-shadow: 0 0 20px rgba(123, 44, 191, 0.3);
+              margin-bottom: 25px;
+              box-shadow: 0 0 25px rgba(123, 44, 191, 0.35);
               text-transform: uppercase;
               letter-spacing: 1px;
             }
             .hero h1 {
-              font-size: clamp(2.5rem, 5vw, 4.2rem);
+              font-size: clamp(2.4rem, 5vw, 4.3rem);
               font-weight: 800;
               line-height: 1.15;
               margin-bottom: 25px;
               letter-spacing: -1px;
             }
             .hero-gradient {
-              background: linear-gradient(135deg, #ffffff 30%, #c77dff 70%, #e1306c 100%);
+              background: linear-gradient(135deg, #ffffff 20%, #c77dff 60%, #e1306c 100%);
               -webkit-background-clip: text;
               -webkit-text-fill-color: transparent;
             }
             .hero p {
               font-size: clamp(1rem, 2vw, 1.25rem);
               color: #b5a9c9;
-              max-width: 750px;
-              margin: 0 auto 45px auto;
+              max-width: 800px;
+              margin: 0 auto 40px auto;
             }
             .hero-buttons {
               display: flex;
@@ -340,7 +336,7 @@ export function startDashboard() {
               grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
               gap: 20px;
               max-width: 1100px;
-              margin: 40px auto 80px auto;
+              margin: 30px auto 70px auto;
               padding: 0 5%;
             }
             .stat-card {
@@ -375,13 +371,13 @@ export function startDashboard() {
             }
 
             .features-section {
-              padding: 60px 8% 100px 8%;
+              padding: 40px 8% 90px 8%;
               max-width: 1250px;
               margin: 0 auto;
             }
             .section-header {
               text-align: center;
-              margin-bottom: 60px;
+              margin-bottom: 55px;
             }
             .section-header h2 {
               font-size: 2.3rem;
@@ -400,7 +396,7 @@ export function startDashboard() {
               gap: 28px;
             }
             .feature-card {
-              background: rgba(16, 12, 26, 0.7);
+              background: rgba(16, 12, 26, 0.75);
               border: 1px solid rgba(157, 78, 221, 0.2);
               border-radius: 18px;
               padding: 35px 30px;
@@ -438,7 +434,7 @@ export function startDashboard() {
               align-items: center;
               justify-content: center;
               font-size: 26px;
-              margin-bottom: 22px;
+              margin-bottom: 20px;
               box-shadow: 0 0 20px rgba(123, 44, 191, 0.3);
             }
             .feature-card h3 {
@@ -456,24 +452,28 @@ export function startDashboard() {
             .highlight-badge {
               display: inline-block;
               padding: 4px 10px;
-              background: linear-gradient(135deg, #e1306c 0%, #c13584 100%);
+              background: linear-gradient(135deg, #00f5d4 0%, #00bbf9 100%);
               border-radius: 6px;
               font-size: 11px;
               font-weight: 800;
-              color: white;
+              color: #050408;
               text-transform: uppercase;
               letter-spacing: 0.5px;
-              margin-bottom: 15px;
+              margin-bottom: 14px;
+            }
+            .insta-badge {
+              background: linear-gradient(135deg, #e1306c 0%, #c13584 100%);
+              color: white;
             }
 
             .cta-banner {
-              background: linear-gradient(135deg, rgba(123, 44, 191, 0.3) 0%, rgba(225, 48, 108, 0.2) 100%);
+              background: linear-gradient(135deg, rgba(123, 44, 191, 0.35) 0%, rgba(225, 48, 108, 0.22) 100%);
               border: 1px solid rgba(179, 136, 235, 0.4);
               border-radius: 24px;
               padding: 60px 40px;
               text-align: center;
               max-width: 1000px;
-              margin: 40px auto 100px auto;
+              margin: 40px auto 90px auto;
               backdrop-filter: blur(15px);
               box-shadow: 0 20px 50px rgba(0,0,0,0.5);
             }
@@ -503,13 +503,10 @@ export function startDashboard() {
               text-decoration: none;
               font-weight: 600;
             }
-            footer a:hover {
-              text-decoration: underline;
-            }
 
             @media (max-width: 768px) {
               nav { padding: 15px 5%; }
-              .hero { padding: 60px 5% 40px 5%; }
+              .hero { padding: 50px 5% 30px 5%; }
               .features-grid { grid-template-columns: 1fr; }
               .nav-actions .btn-invite { display: none; }
             }
@@ -534,91 +531,98 @@ export function startDashboard() {
             </div>
           </nav>
 
-          <!-- Hero Header -->
+          <!-- Hero Section -->
           <section class="hero">
-            <div class="hero-badge">✨ Sistema Central de Comando • Aliança Skyline</div>
-            <h1>O Bot Definitivo para transformar o seu <span class="hero-gradient">Servidor Discord</span></h1>
-            <p>Um ecossistema completo com RPG multiplayer, Feed Social no estilo Instagram, suporte por tickets, moderação avançada e painel web em tempo real.</p>
+            <div class="hero-badge">🎙️ Nova Geração com IA de Voz & Feed Social</div>
+            <h1>Potencialize seu servidor com <span class="hero-gradient">IA de Voz & Recursos Exclusivos</span></h1>
+            <p>O Bryan Bot reúne conversação por voz com inteligência artificial, feed social estilo Instagram, ecossistema RPG completo, suporte por tickets e moderação blindada.</p>
             
             <div class="hero-buttons">
               <a href="${botInviteUrl}" target="_blank" class="btn btn-invite" style="padding: 16px 36px; font-size: 16px;">
                 <span>➕ Adicionar ao Discord</span>
               </a>
               <a href="/login" class="btn btn-secondary" style="padding: 16px 36px; font-size: 16px;">
-                <span>⚙️ Gerenciar Servidores</span>
+                <span>⚙️ Acessar Dashboard</span>
               </a>
             </div>
           </section>
 
-          <!-- Estatísticas & Status -->
+          <!-- Estatísticas -->
           <div class="stats-ribbon">
+            <div class="stat-card">
+              <div class="stat-num">🎙️ IA Real</div>
+              <div class="stat-label">Síntese de Voz ElevenLabs</div>
+            </div>
             <div class="stat-card">
               <div class="stat-num">100%</div>
               <div class="stat-label">Uptime no Railway</div>
             </div>
             <div class="stat-card">
-              <div class="stat-num">0ms</div>
-              <div class="stat-label">Latência Otimizada</div>
+              <div class="stat-num">📸 Social</div>
+              <div class="stat-label">Feed & Notificações PV</div>
             </div>
             <div class="stat-card">
-              <div class="stat-num">12+</div>
-              <div class="stat-label">Módulos Dinâmicos</div>
-            </div>
-            <div class="stat-card">
-              <div class="stat-num">v2.1</div>
-              <div class="stat-label">Nova Geração Skyline</div>
+              <div class="stat-num">14+</div>
+              <div class="stat-label">Módulos Ativos</div>
             </div>
           </div>
 
-          <!-- Grade de Funcionalidades -->
+          <!-- Grade de Recursos -->
           <section class="features-section">
             <div class="section-header">
-              <h2>Poderoso, Rápido e Completo</h2>
-              <p>Explore as principais ferramentas integradas ao Bryan Bot</p>
+              <h2>Recursos de Elite para o seu Servidor</h2>
+              <p>Projetado para entregar a melhor experiência visual, sonora e interativa.</p>
             </div>
 
             <div class="features-grid">
+              <!-- DESTAQUE 1: VOZ COM IA -->
               <div class="feature-card">
-                <span class="highlight-badge">🔥 Exclusivo</span>
+                <span class="highlight-badge">🎙️ Exclusivo IA</span>
+                <div class="feature-icon" style="background: rgba(0, 245, 212, 0.2); border-color: rgba(0, 245, 212, 0.4);">🧠</div>
+                <h3>Sistema de Voz & Conversação com IA</h3>
+                <p>O bot entra no canal de voz e conversa em tempo real com os membros. Integração de voz neural ultra-realista via <strong>ElevenLabs</strong> e respostas inteligentes com <strong>Gemini / OpenAI / Mistral</strong>.</p>
+              </div>
+
+              <!-- DESTAQUE 2: FEED INSTAGRAM -->
+              <div class="feature-card">
+                <span class="highlight-badge insta-badge">🔥 Exclusivo</span>
                 <div class="feature-icon" style="background: rgba(225, 48, 108, 0.2); border-color: rgba(225, 48, 108, 0.4);">📸</div>
                 <h3>Feed Social / Instagram</h3>
-                <p>Transforme fotos enviadas em publicações estéticas estilo Instagram. Sistema interativo de curtidas, comentários via modal, seguidores e <strong>notificações automáticas no PV</strong>.</p>
+                <p>Publicações automáticas com cards estilo Instagram. Sistema interativo de curtidas, comentários via modal, seguidores e <strong>notificações privadas no PV de quem você segue</strong>.</p>
               </div>
 
+              <!-- CARD 3: RPG & ECONOMIA -->
               <div class="feature-card">
                 <div class="feature-icon">⚔️</div>
-                <h3>Ecossistema RPG & Economia</h3>
-                <p>Crie seu personagem, dispute dungeons, enfrente World Bosses, aprenda talentos divinos, suba de nível e compre cosméticos e títulos na loja do servidor.</p>
+                <h3>RPG Multiplayer & Economia</h3>
+                <p>Crie seu personagem, dispute dungeons, enfrente World Bosses, aprenda talentos divinos, suba de nível e compre cosméticos, fundos e títulos exclusivos na loja.</p>
               </div>
 
+              <!-- CARD 4: TICKETS -->
               <div class="feature-card">
                 <div class="feature-icon">🎫</div>
-                <h3>Sistema de Suporte & Tickets</h3>
+                <h3>Suporte & Atendimento</h3>
                 <p>Criação de salas de atendimento privadas por categoria, geração de transcrições em canais de logs e controle total de permissões para a equipe de Staff.</p>
               </div>
 
+              <!-- CARD 5: AUTO-MOD & SEGURANÇA -->
               <div class="feature-card">
                 <div class="feature-icon">🛡️</div>
                 <h3>Segurança & Auto-Mod</h3>
                 <p>Proteção ativa contra spams, links maliciosos e convites externos. Logs detalhados de moderação, sistema de avisos (warns) e controle rigoroso de hierarquia.</p>
               </div>
 
+              <!-- CARD 6: MÚSICA & LEVELING -->
               <div class="feature-card">
                 <div class="feature-icon">🎵</div>
-                <h3>Motor de Música FFmpeg</h3>
-                <p>Reprodução de áudio sem travamentos em canais de voz com suporte a múltiplas fontes, controle de filas, reprodução contínua e equalização precisa.</p>
-              </div>
-
-              <div class="feature-card">
-                <div class="feature-icon">⭐</div>
-                <h3>Leveling & Ranking</h3>
-                <p>Progressão por mensagens enviadas com cooldown inteligente. Avisos de Level Up personalizáveis em canais de texto ou <strong>fóruns dedicados</strong>.</p>
+                <h3>Música & Leveling Dinâmico</h3>
+                <p>Reprodução de áudio sem travamentos via motor FFmpeg e sistema de ganho de XP por mensagens com notificações em canais de texto ou <strong>fóruns dedicados</strong>.</p>
               </div>
             </div>
 
-            <!-- Banner CTA Final -->
+            <!-- Banner CTA -->
             <div class="cta-banner">
-              <h2>Pronto para revolucionar seu servidor?</h2>
+              <h2>Pronto para transformar sua comunidade?</h2>
               <p>Adicione o Bryan Bot agora mesmo e configure tudo facilmente pelo nosso painel online.</p>
               <div style="display: flex; gap: 15px; justify-content: center; flex-wrap: wrap;">
                 <a href="${botInviteUrl}" target="_blank" class="btn btn-invite" style="padding: 15px 32px;">
@@ -714,7 +718,7 @@ export function startDashboard() {
     } catch (error) { res.status(500).json({ error: 'Erro ao salvar.' }); }
   });
 
-  // 🛡️ SEGURANÇA: API /api/update com tratamento correto de tipos e permissão
+  // 🛡️ SEGURANÇA: API /api/update com suporte a Colors (HEX/DEC), Textarea, Números e Strings
   app.post('/api/update', async (req, res) => {
     const userId = req.cookies?.skyline_userid;
     if (!userId) return res.status(401).json({ error: 'Não autenticado' });
@@ -732,14 +736,27 @@ export function startDashboard() {
 
     let finalValue: string | number | null = value;
 
-    if (valueType === 'number') {
+    // Tratamento de Cores (converte #RRGGBB em Int decimal para o Prisma)
+    if (valueType === 'color') {
+      if (typeof value === 'string' && value.startsWith('#')) {
+        const hex = value.replace('#', '');
+        const parsed = parseInt(hex, 16);
+        finalValue = isNaN(parsed) ? 14757996 : parsed;
+      } else if (typeof value === 'number') {
+        finalValue = value;
+      } else {
+        finalValue = parseInt(value, 10) || 14757996;
+      }
+    } else if (valueType === 'number') {
       finalValue = parseInt(value, 10);
       if (isNaN(finalValue)) finalValue = 0;
+    } else if (value === "" || value === null || value === undefined) {
+      finalValue = null;
     }
-    if (value === "") finalValue = null;
 
-    if (feature === 'primaryColor' && finalValue === null) finalValue = 10180278;
-    if (feature === 'feedEmbedColor' && finalValue === null) finalValue = 14757996;
+    // Regras obrigatórias do Prisma
+    if (feature === 'primaryColor' && (finalValue === null || isNaN(Number(finalValue)))) finalValue = 10180278;
+    if (feature === 'feedEmbedColor' && (finalValue === null || isNaN(Number(finalValue)))) finalValue = 14757996;
 
     try {
       if (type === 'server') await prisma.guildConfig.update({ where: { guildId }, data: { [feature]: finalValue } });
@@ -815,10 +832,12 @@ export function startDashboard() {
 
             .setting-item { background: rgba(22,18,30,0.6); padding: 18px; border-radius: 8px; border: 1px solid rgba(106, 13, 173, 0.3); display: flex; flex-direction: column; gap: 10px; }
             .setting-item label { color: #ffffff; font-weight: bold; font-size: 14px; }
-            .input-group { display: flex; gap: 10px; }
-            .input-group input { flex: 1; background: #1a1721; border: 1px solid #3d1c73; color: white; padding: 12px; border-radius: 6px; outline: none; transition: 0.3s; }
-            .input-group input:focus { border-color: #b388eb; box-shadow: 0 0 10px rgba(157,78,221,0.2); }
-            .save-btn { background: #7b2cbf; border: none; color: white; padding: 0 20px; border-radius: 6px; cursor: pointer; font-weight: bold; transition: 0.2s; text-transform: uppercase; font-size: 12px;}
+            .input-group { display: flex; gap: 10px; align-items: center; }
+            .input-group input[type="text"], .input-group input[type="number"] { flex: 1; background: #1a1721; border: 1px solid #3d1c73; color: white; padding: 12px; border-radius: 6px; outline: none; transition: 0.3s; font-size: 14px; }
+            .input-group textarea { flex: 1; background: #1a1721; border: 1px solid #3d1c73; color: white; padding: 12px; border-radius: 6px; outline: none; transition: 0.3s; min-height: 80px; font-family: inherit; font-size: 14px; }
+            .input-group input[type="color"] { width: 50px; height: 44px; background: #1a1721; border: 1px solid #3d1c73; border-radius: 6px; cursor: pointer; padding: 2px; }
+            .input-group input:focus, .input-group textarea:focus { border-color: #b388eb; box-shadow: 0 0 10px rgba(157,78,221,0.2); }
+            .save-btn { background: #7b2cbf; border: none; color: white; padding: 12px 20px; border-radius: 6px; cursor: pointer; font-weight: bold; transition: 0.2s; text-transform: uppercase; font-size: 12px; align-self: stretch; display: flex; align-items: center; justify-content: center; }
             .save-btn:hover { background: #9d4edd; box-shadow: 0 0 15px rgba(157,78,221,0.5); }
 
             #toast { visibility: hidden; min-width: 250px; background-color: #e0c3fc; color: #111214; text-align: center; border-radius: 6px; padding: 16px; position: fixed; right: 30px; bottom: 30px; font-weight: bold; opacity: 0; transition: 0.4s; z-index: 999; box-shadow: 0 5px 20px rgba(157,78,221,0.4); }
@@ -868,6 +887,11 @@ export function startDashboard() {
             const SERVER_SETTINGS = ${JSON.stringify(SERVER_SETTINGS)};
             const GLOBAL_SETTINGS = ${JSON.stringify(GLOBAL_SETTINGS)};
 
+            function intToHexColor(intVal, fallback = '#E1306C') {
+              if (intVal === null || intVal === undefined || isNaN(intVal)) return fallback;
+              return '#' + intVal.toString(16).padStart(6, '0');
+            }
+
             function switchTab(tabId, btnElement) {
               document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
               document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
@@ -914,8 +938,20 @@ export function startDashboard() {
               html += categoryList.map(cat => {
                 let catHtml = \`<div class="category-title">\${cat.category}</div><div class="grid">\`;
                 catHtml += cat.items.map(item => {
-                  const value = dbData[item.id] !== null ? dbData[item.id] : '';
                   const inputId = \`input_\${type}_\${item.id}\`;
+
+                  if (item.type === 'color') {
+                    const fallback = item.id === 'primaryColor' ? '#9B51E0' : '#E1306C';
+                    const hexColor = intToHexColor(dbData[item.id], fallback);
+                    return \`<div class="setting-item"><label>\${item.name}</label><div class="input-group"><input type="color" id="\${inputId}_picker" value="\${hexColor}" oninput="document.getElementById('\${inputId}').value = this.value"><input type="text" id="\${inputId}" placeholder="Ex: #E1306C" value="\${hexColor}" oninput="document.getElementById('\${inputId}_picker').value = this.value"><button class="save-btn" onclick="saveSetting('\${type}', '\${item.id}', '\${inputId}', 'color')">Salvar</button></div></div>\`;
+                  }
+
+                  if (item.type === 'textarea') {
+                    const value = dbData[item.id] !== null && dbData[item.id] !== undefined ? dbData[item.id] : '';
+                    return \`<div class="setting-item"><label>\${item.name}</label><div class="input-group" style="flex-direction: column;"><textarea id="\${inputId}" placeholder="\${item.placeholder}">\${value}</textarea><button class="save-btn" style="width: 100%;" onclick="saveSetting('\${type}', '\${item.id}', '\${inputId}', 'text')">Salvar Mensagem</button></div></div>\`;
+                  }
+
+                  const value = dbData[item.id] !== null && dbData[item.id] !== undefined ? dbData[item.id] : '';
                   return \`<div class="setting-item"><label>\${item.name}</label><div class="input-group"><input type="\${item.type}" id="\${inputId}" placeholder="\${item.placeholder}" value="\${value}"><button class="save-btn" onclick="saveSetting('\${type}', '\${item.id}', '\${inputId}', '\${item.type}')">Salvar</button></div></div>\`;
                 }).join('');
                 catHtml += \`</div>\`;
@@ -955,3 +991,22 @@ export function startDashboard() {
 
   app.listen(port, '0.0.0.0', () => console.log(`🌐 Dashboard Web rodando na porta ${port}`));
 }
+'''
+
+def check_brackets(code):
+    stack = []
+    pairs = {')': '(', '}': '{', ']': '['}
+    for i, char in enumerate(code):
+        if char in '({[':
+            stack.append((char, i))
+        elif char in ')}]':
+            if not stack:
+                return f"Unexpected closing {char} at char {i}"
+            top, pos = stack.pop()
+            if pairs[char] != top:
+                return f"Mismatched {top} at {pos} with {char} at {i}"
+    if stack:
+        return f"Unclosed {stack[-1][0]} at {stack[-1][1]}"
+    return "OK"
+
+print("Audit check on dashboard server:", check_brackets(server_code))

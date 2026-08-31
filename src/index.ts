@@ -216,7 +216,10 @@ const INVITE_REGEX = /(discord\.(gg|io|me|li)|discordapp\.com\/invite|discord\.c
 const PHISHING_REGEX = /(grabify|iplogger|leak|nitro-free|steam-gift)/i;
 
 client.on('messageCreate', async (message) => {
-  if (message.author.bot || !message.guild || !message.guildId) return;
+  if (message.author.bot || !message.guild) return;
+
+  // Salva a hora da última mensagem para o sistema de Reviver Chat
+  lastMessageTime.set(message.guild.id, Date.now());
 
   try {
     const cfg: any = await prisma.guildConfig.findUnique({
@@ -656,6 +659,10 @@ async function start() {
   await client.login(process.env.DISCORD_TOKEN);
   console.log('🤖 Bot conectado ao Discord!');
   console.log('🎵 Sistema de música pronto para operar!');
+  
+  // LIGA O MONITOR DE CHAT AQUI 👇
+  startReviveChatMonitor(client);
+  console.log('🧟 Monitor de Reviver Chat ativado!');
 }
 
 start().catch((error) => {

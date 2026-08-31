@@ -6,53 +6,50 @@ import { prisma } from '../database/client';
 
 const BOT_OWNER_ID = '1195254699943796791';
 
-// ==========================================
-// 🧩 1. MÓDULOS DO SERVIDOR (SWITCHES)
-// ==========================================
 const SERVER_CATEGORIES = [
   {
-    category: "🤖 Inteligência Artificial (Callia)",
-    desc: "Permite que os membros chamem o Bryan ou a IA customizada do servidor para as calls.",
+    category: "🤖 Inteligência Artificial",
+    desc: "Sistemas de voz e conversação avançada",
     features: [
-      { id: 'featVoiceAi', name: 'Ativar IA de Voz', desc: 'Libera o comando /callia neste servidor.', icon: '🎙️' }
+      { id: 'featVoiceAi', name: 'Callia (IA de Voz)', desc: 'Permite que os membros chamem o Bryan ou a Suki nas calls.', icon: '🎙️' }
     ]
   },
   {
     category: "📸 Social & Comunidade",
     desc: "Engajamento, interações e rede social interna",
     features: [
-      { id: 'featSocial', name: 'Feed Social / Insta', desc: 'Postagens de fotos com curtidas e comentários.', icon: '📸' },
-      { id: 'featLeveling', name: 'Sistema de XP', desc: 'Progressão por mensagens e avisos.', icon: '⭐' },
-      { id: 'featGiveaways', name: 'Sorteios', desc: 'Sorteios automatizados.', icon: '🎁' },
-      { id: 'featPolls', name: 'Enquetes', desc: 'Votações com contagem de votos.', icon: '📊' }
+      { id: 'featSocial', name: 'Feed Social / Instagram', desc: 'Postagens automáticas de fotos com curtidas, comentários e avisos no PV.', icon: '📸' },
+      { id: 'featLeveling', name: 'Sistema de XP & Leveling', desc: 'Progressão por mensagens e avisos em canais ou fóruns.', icon: '⭐' },
+      { id: 'featGiveaways', name: 'Sorteios', desc: 'Sorteios automatizados com encerramento programado.', icon: '🎁' },
+      { id: 'featPolls', name: 'Enquetes Interativas', desc: 'Votações com contagem de votos e estatísticas.', icon: '📊' }
     ]
   },
   {
     category: "⚔️ RPG & Economia",
     desc: "Sistemas de progressão, missões e mercado",
     features: [
-      { id: 'featRpg', name: 'Sistema RPG', desc: 'Ativa todo o ecossistema RPG.', icon: '⚔️' },
-      { id: 'featEconomy', name: 'Economia & Loja', desc: 'Sistema de moedas e loja de itens.', icon: '🪙' },
-      { id: 'featMissions', name: 'Missões Diárias', desc: 'Desafios automáticos com recompensas.', icon: '📜' }
+      { id: 'featRpg', name: 'Sistema RPG (Geral)', desc: 'Ativa/desativa todo o ecossistema RPG no Discord.', icon: '⚔️' },
+      { id: 'featEconomy', name: 'Economia & Loja', desc: 'Sistema de moedas, transferências e loja de itens.', icon: '🪙' },
+      { id: 'featMissions', name: 'Missões Diárias', desc: 'Desafios automáticos com recompensas em XP e coins.', icon: '📜' }
     ]
   },
   {
     category: "🛡️ Segurança & Moderação",
     desc: "Proteção em tempo real contra ataques e spam",
     features: [
-      { id: 'featMod', name: 'Moderação', desc: 'Ban, kick, warns e auditoria.', icon: '🔨' },
-      { id: 'antiSpam', name: 'Anti-Spam', desc: 'Bloqueia envio rápido de mensagens.', icon: '⚡' },
-      { id: 'antiLinks', name: 'Anti-Links', desc: 'Remove convites e links suspeitos.', icon: '🔗' }
+      { id: 'featMod', name: 'Módulo de Moderação', desc: 'Comandos administrativos, ban, kick, warns e auditoria.', icon: '🔨' },
+      { id: 'antiSpam', name: 'Defesa Anti-Spam', desc: 'Detecta e bloqueia envio rápido e repetitivo de mensagens.', icon: '⚡' },
+      { id: 'antiLinks', name: 'Filtro Anti-Links', desc: 'Remove automaticamente convites externos e links suspeitos.', icon: '🔗' }
     ]
   },
   {
     category: "🎫 Atendimento & Utilidades",
     desc: "Suporte aos membros e streaming",
     features: [
-      { id: 'featTickets', name: 'Tickets de Suporte', desc: 'Salas privadas com transcrição.', icon: '🎫' },
-      { id: 'featSelfRole', name: 'Auto-Cargos', desc: 'Menus de seleção para cargos.', icon: '🎭' },
-      { id: 'featMusic', name: 'Música', desc: 'Player de áudio em canais de voz.', icon: '🎵' },
-      { id: 'featAnnouncements', name: 'Anúncios', desc: 'Transmissão de comunicados.', icon: '📢' }
+      { id: 'featTickets', name: 'Tickets de Suporte', desc: 'Salas privadas de atendimento com transcrição de histórico.', icon: '🎫' },
+      { id: 'featSelfRole', name: 'Registro de Auto-Cargos', desc: 'Menus de seleção para os membros escolherem cargos.', icon: '🎭' },
+      { id: 'featMusic', name: 'Player de Música', desc: 'Streaming de áudio de alta fidelidade em canais de voz.', icon: '🎵' },
+      { id: 'featAnnouncements', name: 'Anúncios & Eventos', desc: 'Transmissão de comunicados oficiais e eventos.', icon: '📢' }
     ]
   }
 ];
@@ -61,35 +58,40 @@ const GLOBAL_CATEGORIES = [
   {
     category: "⚙️ Sistemas Centrais Globais",
     features: [
-      { id: 'featAfk', name: 'Sistema AFK Global', desc: 'Comando /afk em toda a rede.' },
-      { id: 'featWelcomeDm', name: 'DM de Boas-vindas', desc: 'Mensagem privada a novos membros.' }
+      { id: 'featAfk', name: 'Sistema AFK Global', desc: 'Comando /afk e monitoramento de menções em toda a rede.' },
+      { id: 'featWelcomeDm', name: 'DM de Boas-vindas Global', desc: 'Mensagem privada automática aos novos membros.' }
     ]
   },
   {
     category: "🌍 Master Switches (Trava Absoluta)",
     features: [
-      { id: 'featSocial', name: 'Trava Mestre Insta', desc: 'Derruba o Feed do Instagram globalmente.' },
-      { id: 'featVoiceAi', name: 'Trava Mestre IA', desc: 'Proíbe a IA de voz globalmente.' },
-      { id: 'featRpg', name: 'Trava Mestre RPG', desc: 'Desliga o RPG globalmente.' },
-      { id: 'featEconomy', name: 'Trava Economia', desc: 'Congela lojas e transferências.' },
-      { id: 'featTickets', name: 'Trava Tickets', desc: 'Bloqueia novos atendimentos.' },
-      { id: 'featMusic', name: 'Trava Música', desc: 'Desliga o player de áudio.' },
-      { id: 'antiSpam', name: 'Trava Anti-Spam', desc: 'Desativa o bloqueador globalmente.' }
+      { id: 'featSocial', name: 'Trava Mestre Feed Social', desc: 'Derruba o Feed do Instagram globalmente.' },
+      { id: 'featVoiceAi', name: 'Trava Mestre IA (Callia)', desc: 'Derruba e proíbe a inteligência artificial de voz globalmente.' },
+      { id: 'featRpg', name: 'Trava Mestre RPG', desc: 'Desliga todo o RPG do bot globalmente.' },
+      { id: 'featEconomy', name: 'Trava Economia', desc: 'Congela todas as lojas e transferências de moedas.' },
+      { id: 'featTickets', name: 'Trava Tickets', desc: 'Bloqueia criação de novos atendimentos.' },
+      { id: 'featMusic', name: 'Trava Motor de Música', desc: 'Desliga o player de áudio por segurança.' },
+      { id: 'antiSpam', name: 'Trava Defesa Anti-Spam', desc: 'Desativa o bloqueador de mensagens em massa globalmente.' }
     ]
   }
 ];
 
-// ==========================================
-// ⚙️ 2. CONFIGURAÇÕES DETALHADAS (INPUTS)
-// ==========================================
 const SERVER_SETTINGS = [
   {
-    category: "🤖 Fábrica de IA (Bot do Servidor)",
-    desc: "O Bryan é o bot global. Aqui você cria a personalidade da IA exclusiva deste servidor.",
+    category: "🤖 Fábrica de IA (Bot Customizado)",
+    desc: "Configure a personalidade da IA caso este servidor não possua a Suki.",
     items: [
-      { id: 'aiCustomName', name: 'Nome da sua IA Local', type: 'text', placeholder: 'Ex: Suki, Jarvis, Cortana...' },
-      { id: 'aiCustomVoice', name: 'Voz da IA', type: 'text', placeholder: 'Digite: Feminina ou Masculina' },
-      { id: 'aiSystemPrompt', name: 'Personalidade / Prompt', type: 'textarea', placeholder: 'Ex: Você é a Suki, uma assistente irônica, gótica e que ama roxo. Responda os membros do servidor com sarcasmo...' }
+      { id: 'aiCustomName', name: 'Nome da IA Local', type: 'text', placeholder: 'Ex: Jarvis, Cortana...' },
+      { id: 'aiCustomVoice', name: 'Voz da IA (M/F)', type: 'text', placeholder: 'Masculina ou Feminina' },
+      { id: 'aiSystemPrompt', name: 'Prompt de Comportamento Base', type: 'textarea', placeholder: 'Descreva a personalidade da IA para este servidor...' }
+    ]
+  },
+  {
+    category: "💎 Sistema VIP & Gradientes",
+    desc: "Configuração do ecossistema de apoiadores e benefícios",
+    items: [
+      { id: 'vipRoleId', name: 'Cargo VIP Base (ID)', type: 'text', placeholder: 'ID do cargo que concede os benefícios' },
+      { id: 'vipTicketCategoryId', name: 'Cat. de Gradiente (ID)', type: 'text', placeholder: 'Categoria onde os tickets VIP são criados' }
     ]
   },
   {
@@ -105,38 +107,45 @@ const SERVER_SETTINGS = [
     ]
   },
   {
+    category: "🌌 Rede Aliança Skyline",
+    desc: "Integração oficial do servidor na rede global",
+    items: [
+      { id: 'allianceChannelId', name: 'Canal da Aliança (ID)', type: 'text', placeholder: 'ID do canal para comunicados globais' }
+    ]
+  },
+  {
     category: "📁 Canais de Notificação & Logs",
     desc: "Direcione onde cada sistema do bot enviará avisos",
     items: [
-      { id: 'welcomeChannelId', name: 'Boas-Vindas (ID)', type: 'text', placeholder: 'ID do canal' },
-      { id: 'announcementChannelId', name: 'Anúncios (ID)', type: 'text', placeholder: 'ID do canal' },
-      { id: 'logChannelId', name: 'Logs Gerais (ID)', type: 'text', placeholder: 'ID do canal' },
-      { id: 'levelUpChannelId', name: 'Level Up (ID)', type: 'text', placeholder: 'ID do canal' },
-      { id: 'suggestionChannelId', name: 'Sugestões (ID)', type: 'text', placeholder: 'ID do canal' },
-      { id: 'feedbackChannelId', name: 'Feedback (ID)', type: 'text', placeholder: 'ID do canal' }
+      { id: 'welcomeChannelId', name: 'Canal de Boas-Vindas', type: 'text', placeholder: 'ID do canal' },
+      { id: 'announcementChannelId', name: 'Canal de Anúncios', type: 'text', placeholder: 'ID do canal' },
+      { id: 'logChannelId', name: 'Canal de Logs Gerais', type: 'text', placeholder: 'ID do canal' },
+      { id: 'levelUpChannelId', name: 'Canal de Level Up', type: 'text', placeholder: 'ID do canal' },
+      { id: 'suggestionChannelId', name: 'Canal de Sugestões', type: 'text', placeholder: 'ID do canal' },
+      { id: 'feedbackChannelId', name: 'Canal de Feedback', type: 'text', placeholder: 'ID do canal' }
     ]
   },
   {
     category: "🎫 Sistema de Tickets",
     desc: "Configuração de atendimento e histórico",
     items: [
-      { id: 'ticketCategoryId', name: 'Categoria (ID)', type: 'text', placeholder: 'ID da categoria' },
-      { id: 'ticketLogChannelId', name: 'Canal de Logs (ID)', type: 'text', placeholder: 'ID do canal' }
+      { id: 'ticketCategoryId', name: 'Categoria dos Tickets', type: 'text', placeholder: 'ID da categoria' },
+      { id: 'ticketLogChannelId', name: 'Canal de Transcrições', type: 'text', placeholder: 'ID do canal' }
     ]
   },
   {
-    category: "🛡️ Cargos de Permissão",
+    category: "🛡️ Cargos de Permissão & Moderação",
     desc: "Definição de hierarquia e cargos automáticos",
     items: [
-      { id: 'adminRoleId', name: 'Administrador (ID)', type: 'text', placeholder: 'ID do cargo' },
-      { id: 'modRoleId', name: 'Moderador (ID)', type: 'text', placeholder: 'ID do cargo' },
-      { id: 'autoRoleId', name: 'Auto-Role (ID)', type: 'text', placeholder: 'ID do cargo entregue ao entrar' },
-      { id: 'memberRoleId', name: 'Membro Padrão (ID)', type: 'text', placeholder: 'ID do cargo' },
-      { id: 'mutedRoleId', name: 'Silenciado (ID)', type: 'text', placeholder: 'ID do cargo' }
+      { id: 'adminRoleId', name: 'Cargo de Administrador', type: 'text', placeholder: 'ID do cargo' },
+      { id: 'modRoleId', name: 'Cargo de Moderador', type: 'text', placeholder: 'ID do cargo' },
+      { id: 'autoRoleId', name: 'Cargo Automático (Auto-Role)', type: 'text', placeholder: 'ID do cargo' },
+      { id: 'memberRoleId', name: 'Cargo de Membro Registrado', type: 'text', placeholder: 'ID do cargo' },
+      { id: 'mutedRoleId', name: 'Cargo de Silenciado (Muted)', type: 'text', placeholder: 'ID do cargo' }
     ]
   },
   {
-    category: "💬 Recepção Personalizada",
+    category: "💬 Mensagem de Recepção Personalizada",
     desc: "Configure a mensagem enviada aos novos membros",
     items: [
       { id: 'welcomeMessage', name: 'Texto de Boas-Vindas', type: 'textarea', placeholder: 'Olá {user}, seja muito bem-vindo(a) ao servidor {guild}!' }
@@ -184,35 +193,38 @@ export function startDashboard() {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Bryan Bot — O bot definitivo para o Discord</title>
+  <title>Bryan Bot — Moderação, IA e RPG</title>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <style>
-    :root { --bg: #0B0E14; --card: #161922; --border: #232731; --blurple: #5865F2; --blurple-hover: #4752C4; --text-main: #FFFFFF; --text-muted: #8E929D; }
+    :root { --bg: #111214; --card: #1E1F22; --card-hover: #2B2D31; --border: #313338; --blurple: #5865F2; --blurple-hover: #4752C4; --text: #F2F3F5; --text-muted: #B5BAC1; }
     * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Inter', sans-serif; }
-    body { background-color: var(--bg); color: var(--text-main); overflow-x: hidden; }
-    nav { display: flex; justify-content: space-between; align-items: center; padding: 20px 8%; background: rgba(11, 14, 20, 0.85); backdrop-filter: blur(15px); position: sticky; top: 0; z-index: 1000; border-bottom: 1px solid var(--border); }
-    .brand { display: flex; align-items: center; gap: 12px; text-decoration: none; color: white; font-weight: 800; font-size: 1.2rem; }
-    .brand img { width: 40px; height: 40px; border-radius: 50%; }
-    .nav-links { display: flex; gap: 20px; }
-    .nav-links a { color: var(--text-main); text-decoration: none; font-weight: 500; font-size: 0.95rem; transition: 0.2s; }
-    .nav-links a:hover { color: var(--blurple); }
-    .hero { text-align: center; padding: 120px 20px 80px 20px; background: radial-gradient(circle at 50% -20%, rgba(88, 101, 242, 0.15) 0%, transparent 60%); }
-    .hero h1 { font-size: clamp(2.5rem, 6vw, 4rem); font-weight: 800; letter-spacing: -1px; margin-bottom: 20px; }
-    .hero p { font-size: 1.15rem; color: var(--text-muted); max-width: 600px; margin: 0 auto 40px auto; line-height: 1.6; }
-    .btn { display: inline-flex; align-items: center; padding: 14px 28px; border-radius: 8px; font-weight: 600; font-size: 1rem; text-decoration: none; transition: 0.2s; cursor: pointer; }
-    .btn-primary { background: var(--blurple); color: white; border: none; }
+    body { background: var(--bg); color: var(--text); overflow-x: hidden; line-height: 1.6; }
+    nav { display: flex; justify-content: space-between; align-items: center; padding: 1rem 5%; background: rgba(17, 18, 20, 0.9); backdrop-filter: blur(10px); position: sticky; top: 0; z-index: 1000; border-bottom: 1px solid var(--border); }
+    .brand { display: flex; align-items: center; gap: 12px; font-weight: 800; font-size: 1.25rem; color: white; text-decoration: none; }
+    .brand img { width: 36px; height: 36px; border-radius: 50%; }
+    .nav-links a { color: var(--text-muted); text-decoration: none; font-weight: 600; font-size: 0.95rem; margin-left: 20px; transition: 0.2s; }
+    .nav-links a:hover { color: white; }
+    .nav-links .btn-login { background: var(--blurple); color: white; padding: 8px 18px; border-radius: 4px; margin-left: 20px; }
+    .nav-links .btn-login:hover { background: var(--blurple-hover); }
+    .hero { text-align: center; padding: 120px 20px 80px 20px; position: relative; }
+    .hero::before { content: ''; position: absolute; top: -50%; left: 50%; transform: translateX(-50%); width: 800px; height: 800px; background: radial-gradient(circle, rgba(88,101,242,0.15) 0%, transparent 60%); z-index: -1; }
+    .hero h1 { font-size: clamp(2.5rem, 5vw, 4.5rem); font-weight: 800; letter-spacing: -1.5px; margin-bottom: 20px; line-height: 1.1; }
+    .hero p { font-size: 1.1rem; color: var(--text-muted); max-width: 650px; margin: 0 auto 40px auto; }
+    .btn-group { display: flex; gap: 15px; justify-content: center; flex-wrap: wrap; }
+    .btn { padding: 14px 28px; border-radius: 6px; font-weight: 600; font-size: 1rem; text-decoration: none; transition: 0.2s; display: inline-flex; align-items: center; gap: 8px; }
+    .btn-primary { background: var(--blurple); color: white; }
     .btn-primary:hover { background: var(--blurple-hover); transform: translateY(-2px); }
-    .btn-secondary { background: var(--card); color: white; border: 1px solid var(--border); margin-left: 15px; }
-    .btn-secondary:hover { background: #1C202B; transform: translateY(-2px); }
-    .features-section { padding: 80px 8%; max-width: 1300px; margin: 0 auto; }
-    .section-title { text-align: center; font-size: 2.2rem; font-weight: 800; margin-bottom: 50px; }
-    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 25px; }
-    .card { background: var(--card); border: 1px solid var(--border); padding: 35px; border-radius: 16px; transition: 0.3s; }
-    .card:hover { border-color: var(--blurple); transform: translateY(-5px); box-shadow: 0 10px 30px rgba(88, 101, 242, 0.1); }
-    .icon-wrapper { width: 50px; height: 50px; background: rgba(88, 101, 242, 0.15); border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 24px; margin-bottom: 20px; color: var(--blurple); }
-    .card h3 { font-size: 1.3rem; font-weight: 700; margin-bottom: 12px; }
-    .card p { color: var(--text-muted); line-height: 1.6; font-size: 0.95rem; }
-    footer { text-align: center; padding: 40px; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.9rem; background: var(--card); }
+    .btn-secondary { background: var(--card); color: white; border: 1px solid var(--border); }
+    .btn-secondary:hover { background: var(--card-hover); transform: translateY(-2px); }
+    .features { padding: 80px 5%; max-width: 1200px; margin: 0 auto; }
+    .features-title { text-align: center; font-size: 2rem; font-weight: 800; margin-bottom: 50px; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 20px; }
+    .card { background: var(--card); border: 1px solid var(--border); padding: 30px; border-radius: 12px; transition: 0.3s; }
+    .card:hover { border-color: var(--blurple); transform: translateY(-5px); }
+    .card-icon { width: 50px; height: 50px; background: rgba(88,101,242,0.1); border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 24px; margin-bottom: 20px; }
+    .card h3 { font-size: 1.25rem; font-weight: 700; margin-bottom: 12px; }
+    .card p { color: var(--text-muted); font-size: 0.95rem; }
+    footer { text-align: center; padding: 40px; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.9rem; margin-top: 50px; }
   </style>
 </head>
 <body>
@@ -220,38 +232,58 @@ export function startDashboard() {
     <a href="/" class="brand"><img src="/skylineicon.jpg" alt="Logo"> Bryan Bot</a>
     <div class="nav-links">
       <a href="${botInviteUrl}">Adicionar ao Discord</a>
-      <a href="/login" class="btn btn-primary" style="padding: 8px 18px; margin-left: 15px;">Acessar Painel</a>
+      <a href="/login" class="btn-login">Acessar Painel</a>
     </div>
   </nav>
-  <div class="hero">
+
+  <header class="hero">
     <h1>Suba o nível do seu servidor.</h1>
-    <p>A ferramenta definitiva para a sua comunidade. Inteligência Artificial customizável, Feed do Instagram, RPG completo e moderação blindada.</p>
-    <div>
+    <p>A ferramenta definitiva para a sua comunidade. Inteligência Artificial por voz, Feed do Instagram, RPG completo e ferramentas de moderação blindadas em um só lugar.</p>
+    <div class="btn-group">
       <a href="${botInviteUrl}" class="btn btn-primary">Adicionar ao Discord</a>
       <a href="/login" class="btn btn-secondary">Configurar Bot</a>
     </div>
-  </div>
-  <div class="features-section">
-    <h2 class="section-title">O Ecossistema Skyline</h2>
+  </header>
+
+  <section class="features">
+    <h2 class="features-title">Por que escolher o Bryan?</h2>
     <div class="grid">
       <div class="card">
-        <div class="icon-wrapper">🤖</div>
-        <h3>Fábrica de Inteligência Artificial</h3>
-        <p>Crie a sua própria IA do servidor. Dê um nome, escolha a voz e digite como ela deve se comportar nas chamadas de voz com a comunidade.</p>
+        <div class="card-icon">🎙️</div>
+        <h3>Inteligência Artificial (Voz)</h3>
+        <p>Acesse chamadas de voz com o Bryan ou crie a sua IA exclusiva. O bot escuta, entende e conversa em tempo real.</p>
       </div>
       <div class="card">
-        <div class="icon-wrapper">📸</div>
+        <div class="card-icon">📸</div>
         <h3>Feed Social (Instagram)</h3>
-        <p>Crie uma rede social dentro do servidor. Membros podem postar fotos, seguir amigos, ganhar curtidas e receber notificações automáticas na DM.</p>
+        <p>Crie uma rede social dentro do servidor. Membros podem postar fotos, seguir amigos, ganhar curtidas e comentar.</p>
       </div>
       <div class="card">
-        <div class="icon-wrapper">⚔️</div>
+        <div class="card-icon">⚔️</div>
         <h3>RPG & Economia</h3>
-        <p>Mergulhe em um ecossistema com Dungeons, World Bosses, missões diárias e geração de imagens de perfil customizadas para o seu personagem.</p>
+        <p>Mergulhe em um ecossistema com Dungeons, World Bosses, missões diárias e geração de imagens de perfil customizadas.</p>
+      </div>
+      <div class="card">
+        <div class="card-icon">💎</div>
+        <h3>Sistema VIP</h3>
+        <p>Recompense os apoiadores do seu servidor com cargos exclusivos e geração automática de cores em gradiente.</p>
+      </div>
+      <div class="card">
+        <div class="card-icon">🎫</div>
+        <h3>Sistema de Tickets</h3>
+        <p>Organize o atendimento da sua loja ou comunidade com categorias privativas e salvamento de histórico.</p>
+      </div>
+      <div class="card">
+        <div class="card-icon">🎵</div>
+        <h3>Música FFmpeg</h3>
+        <p>Qualidade de áudio de estúdio para você escutar com os amigos. Suporte a playlists extensas e total controle.</p>
       </div>
     </div>
-  </div>
-  <footer><p>© 2026 Bryan Bot. Feito com ❤️ para a Aliança Skyline.</p></footer>
+  </section>
+
+  <footer>
+    <p>© 2026 Bryan Bot. Feito para a Aliança Skyline.</p>
+  </footer>
 </body>
 </html>`);
   });
@@ -275,7 +307,7 @@ export function startDashboard() {
       const isBotOwner = userId === BOT_OWNER_ID;
       const userRoles = await prisma.allianceServerMember.findMany({ where: { userId } });
 
-      if (!isBotOwner && userRoles.length === 0) return res.status(403).send('<body style="background: #0B0E14; color: #ed4245; text-align: center; padding-top: 150px; font-family: sans-serif;"><h1>🛑 Acesso Negado</h1><p style="color:white;">Sem credenciais ativas na Aliança.</p><br><a href="/" style="color: #5865F2; font-weight: bold;">Voltar</a></body>');
+      if (!isBotOwner && userRoles.length === 0) return res.status(403).send('<body style="background: #111214; color: #ED4245; text-align: center; padding-top: 150px; font-family: sans-serif;"><h1>🛑 Acesso Negado</h1><p style="color:white;">Sem credenciais ativas na Aliança.</p><br><a href="/" style="color: #5865F2; font-weight: bold;">Voltar</a></body>');
 
       res.cookie('skyline_auth', 'permitido', { maxAge: 86400000 }); 
       res.cookie('skyline_userid', userId, { maxAge: 86400000 }); 
@@ -379,64 +411,65 @@ export function startDashboard() {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Dashboard - Bryan</title>
+  <title>Dashboard - Bryan Bot</title>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <style>
-    :root { --bg: #0B0E14; --sidebar: #121620; --card: #1C212B; --border: #2B313E; --blurple: #5865F2; --green: #2ECC71; --red: #ED4245; --text: #FFFFFF; --text-muted: #8E929D; }
+    :root { --bg: #313338; --sidebar: #2B2D31; --header: #313338; --card: #2B2D31; --card-hover: #1E1F22; --border: #1E1F22; --blurple: #5865F2; --blurple-hover: #4752C4; --green: #23A559; --red: #DA373C; --text: #F2F3F5; --text-muted: #B5BAC1; }
     * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Inter', sans-serif; }
     body { background-color: var(--bg); color: var(--text); display: flex; height: 100vh; overflow: hidden; }
     ::-webkit-scrollbar { width: 8px; }
     ::-webkit-scrollbar-track { background: var(--bg); }
-    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
-    .sidebar { width: 280px; background: var(--sidebar); border-right: 1px solid var(--border); display: flex; flex-direction: column; }
-    .brand { padding: 25px; font-size: 1.3rem; font-weight: 700; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 10px; }
-    .brand img { width: 32px; border-radius: 50%; }
-    .nav-items { flex: 1; padding: 20px 15px; display: flex; flex-direction: column; gap: 8px; }
-    .nav-btn { background: transparent; color: var(--text-muted); border: none; padding: 12px 16px; border-radius: 8px; text-align: left; font-size: 0.95rem; font-weight: 500; cursor: pointer; transition: 0.2s; display: flex; align-items: center; gap: 10px; }
+    ::-webkit-scrollbar-thumb { background: #1E1F22; border-radius: 4px; }
+    .sidebar { width: 260px; background: var(--sidebar); display: flex; flex-direction: column; border-right: 1px solid var(--border); }
+    .brand { padding: 20px; font-size: 1.1rem; font-weight: 700; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 10px; color: white; box-shadow: 0 1px 2px rgba(0,0,0,0.2); }
+    .brand img { width: 28px; border-radius: 50%; }
+    .nav-items { flex: 1; padding: 15px; display: flex; flex-direction: column; gap: 5px; }
+    .nav-btn { background: transparent; color: var(--text-muted); border: none; padding: 10px 14px; border-radius: 4px; text-align: left; font-size: 0.95rem; font-weight: 500; cursor: pointer; transition: 0.2s; display: flex; align-items: center; gap: 10px; }
     .nav-btn:hover { background: rgba(255, 255, 255, 0.05); color: var(--text); }
-    .nav-btn.active { background: rgba(88, 101, 242, 0.15); color: var(--blurple); }
-    .user-profile { padding: 20px; border-top: 1px solid var(--border); display: flex; align-items: center; gap: 12px; }
-    .user-profile .avatar { width: 40px; height: 40px; border-radius: 50%; background: #2B313E url('/skylineicon.jpg') center/cover; }
-    .user-profile .info h4 { font-size: 0.9rem; margin-bottom: 2px; }
-    .user-profile .info span { font-size: 0.75rem; color: var(--blurple); background: rgba(88, 101, 242, 0.2); padding: 2px 6px; border-radius: 4px; font-weight: 600;}
-    .main { flex: 1; display: flex; flex-direction: column; }
-    .header { padding: 20px 40px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; background: var(--bg); }
-    .server-selector { display: flex; align-items: center; gap: 15px; }
-    .server-selector label { font-size: 0.9rem; font-weight: 600; color: var(--text-muted); }
-    .server-selector select { background: var(--card); border: 1px solid var(--border); color: var(--text); padding: 10px 15px; border-radius: 8px; outline: none; font-size: 0.95rem; min-width: 200px; cursor: pointer; }
-    .content { padding: 40px; overflow-y: auto; flex: 1; }
+    .nav-btn.active { background: var(--blurple); color: white; }
+    .user-profile { padding: 15px; border-top: 1px solid var(--border); display: flex; align-items: center; gap: 12px; background: #232428; }
+    .user-profile .avatar { width: 36px; height: 36px; border-radius: 50%; background: #1E1F22 url('/skylineicon.jpg') center/cover; }
+    .user-profile .info h4 { font-size: 0.85rem; margin-bottom: 2px; color: white; }
+    .user-profile .info span { font-size: 0.7rem; color: #B5BAC1; }
+    .main { flex: 1; display: flex; flex-direction: column; background: var(--bg); }
+    .header { padding: 15px 30px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; background: var(--sidebar); box-shadow: 0 1px 2px rgba(0,0,0,0.1); }
+    .header h2 { font-size: 1.1rem; font-weight: 600; color: white; }
+    .server-selector select { background: var(--card-hover); border: 1px solid var(--border); color: white; padding: 8px 12px; border-radius: 4px; outline: none; font-size: 0.9rem; min-width: 220px; cursor: pointer; }
+    .server-selector select:focus { border-color: var(--blurple); }
+    .content { padding: 30px 40px; overflow-y: auto; flex: 1; }
     .tab-pane { display: none; }
     .tab-pane.active { display: block; animation: fadeIn 0.3s; }
-    @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
-    .section-title { font-size: 1.5rem; font-weight: 700; margin-bottom: 8px; border-bottom: 1px solid var(--border); padding-bottom: 15px; color: white; }
-    .section-desc { color: var(--text-muted); font-size: 0.9rem; margin-bottom: 25px; margin-top: -5px; }
-    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(350px, 1fr)); gap: 20px; margin-bottom: 50px; }
-    .card-toggle { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 20px; display: flex; justify-content: space-between; align-items: center; transition: 0.2s; }
-    .card-toggle:hover { border-color: var(--blurple); }
-    .card-info { display: flex; align-items: center; gap: 15px; }
-    .card-icon { width: 45px; height: 45px; background: rgba(255,255,255,0.05); border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 20px; }
-    .card-text h3 { font-size: 1rem; margin-bottom: 4px; }
-    .card-text p { font-size: 0.8rem; color: var(--text-muted); line-height: 1.4; max-width: 220px; }
-    .switch { position: relative; width: 44px; height: 24px; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+    .section-title { font-size: 1.25rem; font-weight: 700; margin-bottom: 5px; color: white; }
+    .section-desc { color: var(--text-muted); font-size: 0.9rem; margin-bottom: 20px; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 15px; margin-bottom: 40px; }
+    .card-toggle { background: var(--card); border-radius: 8px; padding: 15px; display: flex; justify-content: space-between; align-items: center; transition: 0.2s; border: 1px solid transparent; }
+    .card-toggle:hover { background: var(--card-hover); border-color: #3f4147; }
+    .card-info { display: flex; align-items: center; gap: 12px; }
+    .card-icon { width: 40px; height: 40px; background: #1E1F22; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 18px; }
+    .card-text h3 { font-size: 0.95rem; margin-bottom: 2px; color: white; }
+    .card-text p { font-size: 0.8rem; color: var(--text-muted); max-width: 200px; line-height: 1.3; }
+    .switch { position: relative; width: 40px; height: 24px; }
     .switch input { opacity: 0; width: 0; height: 0; }
-    .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: var(--text-muted); transition: .3s; border-radius: 34px; }
-    .slider:before { position: absolute; content: ""; height: 18px; width: 18px; left: 3px; bottom: 3px; background-color: white; transition: .3s; border-radius: 50%; }
+    .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #80848E; transition: .3s; border-radius: 34px; }
+    .slider:before { position: absolute; content: ""; height: 18px; width: 18px; left: 3px; bottom: 3px; background-color: white; transition: .3s; border-radius: 50%; box-shadow: 0 2px 4px rgba(0,0,0,0.2); }
     input:checked + .slider { background-color: var(--green); }
-    input:checked + .slider:before { transform: translateX(20px); }
-    .card-input { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 20px; display: flex; flex-direction: column; gap: 12px; }
-    .card-input label { font-size: 0.95rem; font-weight: 600; color: white; }
+    input:checked + .slider:before { transform: translateX(16px); }
+    .card-input { background: var(--card); border-radius: 8px; padding: 15px; display: flex; flex-direction: column; gap: 10px; border: 1px solid transparent; transition: 0.2s; }
+    .card-input:hover { background: var(--card-hover); border-color: #3f4147; }
+    .card-input label { font-size: 0.9rem; font-weight: 600; color: white; }
     .input-group { display: flex; gap: 10px; }
-    .input-group input[type="text"], .input-group input[type="number"], .input-group textarea { flex: 1; background: #121620; border: 1px solid var(--border); color: white; padding: 12px; border-radius: 8px; outline: none; font-size: 0.9rem; transition: 0.2s; }
+    .input-group input[type="text"], .input-group input[type="number"], .input-group textarea { flex: 1; background: #1E1F22; border: 1px solid transparent; color: white; padding: 10px; border-radius: 4px; outline: none; font-size: 0.9rem; transition: 0.2s; }
     .input-group input:focus, .input-group textarea:focus { border-color: var(--blurple); }
     .input-group textarea { resize: vertical; min-height: 80px; }
-    .color-picker-wrapper { width: 42px; height: 42px; border-radius: 8px; overflow: hidden; border: 1px solid var(--border); cursor: pointer; }
+    .color-picker-wrapper { width: 38px; height: 38px; border-radius: 4px; overflow: hidden; border: 1px solid #1E1F22; cursor: pointer; }
     .color-picker-wrapper input { width: 200%; height: 200%; transform: translate(-25%, -25%); cursor: pointer; }
-    .btn-save { background: var(--blurple); color: white; border: none; padding: 0 20px; border-radius: 8px; font-weight: 600; cursor: pointer; transition: 0.2s; }
+    .btn-save { background: var(--blurple); color: white; border: none; padding: 0 15px; border-radius: 4px; font-weight: 500; font-size: 0.9rem; cursor: pointer; transition: 0.2s; white-space: nowrap; }
     .btn-save:hover { background: var(--blurple-hover); }
-    .tag-container { display: flex; gap: 8px; margin-top: 5px; }
-    .tag { background: rgba(255,255,255,0.1); color: var(--text-muted); font-size: 0.75rem; padding: 4px 8px; border-radius: 4px; cursor: pointer; transition: 0.2s; }
+    .tag-container { display: flex; gap: 6px; margin-top: 5px; flex-wrap: wrap; }
+    .tag { background: #1E1F22; color: var(--text-muted); font-size: 0.75rem; padding: 4px 8px; border-radius: 4px; cursor: pointer; transition: 0.2s; border: 1px solid transparent; }
     .tag:hover { background: var(--blurple); color: white; }
-    #toast { visibility: hidden; min-width: 250px; background: var(--green); color: white; text-align: center; border-radius: 8px; padding: 15px; position: fixed; right: 30px; bottom: 30px; font-weight: 600; opacity: 0; transition: 0.3s; z-index: 1000; box-shadow: 0 4px 15px rgba(0,0,0,0.3); }
+    #toast { visibility: hidden; min-width: 250px; background: var(--green); color: white; text-align: center; border-radius: 4px; padding: 12px 20px; position: fixed; right: 30px; bottom: 30px; font-weight: 500; font-size: 0.95rem; opacity: 0; transition: 0.3s; z-index: 1000; box-shadow: 0 4px 15px rgba(0,0,0,0.2); }
     #toast.error { background: var(--red); }
     #toast.show { visibility: visible; opacity: 1; transform: translateY(-10px); }
   </style>
@@ -447,21 +480,20 @@ export function startDashboard() {
     <div class="nav-items">
       <button class="nav-btn active" onclick="switchTab('modulos', this)">🧩 Módulos do Servidor</button>
       <button class="nav-btn" onclick="switchTab('configs', this)">⚙️ Configurações Gerais</button>
-      ${userId === BOT_OWNER_ID ? `<button class="nav-btn" onclick="switchTab('global', this)">🌍 Travas Globais (Dono)</button>` : ''}
+      ${userId === BOT_OWNER_ID ? `<button class="nav-btn" onclick="switchTab('global', this)">🌍 Travas Globais</button>` : ''}
     </div>
     <div class="user-profile">
       <div class="avatar"></div>
       <div class="info">
         <h4>${userName}</h4>
-        <span>${userId === BOT_OWNER_ID ? 'Dono do Bot' : 'Admin'}</span>
+        <span>${userId === BOT_OWNER_ID ? 'Dono do Bot' : 'Admin do Servidor'}</span>
       </div>
     </div>
   </div>
   <div class="main">
     <div class="header">
-      <h2 style="font-size: 1.2rem; font-weight: 600;">Painel de Controle</h2>
+      <h2>Painel de Controle</h2>
       <div class="server-selector">
-        <label>Servidor Atual:</label>
         <select id="serverSelect" onchange="loadConfig()">${serverOptionsHTML}</select>
       </div>
     </div>
@@ -480,7 +512,7 @@ export function startDashboard() {
 
     function intToHex(num, fallback = '#5865F2') {
       if (num === null || num === undefined || isNaN(num)) return fallback;
-      return '#' + num.toString(16).padStart(6, '0');
+      return '#' + num.toString(16).padStart(6, '0').toUpperCase();
     }
 
     function switchTab(tabId, btn) {
@@ -498,13 +530,10 @@ export function startDashboard() {
     async function loadConfig() {
       const guildId = document.getElementById('serverSelect').value;
       if (!guildId) return;
-
       const res = await fetch('/api/config?guildId=' + guildId);
       const data = await res.json();
-
       renderModules('modulos', SERVER_CATEGORIES, data.serverConfig, 'server');
       renderSettings('configs', SERVER_SETTINGS, data.serverConfig, 'server');
-
       if (data.isOwner && document.getElementById('global')) {
         let globalHtml = '';
         globalHtml += generateModulesHtml(GLOBAL_CATEGORIES, data.globalConfig, 'global');
@@ -544,13 +573,12 @@ export function startDashboard() {
         cat.items.forEach(item => {
           const inputId = 'input_' + type + '_' + item.id;
           const rawVal = dbData ? dbData[item.id] : null;
-
           if (item.type === 'color') {
-            const hexColor = intToHex(rawVal, '#5865F2');
+            const hexColor = intToHex(rawVal, '#E1306C');
             html += '<div class="card-input">' +
                       '<label>' + item.name + '</label>' +
                       '<div class="input-group">' +
-                        '<div class="color-picker-wrapper"><input type="color" value="' + hexColor + '" oninput="document.getElementById(\\'' + inputId + '\\').value = this.value"></div>' +
+                        '<div class="color-picker-wrapper"><input type="color" value="' + hexColor + '" oninput="document.getElementById(\\'' + inputId + '\\').value = this.value.toUpperCase()"></div>' +
                         '<input type="text" id="' + inputId + '" value="' + hexColor + '">' +
                         '<button class="btn-save" onclick="saveSetting(\\'' + type + '\\', \\'' + item.id + '\\', \\'' + inputId + '\\', \\'color\\')">Salvar</button>' +
                       '</div>' +
@@ -584,24 +612,20 @@ export function startDashboard() {
       return html;
     }
 
-    function renderModules(containerId, categories, dbData, type) {
-      document.getElementById(containerId).innerHTML = generateModulesHtml(categories, dbData, type);
-    }
-    function renderSettings(containerId, categories, dbData, type) {
-      document.getElementById(containerId).innerHTML = generateSettingsHtml(categories, dbData, type);
-    }
+    function renderModules(containerId, categories, dbData, type) { document.getElementById(containerId).innerHTML = generateModulesHtml(categories, dbData, type); }
+    function renderSettings(containerId, categories, dbData, type) { document.getElementById(containerId).innerHTML = generateSettingsHtml(categories, dbData, type); }
 
     async function toggleFeature(type, feature, state) {
       const guildId = document.getElementById('serverSelect').value;
       const res = await fetch('/api/toggle', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type, guildId, feature, state }) });
-      res.ok ? showToast('Módulo atualizado!') : showToast('Falha ao salvar.', true);
+      res.ok ? showToast('Módulo atualizado com sucesso!') : showToast('Falha ao salvar módulo.', true);
     }
 
     async function saveSetting(type, feature, inputId, valueType) {
       const guildId = document.getElementById('serverSelect').value;
       const value = document.getElementById(inputId).value;
       const res = await fetch('/api/update', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type, guildId, feature, value, valueType }) });
-      res.ok ? showToast('Configuração salva com sucesso!') : showToast('Erro ao salvar.', true);
+      res.ok ? showToast('Configuração salva com sucesso!') : showToast('Erro ao atualizar configuração.', true);
     }
 
     function showToast(msg, isError = false) {

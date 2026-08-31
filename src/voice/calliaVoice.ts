@@ -96,9 +96,8 @@ async function transcribe(wav: Buffer): Promise<string> {
   return data.text?.trim() ?? '';
 }
 
-// 🤖 O BOT FALA: STREAMELEMENTS (Corrigido com Anti-Bloqueio)
+// 🤖 O BOT FALA: STREAMELEMENTS
 async function synthesize(text: string, persona: CalliaPersona, guildId: string): Promise<Buffer> {
-  // Define a voz baseada no personagem escolhido ou painel
   let voice = 'Vitoria'; // Padrão Feminino
   
   if (persona === 'bryan') {
@@ -106,15 +105,15 @@ async function synthesize(text: string, persona: CalliaPersona, guildId: string)
   } else if (persona === 'custom') {
     try {
       const cfg = await prisma.guildConfig.findUnique({ where: { guildId } });
-      // Se no painel estiver configurado como Masculina ("M", "m", "masc"), muda para Ricardo
       if (cfg?.aiCustomVoice && cfg.aiCustomVoice.toLowerCase().startsWith('m')) {
         voice = 'Ricardo';
       }
-    } catch (e) { console.error('Erro ao ler voz customizada', e); }
+    } catch (e) {}
   }
 
-  // Corta em pedaços de 400 caracteres para não sobrecarregar a API
-  const chunks = text.match(/.{1,400}(\s|$|[.?!])/g) || [text];
+  // 💡 A CORREÇÃO: Cortar em MÁXIMO de 150 caracteres. 
+  // O limite da API é ~200. Com 150 nós garantimos que a voz do Ricardo vai gerar sem tomar block!
+  const chunks = text.match(/[\s\S]{1,150}(?!\w)|[\s\S]{1,150}/g) || [text];
   
   const audioBuffers: Buffer[] = [];
   let streamElementsFailed = false;
@@ -127,15 +126,14 @@ async function synthesize(text: string, persona: CalliaPersona, guildId: string)
       
       const response = await fetch(url, {
         headers: {
-          // Engana o Cloudflare fingindo ser um navegador real
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
         }
       });
-      
+
       const contentType = response.headers.get('content-type');
 
       if (!response.ok || !contentType?.includes('audio')) {
-        console.error(`[CALLIA] Bloqueio na StreamElements. Status: ${response.status}`);
+        console.error(`[CALLIA] Bloqueio StreamElements! Status: ${response.status}`);
         streamElementsFailed = true;
         break;
       }
@@ -143,10 +141,10 @@ async function synthesize(text: string, persona: CalliaPersona, guildId: string)
       const arrayBuffer = await response.arrayBuffer();
       audioBuffers.push(Buffer.from(arrayBuffer));
 
-      // Pequena pausa para evitar bloqueio por Rate Limit na API Gratuita
-      await new Promise(r => setTimeout(r, 300));
+      // Pausa leve para não dar Rate Limit na API
+      await new Promise(r => setTimeout(r, 200));
     } catch (e) {
-      console.error('[CALLIA] Falha de conexão com a StreamElements:', e);
+      console.error('[CALLIA] Falha de conexão StreamElements:', e);
       streamElementsFailed = true;
       break;
     }
@@ -156,20 +154,16 @@ async function synthesize(text: string, persona: CalliaPersona, guildId: string)
     return Buffer.concat(audioBuffers);
   }
 
-  // 🚨 PLANO B: GOOGLE TRADUTOR (Se a StreamElements estiver fora do ar)
-  console.log('[CALLIA] Ativando Plano B: Voz do Google Tradutor...');
+  // PLANO B: Se a internet piscar ou a API cair, ele vai pro Google.
+  console.log('[CALLIA] Ativando Plano B: Voz do Google Tradutor (Apenas Feminina)...');
   const fallbackBuffers: Buffer[] = [];
 
   for (const chunk of chunks) {
     if (!chunk.trim()) continue;
-
     const url = `https://translate.google.com/translate_tts?ie=UTF-8&client=tw-ob&tl=pt-BR&q=${encodeURIComponent(chunk.trim())}`;
     const response = await fetch(url, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-      }
+      headers: { 'User-Agent': 'Mozilla/5.0' }
     });
-
     if (response.ok) {
       const arrayBuffer = await response.arrayBuffer();
       fallbackBuffers.push(Buffer.from(arrayBuffer));

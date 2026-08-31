@@ -11,45 +11,45 @@ const SERVER_CATEGORIES = [
     category: "🤖 Inteligência Artificial",
     desc: "Sistemas de voz e conversação avançada",
     features: [
-      { id: 'featVoiceAi', name: 'Callia (IA de Voz)', desc: 'Permite que os membros chamem o Bryan ou a Suki nas calls.', icon: '🎙️' }
+      { id: 'featVoiceAi', name: 'Callia (IA de Voz)', desc: 'Permite que os membros chamem o Bryan ou a IA Local.', icon: '🎙️' }
     ]
   },
   {
     category: "📸 Social & Comunidade",
     desc: "Engajamento, interações e rede social interna",
     features: [
-      { id: 'featSocial', name: 'Feed Social / Instagram', desc: 'Postagens automáticas de fotos com curtidas, comentários e avisos no PV.', icon: '📸' },
-      { id: 'featLeveling', name: 'Sistema de XP & Leveling', desc: 'Progressão por mensagens e avisos em canais ou fóruns.', icon: '⭐' },
-      { id: 'featGiveaways', name: 'Sorteios', desc: 'Sorteios automatizados com encerramento programado.', icon: '🎁' },
-      { id: 'featPolls', name: 'Enquetes Interativas', desc: 'Votações com contagem de votos e estatísticas.', icon: '📊' }
+      { id: 'featSocial', name: 'Feed Social / Instagram', desc: 'Postagens de fotos com curtidas e comentários.', icon: '📸' },
+      { id: 'featLeveling', name: 'Sistema de XP & Leveling', desc: 'Progressão por mensagens e avisos.', icon: '⭐' },
+      { id: 'featGiveaways', name: 'Sorteios', desc: 'Sorteios automatizados.', icon: '🎁' },
+      { id: 'featPolls', name: 'Enquetes Interativas', desc: 'Votações com estatísticas.', icon: '📊' }
     ]
   },
   {
     category: "⚔️ RPG & Economia",
     desc: "Sistemas de progressão, missões e mercado",
     features: [
-      { id: 'featRpg', name: 'Sistema RPG (Geral)', desc: 'Ativa/desativa todo o ecossistema RPG no Discord.', icon: '⚔️' },
-      { id: 'featEconomy', name: 'Economia & Loja', desc: 'Sistema de moedas, transferências e loja de itens.', icon: '🪙' },
-      { id: 'featMissions', name: 'Missões Diárias', desc: 'Desafios automáticos com recompensas em XP e coins.', icon: '📜' }
+      { id: 'featRpg', name: 'Sistema RPG', desc: 'Ativa todo o ecossistema RPG.', icon: '⚔️' },
+      { id: 'featEconomy', name: 'Economia & Loja', desc: 'Sistema de moedas e loja de itens.', icon: '🪙' },
+      { id: 'featMissions', name: 'Missões Diárias', desc: 'Desafios automáticos com recompensas.', icon: '📜' }
     ]
   },
   {
     category: "🛡️ Segurança & Moderação",
     desc: "Proteção em tempo real contra ataques e spam",
     features: [
-      { id: 'featMod', name: 'Módulo de Moderação', desc: 'Comandos administrativos, ban, kick, warns e auditoria.', icon: '🔨' },
-      { id: 'antiSpam', name: 'Defesa Anti-Spam', desc: 'Detecta e bloqueia envio rápido e repetitivo de mensagens.', icon: '⚡' },
-      { id: 'antiLinks', name: 'Filtro Anti-Links', desc: 'Remove automaticamente convites externos e links suspeitos.', icon: '🔗' }
+      { id: 'featMod', name: 'Módulo de Moderação', desc: 'Comandos administrativos, ban, kick e warns.', icon: '🔨' },
+      { id: 'antiSpam', name: 'Defesa Anti-Spam', desc: 'Bloqueia envio rápido de mensagens.', icon: '⚡' },
+      { id: 'antiLinks', name: 'Filtro Anti-Links', desc: 'Remove convites e links suspeitos.', icon: '🔗' }
     ]
   },
   {
     category: "🎫 Atendimento & Utilidades",
     desc: "Suporte aos membros e streaming",
     features: [
-      { id: 'featTickets', name: 'Tickets de Suporte', desc: 'Salas privadas de atendimento com transcrição de histórico.', icon: '🎫' },
-      { id: 'featSelfRole', name: 'Registro de Auto-Cargos', desc: 'Menus de seleção para os membros escolherem cargos.', icon: '🎭' },
-      { id: 'featMusic', name: 'Player de Música', desc: 'Streaming de áudio de alta fidelidade em canais de voz.', icon: '🎵' },
-      { id: 'featAnnouncements', name: 'Anúncios & Eventos', desc: 'Transmissão de comunicados oficiais e eventos.', icon: '📢' }
+      { id: 'featTickets', name: 'Tickets de Suporte', desc: 'Salas privadas de atendimento.', icon: '🎫' },
+      { id: 'featSelfRole', name: 'Registro de Auto-Cargos', desc: 'Menus de seleção para cargos.', icon: '🎭' },
+      { id: 'featMusic', name: 'Player de Música', desc: 'Streaming de áudio em canais de voz.', icon: '🎵' },
+      { id: 'featAnnouncements', name: 'Anúncios & Eventos', desc: 'Transmissão de comunicados.', icon: '📢' }
     ]
   }
 ];
@@ -58,25 +58,32 @@ const GLOBAL_CATEGORIES = [
   {
     category: "⚙️ Sistemas Centrais Globais",
     features: [
-      { id: 'featAfk', name: 'Sistema AFK Global', desc: 'Comando /afk e monitoramento de menções em toda a rede.' },
-      { id: 'featWelcomeDm', name: 'DM de Boas-vindas Global', desc: 'Mensagem privada automática aos novos membros.' }
+      { id: 'featAfk', name: 'Sistema AFK Global', desc: 'Comando /afk e monitoramento de menções.' },
+      { id: 'featWelcomeDm', name: 'DM de Boas-vindas', desc: 'Mensagem privada automática aos novos membros.' }
     ]
   },
   {
     category: "🌍 Master Switches (Trava Absoluta)",
     features: [
       { id: 'featSocial', name: 'Trava Mestre Feed Social', desc: 'Derruba o Feed do Instagram globalmente.' },
-      { id: 'featVoiceAi', name: 'Trava Mestre IA (Callia)', desc: 'Derruba e proíbe a inteligência artificial de voz globalmente.' },
+      { id: 'featVoiceAi', name: 'Trava Mestre IA', desc: 'Proíbe a inteligência artificial globalmente.' },
       { id: 'featRpg', name: 'Trava Mestre RPG', desc: 'Desliga todo o RPG do bot globalmente.' },
-      { id: 'featEconomy', name: 'Trava Economia', desc: 'Congela todas as lojas e transferências de moedas.' },
+      { id: 'featEconomy', name: 'Trava Economia', desc: 'Congela lojas e transferências de moedas.' },
       { id: 'featTickets', name: 'Trava Tickets', desc: 'Bloqueia criação de novos atendimentos.' },
-      { id: 'featMusic', name: 'Trava Motor de Música', desc: 'Desliga o player de áudio por segurança.' },
-      { id: 'antiSpam', name: 'Trava Defesa Anti-Spam', desc: 'Desativa o bloqueador de mensagens em massa globalmente.' }
+      { id: 'featMusic', name: 'Trava Música', desc: 'Desliga o player de áudio por segurança.' },
+      { id: 'antiSpam', name: 'Trava Defesa Anti-Spam', desc: 'Desativa o bloqueador de mensagens em massa.' }
     ]
   }
 ];
 
 const SERVER_SETTINGS = [
+  {
+    category: "💬 Recepção Personalizada (Boas-Vindas)",
+    desc: "Crie um embed rico para receber os novos membros no servidor.",
+    items: [
+      { id: 'welcomeMessage', name: 'Construtor de Embed', type: 'embed_builder', placeholder: '' }
+    ]
+  },
   {
     category: "🤖 Fábrica de IA (Bot Customizado)",
     desc: "Configure a personalidade da IA caso este servidor não possua a Suki.",
@@ -90,8 +97,8 @@ const SERVER_SETTINGS = [
     category: "💎 Sistema VIP & Gradientes",
     desc: "Configuração do ecossistema de apoiadores e benefícios",
     items: [
-      { id: 'vipRoleId', name: 'Cargo VIP Base (ID)', type: 'text', placeholder: 'ID do cargo que concede os benefícios' },
-      { id: 'vipTicketCategoryId', name: 'Cat. de Gradiente (ID)', type: 'text', placeholder: 'Categoria onde os tickets VIP são criados' }
+      { id: 'vipRoleId', name: 'Cargo VIP Base (ID)', type: 'text', placeholder: 'ID do cargo' },
+      { id: 'vipTicketCategoryId', name: 'Cat. de Gradiente (ID)', type: 'text', placeholder: 'Categoria de tickets' }
     ]
   },
   {
@@ -110,7 +117,7 @@ const SERVER_SETTINGS = [
     category: "🌌 Rede Aliança Skyline",
     desc: "Integração oficial do servidor na rede global",
     items: [
-      { id: 'allianceChannelId', name: 'Canal da Aliança (ID)', type: 'text', placeholder: 'ID do canal para comunicados globais' }
+      { id: 'allianceChannelId', name: 'Canal da Aliança (ID)', type: 'text', placeholder: 'ID do canal' }
     ]
   },
   {
@@ -139,16 +146,9 @@ const SERVER_SETTINGS = [
     items: [
       { id: 'adminRoleId', name: 'Cargo de Administrador', type: 'text', placeholder: 'ID do cargo' },
       { id: 'modRoleId', name: 'Cargo de Moderador', type: 'text', placeholder: 'ID do cargo' },
-      { id: 'autoRoleId', name: 'Cargo Automático (Auto-Role)', type: 'text', placeholder: 'ID do cargo' },
-      { id: 'memberRoleId', name: 'Cargo de Membro Registrado', type: 'text', placeholder: 'ID do cargo' },
-      { id: 'mutedRoleId', name: 'Cargo de Silenciado (Muted)', type: 'text', placeholder: 'ID do cargo' }
-    ]
-  },
-  {
-    category: "💬 Mensagem de Recepção Personalizada",
-    desc: "Configure a mensagem enviada aos novos membros",
-    items: [
-      { id: 'welcomeMessage', name: 'Texto de Boas-Vindas', type: 'textarea', placeholder: 'Olá {user}, seja muito bem-vindo(a) ao servidor {guild}!' }
+      { id: 'autoRoleId', name: 'Cargo Automático', type: 'text', placeholder: 'ID do cargo' },
+      { id: 'memberRoleId', name: 'Membro Registrado', type: 'text', placeholder: 'ID do cargo' },
+      { id: 'mutedRoleId', name: 'Silenciado (Muted)', type: 'text', placeholder: 'ID do cargo' }
     ]
   }
 ];
@@ -158,10 +158,10 @@ const GLOBAL_SETTINGS = [
     category: "🎨 Identidade Visual Global",
     desc: "Personalização de rodapés e cores em todos os servidores",
     items: [
-      { id: 'footerText', name: 'Texto de Rodapé Padrão', type: 'text', placeholder: 'Aparece nos embeds gerais' },
-      { id: 'rpFooterText', name: 'Rodapé Roleplay', type: 'text', placeholder: 'Aparece nos comandos de /rp' },
-      { id: 'botIconUrl', name: 'URL do Ícone do Bot', type: 'text', placeholder: 'Link direto da imagem do ícone' },
-      { id: 'primaryColor', name: 'Cor Primária dos Embeds', type: 'color', placeholder: '#5865F2' }
+      { id: 'footerText', name: 'Texto de Rodapé Padrão', type: 'text', placeholder: 'Aparece nos embeds' },
+      { id: 'rpFooterText', name: 'Rodapé Roleplay', type: 'text', placeholder: 'Aparece no /rp' },
+      { id: 'botIconUrl', name: 'URL do Ícone do Bot', type: 'text', placeholder: 'Link da imagem' },
+      { id: 'primaryColor', name: 'Cor Primária', type: 'color', placeholder: '#5865F2' }
     ]
   }
 ];
@@ -235,7 +235,6 @@ export function startDashboard() {
       <a href="/login" class="btn-login">Acessar Painel</a>
     </div>
   </nav>
-
   <header class="hero">
     <h1>Suba o nível do seu servidor.</h1>
     <p>A ferramenta definitiva para a sua comunidade. Inteligência Artificial por voz, Feed do Instagram, RPG completo e ferramentas de moderação blindadas em um só lugar.</p>
@@ -244,46 +243,18 @@ export function startDashboard() {
       <a href="/login" class="btn btn-secondary">Configurar Bot</a>
     </div>
   </header>
-
   <section class="features">
     <h2 class="features-title">Por que escolher o Bryan?</h2>
     <div class="grid">
-      <div class="card">
-        <div class="card-icon">🎙️</div>
-        <h3>Inteligência Artificial (Voz)</h3>
-        <p>Acesse chamadas de voz com o Bryan ou crie a sua IA exclusiva. O bot escuta, entende e conversa em tempo real.</p>
-      </div>
-      <div class="card">
-        <div class="card-icon">📸</div>
-        <h3>Feed Social (Instagram)</h3>
-        <p>Crie uma rede social dentro do servidor. Membros podem postar fotos, seguir amigos, ganhar curtidas e comentar.</p>
-      </div>
-      <div class="card">
-        <div class="card-icon">⚔️</div>
-        <h3>RPG & Economia</h3>
-        <p>Mergulhe em um ecossistema com Dungeons, World Bosses, missões diárias e geração de imagens de perfil customizadas.</p>
-      </div>
-      <div class="card">
-        <div class="card-icon">💎</div>
-        <h3>Sistema VIP</h3>
-        <p>Recompense os apoiadores do seu servidor com cargos exclusivos e geração automática de cores em gradiente.</p>
-      </div>
-      <div class="card">
-        <div class="card-icon">🎫</div>
-        <h3>Sistema de Tickets</h3>
-        <p>Organize o atendimento da sua loja ou comunidade com categorias privativas e salvamento de histórico.</p>
-      </div>
-      <div class="card">
-        <div class="card-icon">🎵</div>
-        <h3>Música FFmpeg</h3>
-        <p>Qualidade de áudio de estúdio para você escutar com os amigos. Suporte a playlists extensas e total controle.</p>
-      </div>
+      <div class="card"><div class="card-icon">🎙️</div><h3>Inteligência Artificial</h3><p>Acesse chamadas de voz com o Bryan ou crie a sua IA exclusiva.</p></div>
+      <div class="card"><div class="card-icon">📸</div><h3>Feed Social (Instagram)</h3><p>Crie uma rede social dentro do servidor com notificações.</p></div>
+      <div class="card"><div class="card-icon">⚔️</div><h3>RPG & Economia</h3><p>Ecossistema com Dungeons, World Bosses e missões diárias.</p></div>
+      <div class="card"><div class="card-icon">💎</div><h3>Sistema VIP</h3><p>Recompense os apoiadores com cargos e gradientes exclusivos.</p></div>
+      <div class="card"><div class="card-icon">🎫</div><h3>Sistema de Tickets</h3><p>Organize o atendimento com salvamento de histórico.</p></div>
+      <div class="card"><div class="card-icon">🎵</div><h3>Música FFmpeg</h3><p>Qualidade de áudio de estúdio para escutar com os amigos.</p></div>
     </div>
   </section>
-
-  <footer>
-    <p>© 2026 Bryan Bot. Feito para a Aliança Skyline.</p>
-  </footer>
+  <footer><p>© 2026 Bryan Bot. Feito para a Aliança Skyline.</p></footer>
 </body>
 </html>`);
   });
@@ -469,6 +440,21 @@ export function startDashboard() {
     .tag-container { display: flex; gap: 6px; margin-top: 5px; flex-wrap: wrap; }
     .tag { background: #1E1F22; color: var(--text-muted); font-size: 0.75rem; padding: 4px 8px; border-radius: 4px; cursor: pointer; transition: 0.2s; border: 1px solid transparent; }
     .tag:hover { background: var(--blurple); color: white; }
+    
+    /* Discord Live Preview Styles */
+    .discord-preview { background: #313338; border-radius: 6px; padding: 15px; margin-top: 10px; border: 1px solid #1E1F22; }
+    .discord-msg-header { display: flex; align-items: center; gap: 10px; margin-bottom: 5px; }
+    .discord-msg-avatar { width: 40px; height: 40px; border-radius: 50%; background: var(--blurple); }
+    .discord-msg-name { color: #F2F3F5; font-weight: 500; font-size: 1rem; }
+    .discord-msg-time { color: #80848E; font-size: 0.75rem; margin-left: 5px; }
+    .discord-embed { border-left: 4px solid var(--blurple); background: #2B2D31; border-radius: 4px; padding: 12px 16px; margin-top: 5px; max-width: 430px; display: flex; flex-direction: column; gap: 8px; }
+    .discord-embed-title { color: #FFFFFF; font-weight: 600; font-size: 1rem; }
+    .discord-embed-desc { color: #DBDEE1; font-size: 0.875rem; white-space: pre-wrap; line-height: 1.3; }
+    .discord-embed-thumb { float: right; max-width: 80px; max-height: 80px; border-radius: 4px; margin-left: 15px; }
+    .discord-embed-image { max-width: 100%; border-radius: 4px; margin-top: 8px; }
+    .discord-embed-body { display: flex; justify-content: space-between; }
+    .discord-mention { color: #C9CDD2; background: rgba(88, 101, 242, 0.3); padding: 0 3px; border-radius: 3px; font-weight: 500; }
+
     #toast { visibility: hidden; min-width: 250px; background: var(--green); color: white; text-align: center; border-radius: 4px; padding: 12px 20px; position: fixed; right: 30px; bottom: 30px; font-weight: 500; font-size: 0.95rem; opacity: 0; transition: 0.3s; z-index: 1000; box-shadow: 0 4px 15px rgba(0,0,0,0.2); }
     #toast.error { background: var(--red); }
     #toast.show { visibility: visible; opacity: 1; transform: translateY(-10px); }
@@ -540,6 +526,14 @@ export function startDashboard() {
         globalHtml += generateSettingsHtml(GLOBAL_SETTINGS, data.globalConfig, 'global');
         document.getElementById('global').innerHTML = globalHtml;
       }
+      
+      // Iniciar os previews dos Embed Builders
+      setTimeout(() => {
+        document.querySelectorAll('.embed-builder-desc').forEach(el => {
+           const id = el.id.replace('_desc', '');
+           updatePreview(id);
+        });
+      }, 200);
     }
 
     function generateModulesHtml(categories, dbData, type) {
@@ -569,11 +563,54 @@ export function startDashboard() {
       categories.forEach(cat => {
         html += '<h2 class="section-title">' + cat.category + '</h2>';
         if (cat.desc) html += '<p class="section-desc">' + cat.desc + '</p>';
-        html += '<div class="grid">';
+        html += '<div class="grid" ' + (cat.items.some(i => i.type === 'embed_builder') ? 'style="display: flex; flex-direction: column;"' : '') + '>';
         cat.items.forEach(item => {
           const inputId = 'input_' + type + '_' + item.id;
           const rawVal = dbData ? dbData[item.id] : null;
-          if (item.type === 'color') {
+
+          if (item.type === 'embed_builder') {
+            let parsed = { title: '', description: '', color: '#5865F2', thumbnail: '', image: '' };
+            if (rawVal) {
+              try { parsed = rawVal.startsWith('{') ? JSON.parse(rawVal) : { title: '', description: rawVal, color: '#5865F2', thumbnail: '', image: '' }; } catch(e) {}
+            }
+            html += '<div class="card-input" style="width: 100%;">' +
+                      '<label>🛠️ Construtor de Embed</label>' +
+                      '<div style="display: flex; gap: 30px; flex-wrap: wrap; margin-top: 5px;">' +
+                        '<div style="flex: 1; min-width: 300px; display: flex; flex-direction: column; gap: 12px;">' +
+                          '<div class="input-group"><input type="text" id="' + inputId + '_title" placeholder="Título (Opcional)" value="' + (parsed.title || '') + '" oninput="updatePreview(\\'' + inputId + '\\')"></div>' +
+                          '<div class="input-group"><textarea id="' + inputId + '_desc" class="embed-builder-desc" placeholder="Descrição (Use {user}, {guild}, {memberCount})" oninput="updatePreview(\\'' + inputId + '\\')" style="min-height: 120px;">' + (parsed.description || '') + '</textarea></div>' +
+                          '<div class="input-group">' +
+                             '<div class="color-picker-wrapper"><input type="color" id="' + inputId + '_color" value="' + (parsed.color || '#5865F2') + '" oninput="document.getElementById(\\'' + inputId + '_color_text\\').value = this.value.toUpperCase(); updatePreview(\\'' + inputId + '\\')"></div>' +
+                             '<input type="text" id="' + inputId + '_color_text" value="' + (parsed.color || '#5865F2') + '" oninput="document.getElementById(\\'' + inputId + '_color\\').value = this.value; updatePreview(\\'' + inputId + '\\')">' +
+                          '</div>' +
+                          '<div class="input-group"><input type="text" id="' + inputId + '_thumb" placeholder="URL da Thumbnail (Opcional)" value="' + (parsed.thumbnail || '') + '" oninput="updatePreview(\\'' + inputId + '\\')"></div>' +
+                          '<div class="input-group"><input type="text" id="' + inputId + '_img" placeholder="URL da Imagem Maior (Opcional)" value="' + (parsed.image || '') + '" oninput="updatePreview(\\'' + inputId + '\\')"></div>' +
+                          '<div class="tag-container" style="margin-top:0;">' +
+                            '<span class="tag" onclick="insertTag(\\'' + inputId + '_desc\\', \\'{user}\\'); updatePreview(\\'' + inputId + '\\')">+{user}</span>' +
+                            '<span class="tag" onclick="insertTag(\\'' + inputId + '_desc\\', \\'{guild}\\'); updatePreview(\\'' + inputId + '\\')">+{guild}</span>' +
+                            '<span class="tag" onclick="insertTag(\\'' + inputId + '_desc\\', \\'{memberCount}\\'); updatePreview(\\'' + inputId + '\\')">+{memberCount}</span>' +
+                          '</div>' +
+                          '<button class="btn-save" style="margin-top: 10px; padding: 12px;" onclick="saveEmbedBuilder(\\'' + type + '\\', \\'' + item.id + '\\', \\'' + inputId + '\\')">💾 Salvar Embed</button>' +
+                        '</div>' +
+                        '<div style="flex: 1; min-width: 320px;">' +
+                          '<label style="color: var(--text-muted); font-size: 0.8rem; margin-bottom: 5px; display: block;">Preview em Tempo Real</label>' +
+                          '<div class="discord-preview">' +
+                            '<div class="discord-msg-header"><div class="discord-msg-avatar"></div><div><span class="discord-msg-name">Bryan Bot</span><span class="discord-msg-time">Hoje às 12:00</span></div></div>' +
+                            '<div class="discord-embed" id="' + inputId + '_preview_card" style="border-left-color: ' + (parsed.color || '#5865F2') + ';">' +
+                              '<div class="discord-embed-body">' +
+                                '<div style="flex: 1;">' +
+                                  '<div class="discord-embed-title" id="' + inputId + '_preview_title"></div>' +
+                                  '<div class="discord-embed-desc" id="' + inputId + '_preview_desc"></div>' +
+                                '</div>' +
+                                '<img id="' + inputId + '_preview_thumb" class="discord-embed-thumb" style="display: none;">' +
+                              '</div>' +
+                              '<img id="' + inputId + '_preview_img" class="discord-embed-image" style="display: none;">' +
+                            '</div>' +
+                          '</div>' +
+                        '</div>' +
+                      '</div>' +
+                    '</div>';
+          } else if (item.type === 'color') {
             const hexColor = intToHex(rawVal, '#E1306C');
             html += '<div class="card-input">' +
                       '<label>' + item.name + '</label>' +
@@ -591,10 +628,6 @@ export function startDashboard() {
                         '<textarea id="' + inputId + '" placeholder="' + item.placeholder + '">' + val + '</textarea>' +
                         '<button class="btn-save" onclick="saveSetting(\\'' + type + '\\', \\'' + item.id + '\\', \\'' + inputId + '\\', \\'text\\')">Salvar</button>' +
                       '</div>' +
-                      '<div class="tag-container">' +
-                        '<span class="tag" onclick="insertTag(\\'' + inputId + '\\', \\'{user}\\')">+{user}</span>' +
-                        '<span class="tag" onclick="insertTag(\\'' + inputId + '\\', \\'{guild}\\')">+{guild}</span>' +
-                      '</div>' +
                     '</div>';
           } else {
             const val = rawVal !== null && rawVal !== undefined ? rawVal : '';
@@ -610,6 +643,51 @@ export function startDashboard() {
         html += '</div>';
       });
       return html;
+    }
+
+    function updatePreview(inputId) {
+      const title = document.getElementById(inputId + '_title').value;
+      const desc = document.getElementById(inputId + '_desc').value;
+      const color = document.getElementById(inputId + '_color').value;
+      const thumb = document.getElementById(inputId + '_thumb').value;
+      const img = document.getElementById(inputId + '_img').value;
+
+      document.getElementById(inputId + '_preview_card').style.borderLeftColor = color;
+      
+      const titleEl = document.getElementById(inputId + '_preview_title');
+      titleEl.innerText = title;
+      titleEl.style.display = title ? 'block' : 'none';
+
+      let parsedDesc = desc
+        .replace(/\{user\}/g, '<span class="discord-mention">@NovoMembro</span>')
+        .replace(/\{guild\}/g, '<b>Aliança Skyline</b>')
+        .replace(/\{memberCount\}/g, '<b>1.500</b>')
+        .replace(/\\n/g, '<br>');
+      document.getElementById(inputId + '_preview_desc').innerHTML = parsedDesc;
+
+      const thumbEl = document.getElementById(inputId + '_preview_thumb');
+      if (thumb) { thumbEl.src = thumb; thumbEl.style.display = 'block'; } else { thumbEl.style.display = 'none'; }
+
+      const imgEl = document.getElementById(inputId + '_preview_img');
+      if (img) { imgEl.src = img; imgEl.style.display = 'block'; } else { imgEl.style.display = 'none'; }
+    }
+
+    async function saveEmbedBuilder(type, feature, inputId) {
+      const guildId = document.getElementById('serverSelect').value;
+      const payload = {
+        title: document.getElementById(inputId + '_title').value.trim(),
+        description: document.getElementById(inputId + '_desc').value.trim(),
+        color: document.getElementById(inputId + '_color').value,
+        thumbnail: document.getElementById(inputId + '_thumb').value.trim(),
+        image: document.getElementById(inputId + '_img').value.trim()
+      };
+      
+      const res = await fetch('/api/update', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type, guildId, feature, value: JSON.stringify(payload), valueType: 'text' })
+      });
+      res.ok ? showToast('✅ Boas-Vindas atualizado com sucesso!') : showToast('❌ Erro ao salvar.', true);
     }
 
     function renderModules(containerId, categories, dbData, type) { document.getElementById(containerId).innerHTML = generateModulesHtml(categories, dbData, type); }

@@ -102,8 +102,8 @@ const SERVER_SETTINGS = [
     category: "🧟 Reviver Chat",
     desc: "O bot enviará uma pergunta gerada por IA para reanimar o chat inativo.",
     items: [
-      { id: 'reviveChannelId', name: 'Canal Alvo (ID)', type: 'text', placeholder: 'ID do canal principal de bate-papo' },
-      { id: 'reviveRoleId', name: 'Cargo para Mencionar (ID)', type: 'text', placeholder: 'Ex: ID do cargo @Chat ou @Membros' },
+      { id: 'reviveChannelId', name: 'Canal Alvo', type: 'channel', placeholder: 'Selecione o canal' },
+      { id: 'reviveRoleId', name: 'Cargo para Mencionar', type: 'role', placeholder: 'Selecione o cargo' },
       { id: 'reviveTimeout', name: 'Tempo de Inatividade', type: 'number', placeholder: 'Tempo em minutos (Ex: 120 para 2 horas)' },
       { id: 'revivePrompt', name: 'Prompt da IA', type: 'textarea', placeholder: 'Ex: Faça uma pergunta polêmica e divertida sobre animes ou jogos.' }
     ]
@@ -112,16 +112,16 @@ const SERVER_SETTINGS = [
     category: "💎 Sistema VIP",
     desc: "Configuração do ecossistema de apoiadores e benefícios",
     items: [
-      { id: 'vipRoleId', name: 'Cargo VIP Base (ID)', type: 'text', placeholder: 'ID do cargo' },
-      { id: 'vipTicketCategoryId', name: 'Cat. de Gradiente (ID)', type: 'text', placeholder: 'Categoria de tickets' }
+      { id: 'vipRoleId', name: 'Cargo VIP Base', type: 'role', placeholder: 'Selecione o cargo' },
+      { id: 'vipTicketCategoryId', name: 'Cat. de Gradiente', type: 'channel', placeholder: 'Selecione a categoria' }
     ]
   },
   {
     category: "📸 Feed Social",
     desc: "Personalize a aparência dos posts e canais de fotos",
     items: [
-      { id: 'feedChannelId', name: 'Canal do Feed (ID)', type: 'text', placeholder: 'ID do canal' },
-      { id: 'feedEmbedColor', name: 'Cor do Card (HEX)', type: 'color', placeholder: '#E1306C' },
+      { id: 'feedChannelId', name: 'Canal do Feed', type: 'channel', placeholder: 'Selecione o canal' },
+      { id: 'feedEmbedColor', name: 'Cor do Card (HEX)', type: 'color', placeholder: '#8B5CF6' },
       { id: 'feedLikeEmoji', name: 'Emoji de Curtir', type: 'text', placeholder: '❤️' },
       { id: 'feedFollowEmoji', name: 'Emoji de Seguir', type: 'text', placeholder: '🔔' },
       { id: 'feedCommentEmoji', name: 'Emoji de Comentar', type: 'text', placeholder: '💬' },
@@ -132,38 +132,38 @@ const SERVER_SETTINGS = [
     category: "🌌 Rede Aliança",
     desc: "Integração oficial do servidor na rede global",
     items: [
-      { id: 'allianceChannelId', name: 'Canal da Aliança (ID)', type: 'text', placeholder: 'ID do canal' }
+      { id: 'allianceChannelId', name: 'Canal da Aliança', type: 'channel', placeholder: 'Selecione o canal' }
     ]
   },
   {
     category: "📁 Canais de Logs",
     desc: "Direcione onde cada sistema do bot enviará avisos",
     items: [
-      { id: 'welcomeChannelId', name: 'Canal de Boas-Vindas', type: 'text', placeholder: 'ID do canal' },
-      { id: 'announcementChannelId', name: 'Canal de Anúncios', type: 'text', placeholder: 'ID do canal' },
-      { id: 'logChannelId', name: 'Canal de Logs Gerais', type: 'text', placeholder: 'ID do canal' },
-      { id: 'levelUpChannelId', name: 'Canal de Level Up', type: 'text', placeholder: 'ID do canal' },
-      { id: 'suggestionChannelId', name: 'Canal de Sugestões', type: 'text', placeholder: 'ID do canal' },
-      { id: 'feedbackChannelId', name: 'Canal de Feedback', type: 'text', placeholder: 'ID do canal' }
+      { id: 'welcomeChannelId', name: 'Canal de Boas-Vindas', type: 'channel', placeholder: 'Selecione o canal' },
+      { id: 'announcementChannelId', name: 'Canal de Anúncios', type: 'channel', placeholder: 'Selecione o canal' },
+      { id: 'logChannelId', name: 'Canal de Logs Gerais', type: 'channel', placeholder: 'Selecione o canal' },
+      { id: 'levelUpChannelId', name: 'Canal de Level Up', type: 'channel', placeholder: 'Selecione o canal' },
+      { id: 'suggestionChannelId', name: 'Canal de Sugestões', type: 'channel', placeholder: 'Selecione o canal' },
+      { id: 'feedbackChannelId', name: 'Canal de Feedback', type: 'channel', placeholder: 'Selecione o canal' }
     ]
   },
   {
     category: "🎫 Tickets",
     desc: "Configuração de atendimento e histórico",
     items: [
-      { id: 'ticketCategoryId', name: 'Categoria dos Tickets', type: 'text', placeholder: 'ID da categoria' },
-      { id: 'ticketLogChannelId', name: 'Canal de Transcrições', type: 'text', placeholder: 'ID do canal' }
+      { id: 'ticketCategoryId', name: 'Categoria dos Tickets', type: 'channel', placeholder: 'Selecione a categoria' },
+      { id: 'ticketLogChannelId', name: 'Canal de Transcrições', type: 'channel', placeholder: 'Selecione o canal' }
     ]
   },
   {
     category: "🛡️ Cargos",
     desc: "Definição de hierarquia e cargos automáticos",
     items: [
-      { id: 'adminRoleId', name: 'Cargo de Administrador', type: 'text', placeholder: 'ID do cargo' },
-      { id: 'modRoleId', name: 'Cargo de Moderador', type: 'text', placeholder: 'ID do cargo' },
-      { id: 'autoRoleId', name: 'Cargo Automático', type: 'text', placeholder: 'ID do cargo' },
-      { id: 'memberRoleId', name: 'Membro Registrado', type: 'text', placeholder: 'ID do cargo' },
-      { id: 'mutedRoleId', name: 'Silenciado (Muted)', type: 'text', placeholder: 'ID do cargo' }
+      { id: 'adminRoleId', name: 'Cargo de Administrador', type: 'role', placeholder: 'Selecione o cargo' },
+      { id: 'modRoleId', name: 'Cargo de Moderador', type: 'role', placeholder: 'Selecione o cargo' },
+      { id: 'autoRoleId', name: 'Cargo Automático', type: 'role', placeholder: 'Selecione o cargo' },
+      { id: 'memberRoleId', name: 'Membro Registrado', type: 'role', placeholder: 'Selecione o cargo' },
+      { id: 'mutedRoleId', name: 'Silenciado (Muted)', type: 'role', placeholder: 'Selecione o cargo' }
     ]
   }
 ];
@@ -187,7 +187,7 @@ const GLOBAL_SETTINGS = [
       { id: 'footerText', name: 'Texto de Rodapé Padrão', type: 'text', placeholder: 'Aparece nos embeds gerais' },
       { id: 'rpFooterText', name: 'Rodapé Roleplay', type: 'text', placeholder: 'Aparece nos comandos de /rp' },
       { id: 'botIconUrl', name: 'URL do Ícone do Bot', type: 'text', placeholder: 'Link direto da imagem do ícone para Embeds' },
-      { id: 'primaryColor', name: 'Cor Primária dos Embeds', type: 'color', placeholder: '#5865F2' }
+      { id: 'primaryColor', name: 'Cor Primária dos Embeds', type: 'color', placeholder: '#8B5CF6' }
     ]
   }
 ];
@@ -213,74 +213,119 @@ export function startDashboard() {
     ? `https://discord.com/oauth2/authorize?client_id=${clientId}&permissions=8&scope=bot%20applications.commands`
     : 'https://discord.com';
 
+  // ROTA PARA AUTOCOMPLETE DE CANAIS E CARGOS DA GUILD
+  app.get('/api/discord-data', async (req, res) => {
+    const { guildId } = req.query;
+    const token = process.env.DISCORD_TOKEN;
+    if (!guildId || !token) return res.json({ channels: [], roles: [] });
+
+    try {
+      const [channelsRes, rolesRes] = await Promise.all([
+        axios.get(`https://discord.com/api/v10/guilds/${guildId}/channels`, { headers: { Authorization: `Bot ${token}` } }).catch(() => ({ data: [] })),
+        axios.get(`https://discord.com/api/v10/guilds/${guildId}/roles`, { headers: { Authorization: `Bot ${token}` } }).catch(() => ({ data: [] }))
+      ]);
+
+      const channels = channelsRes.data.map((c: any) => ({ id: c.id, name: c.name, type: c.type }));
+      const roles = rolesRes.data.map((r: any) => ({ id: r.id, name: r.name }));
+
+      res.json({ channels, roles });
+    } catch (error) {
+      res.json({ channels: [], roles: [] });
+    }
+  });
+
   app.get('/', (req, res) => {
     res.send(`<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Bryan Bot — Moderação, IA e RPG</title>
+  <title>Bryan Bot — Aliança Skyline</title>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <style>
-    :root { --bg: #111214; --card: #1E1F22; --card-hover: #2B2D31; --border: #313338; --blurple: #5865F2; --blurple-hover: #4752C4; --text: #F2F3F5; --text-muted: #B5BAC1; }
+    :root { 
+      --bg: #0B0D17; 
+      --card: #131521; 
+      --card-hover: #1A1D2D; 
+      --border: #2A2E45; 
+      --primary: #8B5CF6; 
+      --primary-hover: #7C3AED; 
+      --text: #F2F3F5; 
+      --text-muted: #9CA3AF; 
+    }
     * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Inter', sans-serif; }
     body { background: var(--bg); color: var(--text); overflow-x: hidden; line-height: 1.6; }
-    nav { display: flex; justify-content: space-between; align-items: center; padding: 1rem 5%; background: rgba(17, 18, 20, 0.9); backdrop-filter: blur(10px); position: sticky; top: 0; z-index: 1000; border-bottom: 1px solid var(--border); }
-    .brand { display: flex; align-items: center; gap: 12px; font-weight: 800; font-size: 1.25rem; color: white; text-decoration: none; }
-    .brand img { width: 36px; height: 36px; border-radius: 50%; }
+    
+    /* Nav */
+    nav { display: flex; justify-content: space-between; align-items: center; padding: 1rem 5%; background: rgba(11, 13, 23, 0.85); backdrop-filter: blur(12px); position: sticky; top: 0; z-index: 1000; border-bottom: 1px solid var(--border); }
+    .brand { display: flex; align-items: center; gap: 12px; font-weight: 800; font-size: 1.3rem; color: white; text-decoration: none; letter-spacing: -0.5px; }
+    .brand img { width: 38px; height: 38px; border-radius: 50%; border: 2px solid var(--primary); }
     .nav-links a { color: var(--text-muted); text-decoration: none; font-weight: 600; font-size: 0.95rem; margin-left: 20px; transition: 0.2s; }
     .nav-links a:hover { color: white; }
-    .nav-links .btn-login { background: var(--blurple); color: white; padding: 8px 18px; border-radius: 4px; margin-left: 20px; }
-    .nav-links .btn-login:hover { background: var(--blurple-hover); }
-    .hero { text-align: center; padding: 120px 20px 80px 20px; position: relative; }
-    .hero::before { content: ''; position: absolute; top: -50%; left: 50%; transform: translateX(-50%); width: 800px; height: 800px; background: radial-gradient(circle, rgba(88,101,242,0.15) 0%, transparent 60%); z-index: -1; }
-    .hero h1 { font-size: clamp(2.5rem, 5vw, 4.5rem); font-weight: 800; letter-spacing: -1.5px; margin-bottom: 20px; line-height: 1.1; }
-    .hero p { font-size: 1.1rem; color: var(--text-muted); max-width: 650px; margin: 0 auto 40px auto; }
+    .nav-links .btn-login { background: var(--primary); color: white; padding: 8px 20px; border-radius: 6px; margin-left: 20px; box-shadow: 0 4px 15px rgba(139, 92, 246, 0.3); }
+    .nav-links .btn-login:hover { background: var(--primary-hover); }
+    
+    /* Hero */
+    .hero { text-align: center; padding: 140px 20px 100px 20px; position: relative; overflow: hidden; }
+    .hero-bg { position: absolute; top: -20%; left: 50%; transform: translateX(-50%); width: 1000px; height: 1000px; background: radial-gradient(circle, rgba(139, 92, 246, 0.15) 0%, transparent 60%); z-index: -1; pointer-events: none; }
+    .hero h1 { font-size: clamp(2.8rem, 6vw, 5rem); font-weight: 800; letter-spacing: -2px; margin-bottom: 20px; line-height: 1.1; background: linear-gradient(to right, #fff, #A78BFA); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+    .hero p { font-size: 1.15rem; color: var(--text-muted); max-width: 650px; margin: 0 auto 40px auto; }
+    
+    /* Buttons */
     .btn-group { display: flex; gap: 15px; justify-content: center; flex-wrap: wrap; }
-    .btn { padding: 14px 28px; border-radius: 6px; font-weight: 600; font-size: 1rem; text-decoration: none; transition: 0.2s; display: inline-flex; align-items: center; gap: 8px; }
-    .btn-primary { background: var(--blurple); color: white; }
-    .btn-primary:hover { background: var(--blurple-hover); transform: translateY(-2px); }
+    .btn { padding: 15px 32px; border-radius: 8px; font-weight: 600; font-size: 1rem; text-decoration: none; transition: 0.2s; display: inline-flex; align-items: center; gap: 8px; }
+    .btn-primary { background: var(--primary); color: white; box-shadow: 0 4px 20px rgba(139, 92, 246, 0.4); }
+    .btn-primary:hover { background: var(--primary-hover); transform: translateY(-3px); box-shadow: 0 6px 25px rgba(139, 92, 246, 0.5); }
     .btn-secondary { background: var(--card); color: white; border: 1px solid var(--border); }
-    .btn-secondary:hover { background: var(--card-hover); transform: translateY(-2px); }
+    .btn-secondary:hover { background: var(--card-hover); transform: translateY(-3px); border-color: var(--primary); }
+    
+    /* Features */
     .features { padding: 80px 5%; max-width: 1200px; margin: 0 auto; }
-    .features-title { text-align: center; font-size: 2rem; font-weight: 800; margin-bottom: 50px; }
-    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 20px; }
-    .card { background: var(--card); border: 1px solid var(--border); padding: 30px; border-radius: 12px; transition: 0.3s; }
-    .card:hover { border-color: var(--blurple); transform: translateY(-5px); }
-    .card-icon { width: 50px; height: 50px; background: rgba(88,101,242,0.1); border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 24px; margin-bottom: 20px; }
-    .card h3 { font-size: 1.25rem; font-weight: 700; margin-bottom: 12px; }
-    .card p { color: var(--text-muted); font-size: 0.95rem; }
-    footer { text-align: center; padding: 40px; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.9rem; margin-top: 50px; }
+    .features-title { text-align: center; font-size: 2.2rem; font-weight: 800; margin-bottom: 50px; color: white; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 24px; }
+    .card { background: var(--card); border: 1px solid var(--border); padding: 35px; border-radius: 16px; transition: 0.3s; position: relative; overflow: hidden; }
+    .card::before { content: ''; position: absolute; top: 0; left: 0; width: 100%; height: 4px; background: var(--primary); opacity: 0; transition: 0.3s; }
+    .card:hover { border-color: var(--primary); transform: translateY(-5px); box-shadow: 0 10px 30px rgba(0,0,0,0.3); }
+    .card:hover::before { opacity: 1; }
+    .card-icon { width: 55px; height: 55px; background: rgba(139, 92, 246, 0.1); border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 26px; margin-bottom: 20px; border: 1px solid rgba(139, 92, 246, 0.2); }
+    .card h3 { font-size: 1.3rem; font-weight: 700; margin-bottom: 12px; color: white; }
+    .card p { color: var(--text-muted); font-size: 0.95rem; line-height: 1.5; }
+    
+    footer { text-align: center; padding: 40px; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.9rem; margin-top: 50px; background: var(--card); }
   </style>
 </head>
 <body>
   <nav>
-    <a href="/" class="brand"><img src="/skylineicon.jpg" alt="Logo"> Bryan Bot</a>
+    <a href="/" class="brand"><img src="/skylineicon.jpg" alt="Bryan"> Aliança Skyline</a>
     <div class="nav-links">
-      <a href="${botInviteUrl}">Adicionar ao Discord</a>
+      <a href="${botInviteUrl}">Adicionar ao Servidor</a>
       <a href="/login" class="btn-login">Acessar Painel</a>
     </div>
   </nav>
+  
   <header class="hero">
-    <h1>Suba o nível do seu servidor.</h1>
-    <p>A ferramenta definitiva para a sua comunidade. Inteligência Artificial por voz, Feed do Instagram, RPG completo e ferramentas de moderação blindadas em um só lugar.</p>
+    <div class="hero-bg"></div>
+    <h1>O Guardião da Aliança.</h1>
+    <p>Traga o <b>Bryan</b> para o seu servidor e conecte-se à maior rede interdimensional. Inteligência Artificial por voz, Feed Social, RPG imersivo e moderação absoluta.</p>
     <div class="btn-group">
       <a href="${botInviteUrl}" class="btn btn-primary">Adicionar ao Discord</a>
       <a href="/login" class="btn btn-secondary">Configurar Bot</a>
     </div>
   </header>
+  
   <section class="features">
-    <h2 class="features-title">Por que escolher o Bryan?</h2>
+    <h2 class="features-title">Sistemas Integrados</h2>
     <div class="grid">
-      <div class="card"><div class="card-icon">🎙️</div><h3>Inteligência Artificial</h3><p>Acesse chamadas de voz com o Bryan ou crie a sua IA exclusiva.</p></div>
-      <div class="card"><div class="card-icon">📸</div><h3>Feed Social (Instagram)</h3><p>Crie uma rede social dentro do servidor com notificações.</p></div>
-      <div class="card"><div class="card-icon">⚔️</div><h3>RPG & Economia</h3><p>Ecossistema com Dungeons, World Bosses e missões diárias.</p></div>
-      <div class="card"><div class="card-icon">💎</div><h3>Sistema VIP</h3><p>Recompense os apoiadores com cargos e gradientes exclusivos.</p></div>
-      <div class="card"><div class="card-icon">🎫</div><h3>Sistema de Tickets</h3><p>Organize o atendimento com salvamento de histórico.</p></div>
-      <div class="card"><div class="card-icon">🎵</div><h3>Música FFmpeg</h3><p>Qualidade de áudio de estúdio para escutar com os amigos.</p></div>
+      <div class="card"><div class="card-icon">🎙️</div><h3>Inteligência Artificial</h3><p>Acesse chamadas de voz com o Bryan, com a Suki ou crie a IA exclusiva do seu servidor.</p></div>
+      <div class="card"><div class="card-icon">📸</div><h3>Feed Social (Instagram)</h3><p>Crie uma rede social interna perfeita com direito a seguidores, curtidas e comentários.</p></div>
+      <div class="card"><div class="card-icon">⚔️</div><h3>RPG & Economia</h3><p>Um ecossistema gigante com Dungeons, World Bosses, inventário e missões diárias.</p></div>
+      <div class="card"><div class="card-icon">💎</div><h3>Sistema VIP</h3><p>Recompense os apoiadores com cargos, painéis especiais e gradientes exclusivos.</p></div>
+      <div class="card"><div class="card-icon">🎫</div><h3>Sistema de Tickets</h3><p>Organize o atendimento da sua comunidade com logs automáticos e transcrições.</p></div>
+      <div class="card"><div class="card-icon">🎵</div><h3>Música FFmpeg</h3><p>Qualidade de áudio de estúdio para escutar Spotify ou YouTube com os amigos na call.</p></div>
     </div>
   </section>
-  <footer><p>© 2026 Bryan Bot. Feito para a Aliança Skyline.</p></footer>
+  
+  <footer><p>© 2026 Bryan Bot • Sistema Oficial da Aliança Skyline</p></footer>
 </body>
 </html>`);
   });
@@ -304,7 +349,7 @@ export function startDashboard() {
       const isBotOwner = userId === BOT_OWNER_ID;
       const userRoles = await prisma.allianceServerMember.findMany({ where: { userId } });
 
-      if (!isBotOwner && userRoles.length === 0) return res.status(403).send('<body style="background: #111214; color: #ED4245; text-align: center; padding-top: 150px; font-family: sans-serif;"><h1>🛑 Acesso Negado</h1><p style="color:white;">Sem credenciais ativas na Aliança.</p><br><a href="/" style="color: #5865F2; font-weight: bold;">Voltar</a></body>');
+      if (!isBotOwner && userRoles.length === 0) return res.status(403).send('<body style="background: #0B0D17; color: #EF4444; text-align: center; padding-top: 150px; font-family: sans-serif;"><h1>🛑 Acesso Negado</h1><p style="color:#9CA3AF;">Sem credenciais ativas na Aliança Skyline.</p><br><a href="/" style="color: #8B5CF6; font-weight: bold; text-decoration: none;">Voltar ao Início</a></body>');
 
       res.cookie('skyline_auth', 'permitido', { maxAge: 86400000 }); 
       res.cookie('skyline_userid', userId, { maxAge: 86400000 }); 
@@ -394,8 +439,9 @@ export function startDashboard() {
     const userName = req.cookies?.skyline_username || 'Administrador';
     const avatarHash = req.cookies?.skyline_avatar;
     
+    // Avatar em alta resolução direto do Discord
     const avatarUrl = avatarHash 
-      ? `https://cdn.discordapp.com/avatars/${userId}/${avatarHash}.png`
+      ? `https://cdn.discordapp.com/avatars/${userId}/${avatarHash}.png?size=256`
       : '/skylineicon.jpg';
 
     let authorizedServers = [];
@@ -416,100 +462,130 @@ export function startDashboard() {
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Dashboard - Bryan Bot</title>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <style>
-    :root { --bg: #313338; --sidebar: #2B2D31; --header: #313338; --card: #2B2D31; --card-hover: #1E1F22; --border: #1E1F22; --blurple: #5865F2; --blurple-hover: #4752C4; --green: #23A559; --red: #DA373C; --text: #F2F3F5; --text-muted: #B5BAC1; }
+    :root { 
+      --bg: #0B0D17; 
+      --sidebar: #131521; 
+      --header: #131521; 
+      --card: #1A1D2D; 
+      --card-hover: #22263A; 
+      --border: #2A2E45; 
+      --primary: #8B5CF6; 
+      --primary-hover: #7C3AED; 
+      --green: #10B981; 
+      --red: #EF4444; 
+      --text: #F2F3F5; 
+      --text-muted: #9CA3AF; 
+    }
     * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Inter', sans-serif; }
     body { background-color: var(--bg); color: var(--text); display: flex; height: 100vh; overflow: hidden; }
     ::-webkit-scrollbar { width: 8px; }
     ::-webkit-scrollbar-track { background: var(--bg); }
-    ::-webkit-scrollbar-thumb { background: #1E1F22; border-radius: 4px; }
+    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
     
     .sidebar { width: 280px; background: var(--sidebar); display: flex; flex-direction: column; border-right: 1px solid var(--border); }
-    .brand { padding: 20px; font-size: 1.1rem; font-weight: 700; display: flex; align-items: center; gap: 10px; color: white; }
-    .brand img { width: 28px; border-radius: 50%; }
+    .brand { padding: 22px 20px; font-size: 1.15rem; font-weight: 800; display: flex; align-items: center; gap: 12px; color: white; border-bottom: 1px solid var(--border); letter-spacing: -0.5px; }
+    .brand img { width: 32px; height: 32px; border-radius: 50%; border: 2px solid var(--primary); }
     
-    .server-selector-sidebar { padding: 0 15px 15px 15px; border-bottom: 1px solid var(--border); }
-    .server-selector-sidebar select { width: 100%; background: var(--card-hover); border: 1px solid var(--border); color: white; padding: 10px; border-radius: 6px; outline: none; font-size: 0.9rem; font-weight: 600; cursor: pointer; transition: 0.2s; }
-    .server-selector-sidebar select:focus { border-color: var(--blurple); }
+    .nav-items { flex: 1; padding: 15px 0; overflow-y: auto; }
+    .nav-group { 
+      font-size: 0.75rem; text-transform: uppercase; font-weight: 800; color: var(--text-muted); 
+      margin: 15px 0 5px 20px; letter-spacing: 0.5px; cursor: pointer; display: flex; align-items: center; 
+      justify-content: space-between; padding-right: 20px; user-select: none; transition: 0.2s;
+    }
+    .nav-group:hover { color: var(--text); }
+    .nav-group::after { content: '▼'; font-size: 0.6rem; transition: transform 0.2s; }
+    .nav-group.collapsed::after { transform: rotate(-90deg); }
     
-    .nav-items { flex: 1; padding: 10px 0; overflow-y: auto; }
-    .nav-group { font-size: 0.75rem; text-transform: uppercase; font-weight: 800; color: var(--text-muted); margin: 15px 0 5px 20px; letter-spacing: 0.5px; }
-    .nav-btn { background: transparent; color: var(--text-muted); border: none; padding: 10px 20px 10px 30px; width: 100%; text-align: left; font-size: 0.95rem; font-weight: 500; cursor: pointer; transition: 0.1s; position: relative; }
-    .nav-btn:hover { background: rgba(255, 255, 255, 0.03); color: var(--text); }
-    .nav-btn.active { background: rgba(88, 101, 242, 0.1); color: white; border-right: 3px solid var(--blurple); }
+    .nav-children { overflow: hidden; transition: max-height 0.3s ease; max-height: 1000px; padding: 0 10px; }
+    .nav-children.collapsed { max-height: 0; }
     
-    .user-profile { padding: 15px; border-top: 1px solid var(--border); display: flex; align-items: center; gap: 12px; background: #232428; }
-    .user-profile .avatar { width: 36px; height: 36px; border-radius: 50%; background: #1E1F22 center/cover; }
-    .user-profile .info h4 { font-size: 0.85rem; margin-bottom: 2px; color: white; }
-    .user-profile .info span { font-size: 0.7rem; color: #B5BAC1; }
+    .nav-btn { background: transparent; color: var(--text-muted); border: none; padding: 10px 15px; margin-bottom: 2px; width: 100%; text-align: left; font-size: 0.95rem; font-weight: 600; cursor: pointer; transition: 0.15s; border-radius: 6px; }
+    .nav-btn:hover { background: rgba(255, 255, 255, 0.05); color: var(--text); }
+    .nav-btn.active { background: rgba(139, 92, 246, 0.15); color: var(--primary); border-left: 3px solid var(--primary); border-radius: 0 6px 6px 0;}
     
-    .main { flex: 1; display: flex; flex-direction: column; background: var(--bg); }
-    .header { padding: 20px 30px; border-bottom: 1px solid var(--border); background: var(--bg); }
-    .header h2 { font-size: 1.25rem; font-weight: 700; color: white; }
+    .user-profile { padding: 15px 20px; border-top: 1px solid var(--border); display: flex; align-items: center; gap: 12px; background: rgba(0,0,0,0.2); }
+    .user-profile .avatar { width: 40px; height: 40px; border-radius: 50%; background: var(--card) center/cover; border: 2px solid var(--border); }
+    .user-profile .info h4 { font-size: 0.9rem; margin-bottom: 2px; color: white; font-weight: 700; }
+    .user-profile .info span { font-size: 0.75rem; color: var(--primary); font-weight: 600; }
     
-    .content { padding: 30px; overflow-y: auto; flex: 1; }
-    .section-title { font-size: 1.15rem; font-weight: 700; margin-bottom: 5px; color: white; }
-    .section-desc { color: var(--text-muted); font-size: 0.9rem; margin-bottom: 20px; }
+    .main { flex: 1; display: flex; flex-direction: column; background: var(--bg); position: relative;}
+    .header { padding: 18px 40px; border-bottom: 1px solid var(--border); background: var(--header); display: flex; justify-content: space-between; align-items: center; box-shadow: 0 4px 20px rgba(0,0,0,0.15); z-index:5;}
+    .header h2 { font-size: 1.3rem; font-weight: 800; color: white; letter-spacing: -0.5px; }
     
-    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 15px; margin-bottom: 40px; }
-    .card-toggle { background: var(--card); border-radius: 8px; padding: 15px; display: flex; justify-content: space-between; align-items: center; transition: 0.2s; border: 1px solid transparent; }
-    .card-toggle:hover { background: var(--card-hover); border-color: #3f4147; }
-    .card-info { display: flex; align-items: center; gap: 12px; }
-    .card-icon { width: 40px; height: 40px; background: #1E1F22; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 18px; }
-    .card-text h3 { font-size: 0.95rem; margin-bottom: 2px; color: white; }
-    .card-text p { font-size: 0.8rem; color: var(--text-muted); max-width: 200px; line-height: 1.3; }
+    .server-selector { display: flex; align-items: center; gap: 10px; }
+    .server-selector select { background: var(--card); border: 1px solid var(--border); color: white; padding: 10px 15px; border-radius: 6px; outline: none; font-size: 0.9rem; min-width: 250px; cursor: pointer; font-weight: 600; transition: 0.2s; appearance: none; }
+    .server-selector select:focus, .server-selector select:hover { border-color: var(--primary); background: var(--card-hover); }
+
+    .content { padding: 40px; overflow-y: auto; flex: 1; }
+    .section-title { font-size: 1.4rem; font-weight: 800; margin-bottom: 8px; color: white; letter-spacing: -0.5px; }
+    .section-desc { color: var(--text-muted); font-size: 0.95rem; margin-bottom: 25px; }
     
-    .switch { position: relative; width: 40px; height: 24px; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 20px; margin-bottom: 40px; }
+    .card-toggle { background: var(--card); border-radius: 12px; padding: 20px; display: flex; justify-content: space-between; align-items: center; transition: 0.2s; border: 1px solid var(--border); }
+    .card-toggle:hover { background: var(--card-hover); border-color: var(--primary); transform: translateY(-2px); box-shadow: 0 8px 20px rgba(0,0,0,0.2); }
+    .card-info { display: flex; align-items: center; gap: 15px; }
+    .card-icon { width: 45px; height: 45px; background: rgba(139, 92, 246, 0.1); border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 20px; border: 1px solid rgba(139, 92, 246, 0.2); }
+    .card-text h3 { font-size: 1rem; font-weight: 700; margin-bottom: 4px; color: white; }
+    .card-text p { font-size: 0.85rem; color: var(--text-muted); max-width: 220px; line-height: 1.4; }
+    
+    .switch { position: relative; width: 44px; height: 26px; flex-shrink: 0; }
     .switch input { opacity: 0; width: 0; height: 0; }
-    .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #80848E; transition: .3s; border-radius: 34px; }
-    .slider:before { position: absolute; content: ""; height: 18px; width: 18px; left: 3px; bottom: 3px; background-color: white; transition: .3s; border-radius: 50%; box-shadow: 0 2px 4px rgba(0,0,0,0.2); }
-    input:checked + .slider { background-color: var(--green); }
-    input:checked + .slider:before { transform: translateX(16px); }
+    .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: var(--border); transition: .3s; border-radius: 34px; }
+    .slider:before { position: absolute; content: ""; height: 20px; width: 20px; left: 3px; bottom: 3px; background-color: var(--text-muted); transition: .3s; border-radius: 50%; }
+    input:checked + .slider { background-color: rgba(16, 185, 129, 0.2); border: 1px solid var(--green); }
+    input:checked + .slider:before { transform: translateX(18px); background-color: var(--green); box-shadow: 0 0 10px var(--green); }
     
-    .card-input { background: var(--card); border-radius: 8px; padding: 15px; display: flex; flex-direction: column; gap: 10px; border: 1px solid transparent; transition: 0.2s; }
-    .card-input:hover { background: var(--card-hover); border-color: #3f4147; }
-    .card-input label { font-size: 0.9rem; font-weight: 600; color: white; }
-    .input-group { display: flex; gap: 10px; }
-    .input-group input[type="text"], .input-group input[type="number"], .input-group textarea { flex: 1; background: #1E1F22; border: 1px solid transparent; color: white; padding: 10px; border-radius: 4px; outline: none; font-size: 0.9rem; transition: 0.2s; }
-    .input-group input:focus, .input-group textarea:focus { border-color: var(--blurple); }
-    .input-group textarea { resize: vertical; min-height: 80px; }
-    .color-picker-wrapper { width: 38px; height: 38px; border-radius: 4px; overflow: hidden; border: 1px solid #1E1F22; cursor: pointer; }
+    .card-input { background: var(--card); border-radius: 12px; padding: 20px; display: flex; flex-direction: column; gap: 12px; border: 1px solid var(--border); transition: 0.2s; }
+    .card-input:hover { background: var(--card-hover); border-color: var(--primary); box-shadow: 0 8px 20px rgba(0,0,0,0.2); }
+    .card-input label { font-size: 0.95rem; font-weight: 700; color: white; }
+    .input-group { display: flex; gap: 12px; align-items: flex-start; }
+    .input-group input[type="text"], .input-group input[type="number"], .input-group textarea { flex: 1; background: #0B0D17; border: 1px solid var(--border); color: white; padding: 12px 15px; border-radius: 6px; outline: none; font-size: 0.95rem; transition: 0.2s; width: 100%; }
+    .input-group input:focus, .input-group textarea:focus { border-color: var(--primary); box-shadow: 0 0 0 2px rgba(139, 92, 246, 0.2); }
+    .input-group textarea { resize: vertical; min-height: 90px; }
+    
+    /* Autocomplete Styles */
+    .autocomplete { position: relative; flex: 1; width: 100%; }
+    .autocomplete-items { position: absolute; border: 1px solid var(--border); border-radius: 6px; background-color: var(--card-hover); z-index: 99; top: 100%; left: 0; right: 0; max-height: 250px; overflow-y: auto; display: none; margin-top: 8px; box-shadow: 0 10px 25px rgba(0,0,0,0.5); }
+    .autocomplete-items.show { display: block; }
+    .autocomplete-item { padding: 10px 15px; cursor: pointer; color: var(--text-muted); font-size: 0.9rem; display: flex; align-items: center; gap: 10px; border-bottom: 1px solid rgba(255,255,255,0.02); transition: 0.2s; }
+    .autocomplete-item:hover { background-color: var(--primary); color: white; }
+    .autocomplete-item span { color: white; font-weight: 600; }
+    
+    .color-picker-wrapper { width: 44px; height: 44px; border-radius: 6px; overflow: hidden; border: 1px solid var(--border); cursor: pointer; flex-shrink:0; }
     .color-picker-wrapper input { width: 200%; height: 200%; transform: translate(-25%, -25%); cursor: pointer; }
-    .btn-save { background: var(--blurple); color: white; border: none; padding: 0 15px; border-radius: 4px; font-weight: 500; font-size: 0.9rem; cursor: pointer; transition: 0.2s; white-space: nowrap; }
-    .btn-save:hover { background: var(--blurple-hover); }
+    .btn-save { background: var(--primary); color: white; border: none; padding: 0 20px; height: 44px; border-radius: 6px; font-weight: 600; font-size: 0.95rem; cursor: pointer; transition: 0.2s; white-space: nowrap; flex-shrink:0; }
+    .btn-save:hover { background: var(--primary-hover); transform: translateY(-2px); box-shadow: 0 4px 12px rgba(139, 92, 246, 0.4); }
     
-    .tag-container { display: flex; gap: 6px; margin-top: 5px; flex-wrap: wrap; }
-    .tag { background: #1E1F22; color: var(--text-muted); font-size: 0.75rem; padding: 4px 8px; border-radius: 4px; cursor: pointer; transition: 0.2s; border: 1px solid transparent; }
-    .tag:hover { background: var(--blurple); color: white; }
+    .tag-container { display: flex; gap: 8px; margin-top: 5px; flex-wrap: wrap; }
+    .tag { background: #0B0D17; color: var(--text-muted); font-size: 0.8rem; font-weight: 600; padding: 6px 10px; border-radius: 4px; cursor: pointer; transition: 0.2s; border: 1px solid var(--border); }
+    .tag:hover { background: var(--primary); color: white; border-color: var(--primary); }
     
     /* Discord Live Preview Styles */
-    .discord-preview { background: #313338; border-radius: 6px; padding: 15px; margin-top: 10px; border: 1px solid #1E1F22; }
-    .discord-msg-header { display: flex; align-items: center; gap: 10px; margin-bottom: 5px; }
-    .discord-msg-avatar { width: 40px; height: 40px; border-radius: 50%; background: var(--blurple); }
-    .discord-msg-name { color: #F2F3F5; font-weight: 500; font-size: 1rem; }
-    .discord-msg-time { color: #80848E; font-size: 0.75rem; margin-left: 5px; }
-    .discord-embed { border-left: 4px solid var(--blurple); background: #2B2D31; border-radius: 4px; padding: 12px 16px; margin-top: 5px; max-width: 430px; display: flex; flex-direction: column; gap: 8px; }
-    .discord-embed-title { color: #FFFFFF; font-weight: 600; font-size: 1rem; }
-    .discord-embed-desc { color: #DBDEE1; font-size: 0.875rem; white-space: pre-wrap; line-height: 1.3; }
-    .discord-embed-thumb { float: right; max-width: 80px; max-height: 80px; border-radius: 4px; margin-left: 15px; }
-    .discord-embed-image { max-width: 100%; border-radius: 4px; margin-top: 8px; }
+    .discord-preview { background: #131521; border-radius: 8px; padding: 20px; margin-top: 10px; border: 1px solid var(--border); }
+    .discord-msg-header { display: flex; align-items: center; gap: 12px; margin-bottom: 8px; }
+    .discord-msg-avatar { width: 44px; height: 44px; border-radius: 50%; background: var(--primary); border: 2px solid var(--border); }
+    .discord-msg-name { color: white; font-weight: 600; font-size: 1.05rem; }
+    .discord-msg-time { color: var(--text-muted); font-size: 0.8rem; margin-left: 5px; font-weight: 500;}
+    .discord-embed { border-left: 4px solid var(--primary); background: #1A1D2D; border-radius: 4px; padding: 16px; margin-top: 8px; max-width: 480px; display: flex; flex-direction: column; gap: 10px; box-shadow: 0 4px 10px rgba(0,0,0,0.2); }
+    .discord-embed-title { color: #FFFFFF; font-weight: 700; font-size: 1.05rem; }
+    .discord-embed-desc { color: #DBDEE1; font-size: 0.9rem; white-space: pre-wrap; line-height: 1.4; }
+    .discord-embed-thumb { float: right; max-width: 90px; max-height: 90px; border-radius: 6px; margin-left: 15px; }
+    .discord-embed-image { max-width: 100%; border-radius: 6px; margin-top: 10px; border: 1px solid rgba(255,255,255,0.05); }
     .discord-embed-body { display: flex; justify-content: space-between; }
-    .discord-mention { color: #C9CDD2; background: rgba(88, 101, 242, 0.3); padding: 0 3px; border-radius: 3px; font-weight: 500; }
+    .discord-mention { color: #C9CDD2; background: rgba(139, 92, 246, 0.3); padding: 0 4px; border-radius: 4px; font-weight: 600; }
 
-    #toast { visibility: hidden; min-width: 250px; background: var(--green); color: white; text-align: center; border-radius: 4px; padding: 12px 20px; position: fixed; right: 30px; bottom: 30px; font-weight: 500; font-size: 0.95rem; opacity: 0; transition: 0.3s; z-index: 1000; box-shadow: 0 4px 15px rgba(0,0,0,0.2); }
+    #toast { visibility: hidden; min-width: 250px; background: var(--green); color: white; text-align: center; border-radius: 6px; padding: 14px 24px; position: fixed; right: 40px; bottom: 40px; font-weight: 600; font-size: 1rem; opacity: 0; transition: 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275); z-index: 1000; box-shadow: 0 10px 30px rgba(0,0,0,0.3); }
     #toast.error { background: var(--red); }
-    #toast.show { visibility: visible; opacity: 1; transform: translateY(-10px); }
+    #toast.show { visibility: visible; opacity: 1; transform: translateY(-15px); }
   </style>
 </head>
 <body>
   <div class="sidebar">
     <div class="brand"><img src="/skylineicon.jpg" alt="Logo"> Bryan Bot</div>
-    <div class="server-selector-sidebar">
-      <select id="serverSelect" onchange="loadConfig()">${serverOptionsHTML}</select>
-    </div>
     <div class="nav-items" id="sidebar-nav">
-      <!-- Navegação gerada por JS -->
+      <!-- Nav gerada via JS -->
     </div>
     <div class="user-profile">
       <div class="avatar" style="background-image: url('${avatarUrl}');"></div>
@@ -519,14 +595,19 @@ export function startDashboard() {
       </div>
     </div>
   </div>
+  
   <div class="main">
     <div class="header">
       <h2 id="main-header-title">Visão Geral</h2>
+      <div class="server-selector">
+        <select id="serverSelect" onchange="loadConfig()">${serverOptionsHTML}</select>
+      </div>
     </div>
     <div class="content" id="main-content">
-      <!-- Conteúdo gerado por JS -->
+      <!-- Conteúdo gerado via JS -->
     </div>
   </div>
+  
   <div id="toast">Ação concluída!</div>
   
   <script>
@@ -536,8 +617,9 @@ export function startDashboard() {
     const GLOBAL_SETTINGS = ${JSON.stringify(GLOBAL_SETTINGS)};
     
     let stateData = null;
+    let discordDataCache = { channels: [], roles: [] };
 
-    function intToHex(num, fallback = '#5865F2') {
+    function intToHex(num, fallback = '#8B5CF6') {
       if (num === null || num === undefined || isNaN(num)) return fallback;
       return '#' + num.toString(16).padStart(6, '0').toUpperCase();
     }
@@ -547,11 +629,22 @@ export function startDashboard() {
       if (!el) return; el.value += tag + ' '; el.focus();
     }
 
+    function toggleNavGroup(headerEl) {
+      headerEl.classList.toggle('collapsed');
+      headerEl.nextElementSibling.classList.toggle('collapsed');
+    }
+
     async function loadConfig() {
       const guildId = document.getElementById('serverSelect').value;
       if (!guildId) return;
-      const res = await fetch('/api/config?guildId=' + guildId);
-      stateData = await res.json();
+      
+      const [resConfig, resDiscord] = await Promise.all([
+        fetch('/api/config?guildId=' + guildId),
+        fetch('/api/discord-data?guildId=' + guildId)
+      ]);
+      
+      stateData = await resConfig.json();
+      discordDataCache = await resDiscord.json();
       
       buildNavigation(stateData.isOwner);
     }
@@ -560,30 +653,34 @@ export function startDashboard() {
       const navContainer = document.getElementById('sidebar-nav');
       let navHtml = '';
 
-      navHtml += '<div class="nav-group">Módulos do Servidor</div>';
+      navHtml += '<div class="nav-group" onclick="toggleNavGroup(this)">Módulos do Servidor</div><div class="nav-children">';
       SERVER_CATEGORIES.forEach((cat, i) => {
-        navHtml += \`<button class="nav-btn" onclick="renderContent('modulos', \${i}, this)">\${cat.category.substring(2)}</button>\`;
+        navHtml += \`<button class="nav-btn" onclick="renderContent('modulos', \${i}, this)">\${cat.category.substring(3)}</button>\`;
       });
+      navHtml += '</div>';
 
-      navHtml += '<div class="nav-group" style="margin-top:15px;">Configurações</div>';
+      navHtml += '<div class="nav-group" onclick="toggleNavGroup(this)">Configurações</div><div class="nav-children">';
       SERVER_SETTINGS.forEach((cat, i) => {
-        navHtml += \`<button class="nav-btn" onclick="renderContent('configs', \${i}, this)">\${cat.category.substring(2)}</button>\`;
+        navHtml += \`<button class="nav-btn" onclick="renderContent('configs', \${i}, this)">\${cat.category.substring(3)}</button>\`;
       });
+      navHtml += '</div>';
 
       if (isOwner) {
-        navHtml += '<div class="nav-group" style="margin-top:15px;">Global: Módulos</div>';
+        navHtml += '<div class="nav-group" onclick="toggleNavGroup(this)">Globais (Módulos)</div><div class="nav-children">';
         GLOBAL_CATEGORIES.forEach((cat, i) => {
-          navHtml += \`<button class="nav-btn" onclick="renderContent('global_modulos', \${i}, this)">\${cat.category.substring(2)}</button>\`;
+          navHtml += \`<button class="nav-btn" onclick="renderContent('global_modulos', \${i}, this)">\${cat.category.substring(3)}</button>\`;
         });
-        navHtml += '<div class="nav-group" style="margin-top:15px;">Global: Configs</div>';
+        navHtml += '</div>';
+
+        navHtml += '<div class="nav-group" onclick="toggleNavGroup(this)">Globais (Configs)</div><div class="nav-children">';
         GLOBAL_SETTINGS.forEach((cat, i) => {
-          navHtml += \`<button class="nav-btn" onclick="renderContent('global_configs', \${i}, this)">\${cat.category.substring(2)}</button>\`;
+          navHtml += \`<button class="nav-btn" onclick="renderContent('global_configs', \${i}, this)">\${cat.category.substring(3)}</button>\`;
         });
+        navHtml += '</div>';
       }
 
       navContainer.innerHTML = navHtml;
       
-      // Auto-click no primeiro item ao carregar
       const firstBtn = navContainer.querySelector('.nav-btn');
       if(firstBtn) firstBtn.click();
     }
@@ -616,11 +713,9 @@ export function startDashboard() {
 
       contentDiv.innerHTML = html;
       
-      // Re-trigger previews if embed builder is present
       setTimeout(() => {
         document.querySelectorAll('.embed-builder-desc').forEach(el => {
-           const id = el.id.replace('_desc', '');
-           updatePreview(id);
+           updatePreview(el.id.replace('_desc', ''));
         });
       }, 100);
     }
@@ -656,9 +751,9 @@ export function startDashboard() {
           const rawVal = dbData ? dbData[item.id] : null;
 
           if (item.type === 'embed_builder') {
-            let parsed = { title: '', description: '', color: '#5865F2', thumbnail: '', image: '' };
+            let parsed = { title: '', description: '', color: '#8B5CF6', thumbnail: '', image: '' };
             if (rawVal) {
-              try { parsed = rawVal.startsWith('{') ? JSON.parse(rawVal) : { title: '', description: rawVal, color: '#5865F2', thumbnail: '', image: '' }; } catch(e) {}
+              try { parsed = rawVal.startsWith('{') ? JSON.parse(rawVal) : { title: '', description: rawVal, color: '#8B5CF6', thumbnail: '', image: '' }; } catch(e) {}
             }
             html += '<div class="card-input" style="width: 100%;">' +
                       '<label>🛠️ Construtor de Embed</label>' +
@@ -667,8 +762,8 @@ export function startDashboard() {
                           '<div class="input-group"><input type="text" id="' + inputId + '_title" placeholder="Título (Opcional)" value="' + (parsed.title || '') + '" oninput="updatePreview(\\'' + inputId + '\\')"></div>' +
                           '<div class="input-group"><textarea id="' + inputId + '_desc" class="embed-builder-desc" placeholder="Descrição (Use {user}, {guild}, {memberCount})" oninput="updatePreview(\\'' + inputId + '\\')" style="min-height: 120px;">' + (parsed.description || '') + '</textarea></div>' +
                           '<div class="input-group">' +
-                             '<div class="color-picker-wrapper"><input type="color" id="' + inputId + '_color" value="' + (parsed.color || '#5865F2') + '" oninput="document.getElementById(\\'' + inputId + '_color_text\\').value = this.value.toUpperCase(); updatePreview(\\'' + inputId + '\\')"></div>' +
-                             '<input type="text" id="' + inputId + '_color_text" value="' + (parsed.color || '#5865F2') + '" oninput="document.getElementById(\\'' + inputId + '_color\\').value = this.value; updatePreview(\\'' + inputId + '\\')">' +
+                             '<div class="color-picker-wrapper"><input type="color" id="' + inputId + '_color" value="' + (parsed.color || '#8B5CF6') + '" oninput="document.getElementById(\\'' + inputId + '_color_text\\').value = this.value.toUpperCase(); updatePreview(\\'' + inputId + '\\')"></div>' +
+                             '<input type="text" id="' + inputId + '_color_text" value="' + (parsed.color || '#8B5CF6') + '" oninput="document.getElementById(\\'' + inputId + '_color\\').value = this.value; updatePreview(\\'' + inputId + '\\')">' +
                           '</div>' +
                           '<div class="input-group"><input type="text" id="' + inputId + '_thumb" placeholder="URL da Thumbnail (Opcional)" value="' + (parsed.thumbnail || '') + '" oninput="updatePreview(\\'' + inputId + '\\')"></div>' +
                           '<div class="input-group"><input type="text" id="' + inputId + '_img" placeholder="URL da Imagem Maior (Opcional)" value="' + (parsed.image || '') + '" oninput="updatePreview(\\'' + inputId + '\\')"></div>' +
@@ -677,13 +772,13 @@ export function startDashboard() {
                             '<span class="tag" onclick="insertTag(\\'' + inputId + '_desc\\', \\'{guild}\\'); updatePreview(\\'' + inputId + '\\')">+{guild}</span>' +
                             '<span class="tag" onclick="insertTag(\\'' + inputId + '_desc\\', \\'{memberCount}\\'); updatePreview(\\'' + inputId + '\\')">+{memberCount}</span>' +
                           '</div>' +
-                          '<button class="btn-save" style="margin-top: 10px; padding: 12px;" onclick="saveEmbedBuilder(\\'' + type + '\\', \\'' + item.id + '\\', \\'' + inputId + '\\')">💾 Salvar Embed</button>' +
+                          '<button class="btn-save" style="margin-top: 10px;" onclick="saveEmbedBuilder(\\'' + type + '\\', \\'' + item.id + '\\', \\'' + inputId + '\\')">💾 Salvar Embed</button>' +
                         '</div>' +
                         '<div style="flex: 1; min-width: 320px;">' +
-                          '<label style="color: var(--text-muted); font-size: 0.8rem; margin-bottom: 5px; display: block;">Preview em Tempo Real</label>' +
+                          '<label style="color: var(--text-muted); font-size: 0.85rem; margin-bottom: 5px; display: block;">Preview em Tempo Real</label>' +
                           '<div class="discord-preview">' +
                             '<div class="discord-msg-header"><div class="discord-msg-avatar"></div><div><span class="discord-msg-name">Bryan Bot</span><span class="discord-msg-time">Hoje às 12:00</span></div></div>' +
-                            '<div class="discord-embed" id="' + inputId + '_preview_card" style="border-left-color: ' + (parsed.color || '#5865F2') + ';">' +
+                            '<div class="discord-embed" id="' + inputId + '_preview_card" style="border-left-color: ' + (parsed.color || '#8B5CF6') + ';">' +
                               '<div class="discord-embed-body">' +
                                 '<div style="flex: 1;">' +
                                   '<div class="discord-embed-title" id="' + inputId + '_preview_title"></div>' +
@@ -698,13 +793,25 @@ export function startDashboard() {
                       '</div>' +
                     '</div>';
           } else if (item.type === 'color') {
-            const hexColor = intToHex(rawVal, '#E1306C');
+            const hexColor = intToHex(rawVal, '#8B5CF6');
             html += '<div class="card-input">' +
                       '<label>' + item.name + '</label>' +
                       '<div class="input-group">' +
                         '<div class="color-picker-wrapper"><input type="color" value="' + hexColor + '" oninput="document.getElementById(\\'' + inputId + '\\').value = this.value.toUpperCase()"></div>' +
                         '<input type="text" id="' + inputId + '" value="' + hexColor + '">' +
                         '<button class="btn-save" onclick="saveSetting(\\'' + type + '\\', \\'' + item.id + '\\', \\'' + inputId + '\\', \\'color\\')">Salvar</button>' +
+                      '</div>' +
+                    '</div>';
+          } else if (item.type === 'channel' || item.type === 'role') {
+            const val = rawVal !== null && rawVal !== undefined ? rawVal : '';
+            html += '<div class="card-input">' +
+                      '<label>' + item.name + '</label>' +
+                      '<div class="input-group">' +
+                        '<div class="autocomplete">' +
+                          '<input type="text" id="' + inputId + '" placeholder="' + item.placeholder + '" value="' + val + '" onfocus="showOptions(this, \\'' + item.type + '\\')" oninput="filterOptions(this, \\'' + item.type + '\\')" onblur="hideOptionsDelayed(\\'' + inputId + '\\')">' +
+                          '<div class="autocomplete-items" id="' + inputId + '-list"></div>' +
+                        '</div>' +
+                        '<button class="btn-save" onclick="saveSetting(\\'' + type + '\\', \\'' + item.id + '\\', \\'' + inputId + '\\', \\'text\\')">Salvar</button>' +
                       '</div>' +
                     '</div>';
           } else if (item.type === 'textarea') {
@@ -730,6 +837,54 @@ export function startDashboard() {
         html += '</div>';
       });
       return html;
+    }
+
+    // Lógicas de Auto-Complete
+    function showOptions(inputEl, entityType) {
+      const listEl = document.getElementById(inputEl.id + '-list');
+      renderOptions(inputEl.id, entityType, inputEl.value);
+      listEl.classList.add('show');
+    }
+
+    function filterOptions(inputEl, entityType) {
+      renderOptions(inputEl.id, entityType, inputEl.value);
+    }
+
+    function hideOptionsDelayed(inputId) {
+      setTimeout(() => {
+        const listEl = document.getElementById(inputId + '-list');
+        if(listEl) listEl.classList.remove('show');
+      }, 200);
+    }
+
+    function selectOption(inputId, idValue) {
+      const inputEl = document.getElementById(inputId);
+      inputEl.value = idValue;
+      const listEl = document.getElementById(inputId + '-list');
+      listEl.classList.remove('show');
+    }
+
+    function renderOptions(inputId, entityType, filterText) {
+      const listEl = document.getElementById(inputId + '-list');
+      const data = entityType === 'channel' ? discordDataCache.channels : discordDataCache.roles;
+      const lowerFilter = filterText.toLowerCase();
+
+      const filtered = data.filter(d => d.name.toLowerCase().includes(lowerFilter) || d.id.includes(lowerFilter)).slice(0, 15);
+
+      if (filtered.length === 0) {
+        listEl.innerHTML = '<div class="autocomplete-item">Nenhum resultado... (Você pode colar o ID)</div>';
+        return;
+      }
+
+      listEl.innerHTML = filtered.map(d => {
+        let icon = '🛡️';
+        if (entityType === 'channel') {
+           if (d.type === 0) icon = '💬'; // Texto
+           else if (d.type === 4) icon = '📁'; // Categoria
+           else if (d.type === 2) icon = '🔊'; // Voz
+        }
+        return \`<div class="autocomplete-item" onclick="selectOption('\${inputId}', '\${d.id}')">\${icon} <span>\${d.name}</span> <small style="opacity:0.5; font-size:0.7rem; margin-left:auto;">\${d.id}</small></div>\`;
+      }).join('');
     }
 
     function updatePreview(inputId) {
@@ -780,14 +935,14 @@ export function startDashboard() {
     async function toggleFeature(type, feature, state) {
       const guildId = document.getElementById('serverSelect').value;
       const res = await fetch('/api/toggle', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type, guildId, feature, state }) });
-      res.ok ? showToast('Módulo atualizado com sucesso!') : showToast('Falha ao salvar módulo.', true);
+      res.ok ? showToast('Módulo atualizado!') : showToast('Falha ao salvar.', true);
     }
 
     async function saveSetting(type, feature, inputId, valueType) {
       const guildId = document.getElementById('serverSelect').value;
       const value = document.getElementById(inputId).value;
       const res = await fetch('/api/update', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type, guildId, feature, value, valueType }) });
-      res.ok ? showToast('Configuração salva com sucesso!') : showToast('Erro ao atualizar configuração.', true);
+      res.ok ? showToast('Salvo com sucesso!') : showToast('Erro ao atualizar.', true);
     }
 
     function showToast(msg, isError = false) {

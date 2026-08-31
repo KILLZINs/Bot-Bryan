@@ -5,7 +5,7 @@ import path from 'path';
 import { prisma } from '../database/client';
 
 // ─── Importações Oficiais do RPG da Aliança Skyline ─────────────────────────
-import { getOrCreateCharacter, computeStats, distributeStatPoints, FullCharacter, hpBar, xpBar } from '../rpg/services/character';
+import { getOrCreateCharacter, computeStats, distributeStatPoints, FullCharacter } from '../rpg/services/character';
 import { doExplore } from '../rpg/panels/exploracao';
 import { doTrain } from '../rpg/panels/treinar';
 import { startMeditation, collectMeditation } from '../rpg/panels/meditar';
@@ -13,13 +13,14 @@ import { castFishingLine, reelFishingLine } from '../rpg/panels/pescaria';
 import { buyTavernaItem, rollTavernaDice } from '../rpg/panels/taverna';
 import { attackWorldBoss, getActiveBoss } from '../rpg/services/worldBoss';
 import { travelTo } from '../rpg/panels/travel';
-import { equipItem, unequipItem, useConsumable, sellItem, buyItem } from '../rpg/services/inventory';
-import { getItem, ITEMS } from '../rpg/constants/items';
-import { getLocation, LOCATION_LIST, ENV_EMOJI } from '../rpg/constants/locations';
-import { getClass, rpgXpForLevel, karmaLabel } from '../rpg/constants/classes';
-import { DIVINE_SKILLS } from '../rpg/constants/skills';
-import { getEnemiesForLocation, getBossesForLocation, getEnemy } from '../rpg/constants/enemies';
+import { equipItem, unequipItem, useConsumable, sellItem, buyItem, getInventory } from '../rpg/services/inventory';
+import { getItem, ITEMS, ITEM_LIST, CRAFT_RECIPES } from '../rpg/constants/items';
+import { getLocation, LOCATION_LIST } from '../rpg/constants/locations';
+import { getClass, rpgXpForLevel } from '../rpg/constants/classes';
+import { DIVINE_SKILLS, PASSIVE_TALENTS } from '../rpg/constants/skills';
+import { getEnemiesForLocation } from '../rpg/constants/enemies';
 import { startInteractiveCombat, takeCombatAction } from '../rpg/services/combat';
+import { craftItem } from '../rpg/panels/forja';
 
 const BOT_OWNER_ID = '1195254699943796791';
 
@@ -160,7 +161,7 @@ async function validateGuildAccess(userId: string, guildId: string): Promise<boo
   const access = await prisma.allianceServerMember.findFirst({
     where: { userId, guildId }
   });
-  return !!access;
+  return !access;
 }
 
 export function startDashboard() {
@@ -316,7 +317,7 @@ export function startDashboard() {
 </html>`);
   });
 
-  // ─── TELA DO WEB RPG (RETRO PIXEL INDIE COM ARENA DINÂMICA) ───────────────
+  // ─── TELA DO WEB RPG (PIXEL ART RETRO COM TODOS OS SISTEMAS) ──────────────
   app.get('/rpg', async (req, res) => {
     if (req.cookies?.skyline_auth !== 'permitido') {
       return res.redirect('/login');
@@ -508,6 +509,8 @@ export function startDashboard() {
     <div class="action-panel">
       <div class="action-tabs">
         <button class="game-tab-btn active" onclick="switchGameTab('dungeon')">⚔️ DUNGEON</button>
+        <button class="game-tab-btn" onclick="switchGameTab('city')">🏰 CIDADE & LOJA</button>
+        <button class="game-tab-btn" onclick="switchGameTab('inventory')">🎒 INVENTÁRIO</button>
         <button class="game-tab-btn" onclick="switchGameTab('explore')">🌍 EXPLORAR</button>
         <button class="game-tab-btn" onclick="switchGameTab('train')">🥊 TREINAR</button>
         <button class="game-tab-btn" onclick="switchGameTab('fish')">🎣 PESCAR</button>
@@ -568,9 +571,32 @@ export function startDashboard() {
           document.getElementById('enemySprite').innerText = '👹';
           controls.innerHTML = \`
             <button class="btn-action" onclick="sendAction('combat_start')">⚔️ INICIAR COMBATE</button>
-            <button class="btn-action" style="background:#2b9348;" onclick="sendAction('heal_rest')">🏥 CURAR (10G)</button>
+            <button class="btn-action" style="background:#2b9348;" onclick="sendAction('heal_rest')">🏥 CURAR HP/ENERGIA</button>
           \`;
         }
+      } else if (tab === 'city') {
+        document.getElementById('enemyName').innerText = 'CIDADE DA ALIANÇA';
+        document.getElementById('enemySprite').innerText = '🏰';
+        document.getElementById('enemyHpText').innerText = 'ZONA SEGURA';
+        document.getElementById('enemyHpBar').style.width = '100%';
+        controls.innerHTML = \`
+          <button class="btn-action" style="background:#2ecc71;" onclick="sendAction('heal_rest')">🏥 CURANDEIRO</button>
+          <button class="btn-action" style="background:#f1c40f; color:#000;" onclick="sendAction('tavern_beer')">🍺 BEBER CERVEJA (20G)</button>
+          <button class="btn-action" style="background:#e67e22;" onclick="sendAction('forge_iron_sword')">⚒️ FORJAR ESPADA (100G)</button>
+          <button class="btn-action" style="background:#9b59b6;" onclick="loadCharacter()">🔄 ATUALIZAR</button>
+        \`;
+        addLog('Hub da Cidade: Acesse curandeiro, forja e comércios da Aliança.', '#ffd166');
+      } else if (tab === 'inventory') {
+        document.getElementById('enemyName').innerText = 'MOCHILA & EQUIPAMENTO';
+        document.getElementById('enemySprite').innerText = '🎒';
+        document.getElementById('enemyHpText').innerText = 'INVENTÁRIO';
+        document.getElementById('enemyHpBar').style.width = '100%';
+        controls.innerHTML = \`
+          <button class="btn-action" style="background:#3498db;" onclick="sendAction('use_potion')">🧪 USAR POÇÃO DE HP</button>
+          <button class="btn-action" style="background:#e67e22;" onclick="sendAction('sell_iron')">💰 VENDER MINÉRIO</button>
+          <button class="btn-action" style="background:#7928ca;" onclick="loadCharacter()">🔄 ATUALIZAR BOLSA</button>
+        \`;
+        addLog('Inventário de itens: Use consumíveis ou venda recursos.', '#00e5ff');
       } else if (tab === 'explore') {
         document.getElementById('enemyName').innerText = 'RUÍNAS & CAMINHOS';
         document.getElementById('enemySprite').innerText = '🗺️';
@@ -676,7 +702,6 @@ export function startDashboard() {
         document.getElementById('luckVal').innerText = stats.lck;
         document.getElementById('statPointsVal').innerText = char.statPoints;
 
-        // Ativa ou esconde botões de ponto
         const hasPoints = char.statPoints > 0;
         ['btnStr','btnAgi','btnInt','btnVit','btnLuck'].forEach(id => {
           const btn = document.getElementById(id);
@@ -698,7 +723,7 @@ export function startDashboard() {
           document.getElementById('locationName').innerText = '📍 LOCAL: ' + loc.name.toUpperCase();
         }
 
-        // Atualiza Arena se estiver em combate
+        // Atualiza Arena se estiver em combate ativo
         if (data.combat) {
           inBattle = true;
           document.getElementById('enemyName').innerText = data.combat.enemyName.toUpperCase();
@@ -735,7 +760,6 @@ export function startDashboard() {
           addLog(data.message, data.success ? '#ffd700' : '#ff0055');
         }
 
-        // Se o combate acabou, reseta o estado
         if (data.combatFinished) {
           inBattle = false;
           switchGameTab(currentTab);
@@ -813,7 +837,7 @@ export function startDashboard() {
     try {
       let char = await getOrCreateCharacter(userId, userName);
 
-      // INICIAR COMBATE
+      // 1. INICIAR COMBATE
       if (action === 'combat_start') {
         const loc = getLocation(char.currentLocation);
         const enemies = getEnemiesForLocation(loc.id, char.level);
@@ -837,7 +861,7 @@ export function startDashboard() {
         }
       }
 
-      // TURNOS DE COMBATE
+      // 2. EXECUTAR TURNOS DE COMBATE
       if (action.startsWith('combat_')) {
         const combatAction = action.replace('combat_', '') as 'attack' | 'skill' | 'defend' | 'potion' | 'flee';
         try {
@@ -867,20 +891,20 @@ export function startDashboard() {
         }
       }
 
-      // EXPLORAÇÃO
+      // 3. EXPLORAÇÃO
       if (action === 'explore') {
         const result = await doExplore(char);
         return res.json({ success: result.success, message: result.message || 'Exploração concluída!' });
       }
 
-      // TREINAMENTO
+      // 4. TREINAMENTO
       if (action.startsWith('train_')) {
         const statId = action.replace('train_', '');
         const result = await doTrain(char, statId);
         return res.json(result);
       }
 
-      // PESCARIA
+      // 5. PESCARIA
       if (action === 'fish_cast') {
         const result = await castFishingLine(char);
         return res.json(result);
@@ -891,7 +915,7 @@ export function startDashboard() {
         return res.json({ success: result.success, message: result.message || 'Você puxou a linha de pesca!' });
       }
 
-      // TAVERNA
+      // 6. TAVERNA
       if (action === 'tavern_beer' || action === 'tavern_meal') {
         const itemId = action === 'tavern_beer' ? 'cerveja' : 'banquete';
         const result = await buyTavernaItem(char, itemId);
@@ -903,15 +927,42 @@ export function startDashboard() {
         return res.json({ success: true, message: result.embed.data.description || 'Jogo de dados finalizado!' });
       }
 
-      // CURANDEIRO
+      // 7. CURANDEIRO
       if (action === 'heal_rest') {
         const stats = computeStats(char);
-        if (char.gold < 10) return res.json({ success: false, message: 'Ouro insuficiente para curar (Custa 10G).' });
+        const hpMissing = stats.maxHp - char.currentHp;
+        const enMissing = stats.maxEnergy - char.currentEnergy;
+        const cost = Math.max(5, Math.ceil(hpMissing * 0.12 + enMissing * 0.08));
+
+        if (hpMissing === 0 && enMissing === 0) {
+          return res.json({ success: true, message: '🏥 Você já está com HP e Energia 100% cheios!' });
+        }
+        if (char.gold < cost) {
+          return res.json({ success: false, message: `🏥 Ouro insuficiente! Curar custa ${cost}G e você tem ${char.gold}G.` });
+        }
+
         await prisma.rpgCharacter.update({
           where: { discordId: userId },
-          data: { currentHp: stats.maxHp, currentEnergy: stats.maxEnergy, gold: { decrement: 10 } }
+          data: { currentHp: stats.maxHp, currentEnergy: stats.maxEnergy, gold: { decrement: cost }, lastRest: new Date() }
         });
-        return res.json({ success: true, message: '❤️ Você foi curado na cidade! HP e Energia 100% restaurados.' });
+        return res.json({ success: true, message: `❤️ Você foi curado na cidade por ${cost}G! HP e Energia 100% restaurados.` });
+      }
+
+      // 8. FORJA
+      if (action === 'forge_iron_sword') {
+        const result = await craftItem(userId, 'craft_espada_ferro');
+        return res.json(result);
+      }
+
+      // 9. ITENS & INVENTÁRIO
+      if (action === 'use_potion') {
+        const result = await useConsumable(userId, 'pocao_de_vida_p');
+        return res.json(result);
+      }
+
+      if (action === 'sell_iron') {
+        const result = await sellItem(userId, 'minerio_de_ferro', 1);
+        return res.json(result);
       }
 
       res.json({ success: true, message: 'Ação executada.' });

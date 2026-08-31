@@ -12,6 +12,7 @@ import { GuildMember, VoiceBasedChannel } from 'discord.js';
 import prism from 'prism-media';
 import { Readable } from 'node:stream';
 import { prisma } from '../database/client';
+import axios from 'axios';
 
 export type CalliaPersona = 'bryan' | 'suki' | 'custom';
 
@@ -96,55 +97,73 @@ async function transcribe(wav: Buffer): Promise<string> {
   return data.text?.trim() ?? '';
 }
 
-// 🤖 O BOT FALA: STREAMELEMENTS
+// 🤖 MOTOR DE VOZ TRIPLO (TikTok -> StreamElements -> Google)
 async function synthesize(text: string, persona: CalliaPersona, guildId: string): Promise<Buffer> {
-  let voice = 'Vitoria'; // Padrão Feminino
+  let isMale = false;
   
   if (persona === 'bryan') {
-    voice = 'Ricardo'; // Padrão Masculino
+    isMale = true;
   } else if (persona === 'custom') {
     try {
       const cfg = await prisma.guildConfig.findUnique({ where: { guildId } });
       if (cfg?.aiCustomVoice && cfg.aiCustomVoice.toLowerCase().startsWith('m')) {
-        voice = 'Ricardo';
+        isMale = true;
       }
     } catch (e) {}
   }
 
-  // 💡 A CORREÇÃO: Cortar em MÁXIMO de 150 caracteres. 
-  // O limite da API é ~200. Com 150 nós garantimos que a voz do Ricardo vai gerar sem tomar block!
+  // Corta em 150 caracteres para respeitar os limites das APIs Gratuitas
   const chunks = text.match(/[\s\S]{1,150}(?!\w)|[\s\S]{1,150}/g) || [text];
-  
   const audioBuffers: Buffer[] = [];
-  let streamElementsFailed = false;
+
+  // ==========================================
+  // TENTATIVA 1: TIKTOK TTS (Muito Realista e não bloqueia fácil)
+  // ==========================================
+  let tiktokFailed = false;
+  const tiktokVoice = isMale ? 'br_005' : 'br_001'; // br_005 (Pedro/Masc), br_001 (Júlia/Fem)
 
   for (const chunk of chunks) {
     if (!chunk.trim()) continue;
-
     try {
-      const url = `https://api.streamelements.com/kappa/v2/speech?voice=${voice}&text=${encodeURIComponent(chunk.trim())}`;
-      
-      const response = await fetch(url, {
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-        }
+      const res = await fetch('https://tiktok-tts.weilnet.workers.dev/api/generation', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: chunk.trim(), voice: tiktokVoice })
       });
-
-      const contentType = response.headers.get('content-type');
-
-      if (!response.ok || !contentType?.includes('audio')) {
-        console.error(`[CALLIA] Bloqueio StreamElements! Status: ${response.status}`);
-        streamElementsFailed = true;
-        break;
+      const data = (await res.json()) as { data?: string, error?: string };
+      
+      if (data.data) {
+        audioBuffers.push(Buffer.from(data.data, 'base64'));
+        await new Promise(r => setTimeout(r, 200)); // anti-spam
+      } else {
+        tiktokFailed = true; break;
       }
-
-      const arrayBuffer = await response.arrayBuffer();
-      audioBuffers.push(Buffer.from(arrayBuffer));
-
-      // Pausa leve para não dar Rate Limit na API
-      await new Promise(r => setTimeout(r, 200));
     } catch (e) {
-      console.error('[CALLIA] Falha de conexão StreamElements:', e);
+      tiktokFailed = true; break;
+    }
+  }
+
+  if (!tiktokFailed && audioBuffers.length > 0) {
+    return Buffer.concat(audioBuffers);
+  }
+
+  console.log('[CALLIA] TikTok TTS falhou, tentando StreamElements...');
+  audioBuffers.length = 0; // Limpa os buffers para tentar de novo
+
+  // ==========================================
+  // TENTATIVA 2: STREAMELEMENTS VIA AXIOS (Para burlar bloqueio CF)
+  // ==========================================
+  let streamElementsFailed = false;
+  const seVoice = isMale ? 'Ricardo' : 'Vitoria';
+
+  for (const chunk of chunks) {
+    if (!chunk.trim()) continue;
+    try {
+      const url = `https://api.streamelements.com/kappa/v2/speech?voice=${seVoice}&text=${encodeURIComponent(chunk.trim())}`;
+      const res = await axios.get(url, { responseType: 'arraybuffer' });
+      audioBuffers.push(Buffer.from(res.data));
+      await new Promise(r => setTimeout(r, 300));
+    } catch (e) {
       streamElementsFailed = true;
       break;
     }
@@ -154,23 +173,22 @@ async function synthesize(text: string, persona: CalliaPersona, guildId: string)
     return Buffer.concat(audioBuffers);
   }
 
-  // PLANO B: Se a internet piscar ou a API cair, ele vai pro Google.
-  console.log('[CALLIA] Ativando Plano B: Voz do Google Tradutor (Apenas Feminina)...');
-  const fallbackBuffers: Buffer[] = [];
+  console.log('[CALLIA] StreamElements falhou, ativando Plano C: Google Tradutor');
+  audioBuffers.length = 0;
 
+  // ==========================================
+  // TENTATIVA 3: GOOGLE TRADUTOR (Fallback final - Só tem voz feminina)
+  // ==========================================
   for (const chunk of chunks) {
     if (!chunk.trim()) continue;
-    const url = `https://translate.google.com/translate_tts?ie=UTF-8&client=tw-ob&tl=pt-BR&q=${encodeURIComponent(chunk.trim())}`;
-    const response = await fetch(url, {
-      headers: { 'User-Agent': 'Mozilla/5.0' }
-    });
-    if (response.ok) {
-      const arrayBuffer = await response.arrayBuffer();
-      fallbackBuffers.push(Buffer.from(arrayBuffer));
-    }
+    try {
+      const url = `https://translate.google.com/translate_tts?ie=UTF-8&client=tw-ob&tl=pt-BR&q=${encodeURIComponent(chunk.trim())}`;
+      const res = await axios.get(url, { responseType: 'arraybuffer' });
+      audioBuffers.push(Buffer.from(res.data));
+    } catch (e) {}
   }
 
-  return Buffer.concat(fallbackBuffers);
+  return Buffer.concat(audioBuffers);
 }
 
 class CalliaSession implements SessionLike {
@@ -309,7 +327,7 @@ class CalliaSession implements SessionLike {
       });
     } catch (error) {
       console.error('[CALLIA] Falha no ciclo de voz:', error);
-      await this.status('Não consegui processar sua fala. Verifique os logs do bot.').catch(() => {});
+      await this.status('Não consegui processar sua fala.').catch(() => {});
     } finally {
       this.processing = false;
     }

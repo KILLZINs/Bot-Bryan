@@ -270,12 +270,13 @@ model GuildConfig {
   id                    String   @id @default(cuid())
   guildId               String   @unique
 
- // 🧟 Sistema de Reviver Chat
+  // 🧟 Sistema de Reviver Chat
   reviveChannelId       String?
   reviveRoleId          String?
   reviveTimeout         Int?     @default(120) // Tempo em minutos
   revivePrompt          String?  @db.Text
   featReviveChat        Boolean  @default(false)
+  
   // 🤖 Fábrica de IA (Custom Callia)
   aiCustomName          String?
   aiCustomVoice         String?
@@ -305,7 +306,7 @@ model GuildConfig {
   autoRoleId            String?
   welcomeMessage        String?
   
-  // 💎 VIP e Aliança (Adicionado aqui)
+  // 💎 VIP e Aliança
   vipRoleId             String?
   vipTicketCategoryId   String?
   allianceChannelId     String?
@@ -776,6 +777,7 @@ model BotConfig {
   featAfk           Boolean  @default(true)
   featWelcomeDm     Boolean  @default(true)
 
+  // 🌍 Travas Globais Mestre
   featLeveling      Boolean  @default(true)
   featRpg           Boolean  @default(true)
   featTickets       Boolean  @default(true)
@@ -789,6 +791,14 @@ model BotConfig {
   featAnnouncements Boolean  @default(true)
   featMusic         Boolean  @default(true)
   featVoiceAi       Boolean  @default(true)
+  featReviveChat    Boolean  @default(true)
+
+  // 👤 Perfil Oficial do Bryan (Configurador)
+  botAvatarUrl      String?
+  botBannerUrl      String?
+  botPronouns       String   @default("Ele/Dele")
+  botBio            String?  @db.Text
+  botStatusRotation String?  @db.Text
 
   updatedAt         DateTime @updatedAt @default(now())
 

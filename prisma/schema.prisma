@@ -40,11 +40,11 @@ model AllowedGuild {
 }
 
 model BotManager {
-  id        String   @id @default(cuid())
-  userId    String   @unique
-  username  String?
-  addedBy   String
-  addedAt   DateTime @default(now())
+  id       String   @id @default(cuid())
+  userId   String   @unique
+  username String?
+  addedBy  String
+  addedAt  DateTime @default(now())
 
   @@map("bot_managers")
 }
@@ -266,10 +266,16 @@ model WeeklyMission {
   @@map("weekly_missions")
 }
 
-// Adicione feedChannelId dentro do seu model GuildConfig:
 model GuildConfig {
   id                    String   @id @default(cuid())
   guildId               String   @unique
+  
+  // 🤖 Fábrica de IA (Custom Callia)
+  aiCustomName          String?
+  aiCustomVoice         String?
+  aiSystemPrompt        String?
+
+  // 📸 Feed Social / Instagram
   feedChannelId         String?
   feedEmbedColor        Int?     @default(14757996)
   feedLikeEmoji         String   @default("❤️")
@@ -277,6 +283,7 @@ model GuildConfig {
   feedCommentEmoji      String   @default("💬")
   feedFooterText        String   @default("📸 Instagram Skyline")
 
+  // 📁 Canais, Tickets e Cargos
   logChannelId          String?
   welcomeChannelId      String?
   announcementChannelId String?
@@ -291,12 +298,19 @@ model GuildConfig {
   feedbackChannelId     String?
   autoRoleId            String?
   welcomeMessage        String?
+  
+  // 💎 VIP e Aliança (Adicionado aqui)
+  vipRoleId             String?
+  vipTicketCategoryId   String?
+  allianceChannelId     String?
+
   xpMin                 Int      @default(15)
   xpMax                 Int      @default(25)
   xpCooldown            Int      @default(60)
   antiSpam              Boolean  @default(false)
   antiLinks             Boolean  @default(false)
 
+  // 🧩 Módulos (Switches)
   featLeveling          Boolean  @default(true)
   featRpg               Boolean  @default(true)
   featTickets           Boolean  @default(true)
@@ -309,6 +323,7 @@ model GuildConfig {
   featMod               Boolean  @default(true)
   featAnnouncements     Boolean  @default(true)
   featMusic             Boolean  @default(true)
+  featVoiceAi           Boolean  @default(true)
 
   logFlags              Int      @default(31)
   updatedAt             DateTime @updatedAt @default(now())
@@ -671,9 +686,9 @@ model WorldBossParticipant {
 }
 
 model Marriage {
-  id       String   @id @default(cuid())
-  userId1  String
-  userId2  String
+  id        String   @id @default(cuid())
+  userId1   String
+  userId2   String
   marriedAt DateTime @default(now())
 
   @@unique([userId1, userId2])
@@ -747,13 +762,13 @@ model AllianceEmbed {
 }
 
 model BotConfig {
-  id            String   @id @default("global")
-  footerText    String   @default("⚔️ Aliança Skyline")
-  primaryColor  Int      @default(10180278)
-  botIconUrl    String?
-  rpFooterText  String   @default("⚔️ Aliança Skyline • /genero para mudar seus pronomes")
-  featAfk       Boolean  @default(true)
-  featWelcomeDm Boolean  @default(true)
+  id                String   @id @default("global")
+  footerText        String   @default("⚔️ Aliança Skyline")
+  primaryColor      Int      @default(10180278)
+  botIconUrl        String?
+  rpFooterText      String   @default("⚔️ Aliança Skyline • /genero para mudar seus pronomes")
+  featAfk           Boolean  @default(true)
+  featWelcomeDm     Boolean  @default(true)
 
   featLeveling      Boolean  @default(true)
   featRpg           Boolean  @default(true)
@@ -767,8 +782,9 @@ model BotConfig {
   featMod           Boolean  @default(true)
   featAnnouncements Boolean  @default(true)
   featMusic         Boolean  @default(true)
+  featVoiceAi       Boolean  @default(true)
 
-  updatedAt     DateTime @updatedAt @default(now())
+  updatedAt         DateTime @updatedAt @default(now())
 
   @@map("bot_config")
 }
@@ -831,12 +847,12 @@ model VipConfig {
 }
 
 model VipGuildConfig {
-  id                       String   @id @default(cuid())
-  guildId                  String   @unique
+  id                     String   @id @default(cuid())
+  guildId                String   @unique
   gradientTicketCategoryId String?
   defaultFavoriteLimit     Int      @default(3)
-  createdAt                DateTime @default(now())
-  updatedAt                DateTime @updatedAt
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
 
   @@map("vip_guild_configs")
 }

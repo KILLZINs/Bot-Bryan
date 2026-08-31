@@ -4,6 +4,25 @@ import cookieParser from 'cookie-parser';
 import path from 'path';
 import { prisma } from '../database/client';
 
+// ─── Importações Reais do Ecossistema RPG ────────────────────────────────────
+import { getOrCreateCharacter, computeStats, distributeStatPoints, FullCharacter } from '../rpg/services/character';
+import { doExplore } from '../rpg/panels/exploracao';
+import { doTrain } from '../rpg/panels/treinar';
+import { startMeditation, collectMeditation } from '../rpg/panels/meditar';
+import { castFishingLine, reelFishingLine } from '../rpg/panels/pescaria';
+import { buyTavernaItem, rollTavernaDice } from '../rpg/panels/taverna';
+import { attackWorldBoss, getActiveBoss } from '../rpg/services/worldBoss';
+import { travelTo } from '../rpg/panels/travel';
+import { equipItem, unequipItem, useConsumable, sellItem, buyItem, getInventory } from '../rpg/services/inventory';
+import { getItem, ITEMS, ITEM_LIST } from '../rpg/constants/items';
+import { getLocation, LOCATION_LIST, ENV_EMOJI } from '../rpg/constants/locations';
+import { getClass, rpgXpForLevel, karmaLabel } from '../rpg/constants/classes';
+import { DIVINE_SKILLS } from '../rpg/constants/skills';
+import { getEnemiesForLocation, getBossesForLocation, getEnemy } from '../rpg/constants/enemies';
+import { startInteractiveCombat, takeCombatAction } from '../rpg/services/combat';
+import { getActiveBuffs, formatBuffList } from '../rpg/services/temp-buffs';
+import { getMarriage, getPartner } from '../rpg/services/marriage';
+
 const BOT_OWNER_ID = '1195254699943796791';
 
 // ==========================================
@@ -55,7 +74,7 @@ const GLOBAL_CATEGORIES = [
     category: "⚙️ Sistemas Centrais Globais",
     features: [
       { id: 'featAfk', name: 'Sistema AFK Global', desc: 'Comando /afk e monitoramento de menções em toda a rede.' },
-      { id: 'featWelcomeDm', name: 'DM de Boas-vindas Global', desc: 'Mensagem privada automática aos novos membros.' }
+      { id: 'featWelcomeDm', name: 'DM de Boas-vindas Global', desc: 'Recepciona novos membros com mensagem no privado.' }
     ]
   },
   {
@@ -513,7 +532,7 @@ export function startDashboard() {
 </html>`);
   });
 
-  // ─── TELA DO WEB RPG (PIXEL ART RETRO INDIE GAME) ────────────────────────
+  // ─── TELA DO WEB RPG (PIXEL ART RETRO INDIE GAME FIEL AO BACKEND) ─────────
   app.get('/rpg', async (req, res) => {
     if (req.cookies?.skyline_auth !== 'permitido') {
       return res.redirect('/login');
@@ -544,88 +563,90 @@ export function startDashboard() {
     .crt-overlay {
       position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
       pointer-events: none; z-index: 999;
-      background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.35) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.03), rgba(0, 255, 0, 0.01), rgba(0, 255, 0, 0.03));
+      background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.35) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.03), rgba(0, 255, 0, 0.01), rgba(0, 0, 255, 0.03));
       background-size: 100% 3px, 4px 100%;
     }
     .game-navbar {
       background: #190f28; border-bottom: 4px solid #7928ca;
       padding: 15px 30px; display: flex; justify-content: space-between; align-items: center;
     }
-    .game-logo { font-size: 14px; color: #ff007f; text-shadow: 2px 2px #000; }
+    .game-logo { font-size: 13px; color: #ff007f; text-shadow: 2px 2px #000; }
     .nav-link { color: #ffd166; text-decoration: none; font-size: 10px; margin-left: 20px; }
     .nav-link:hover { color: #00ffcc; }
 
     .game-container {
-      flex: 1; max-width: 1200px; width: 100%; margin: 25px auto; padding: 0 20px;
-      display: grid; grid-template-columns: 360px 1fr; gap: 25px;
+      flex: 1; max-width: 1280px; width: 100%; margin: 20px auto; padding: 0 20px;
+      display: grid; grid-template-columns: 380px 1fr; gap: 20px;
     }
 
+    /* COLUNA DO PERSONAGEM */
     .char-panel {
       background: #150c22; border: 4px solid #ff007f; box-shadow: 6px 6px 0px #000;
-      padding: 20px; display: flex; flex-direction: column; gap: 15px;
+      padding: 18px; display: flex; flex-direction: column; gap: 14px;
     }
     .avatar-frame {
-      width: 100%; height: 160px; background: #07040a; border: 4px solid #7928ca;
+      width: 100%; height: 140px; background: #07040a; border: 4px solid #7928ca;
       display: flex; align-items: center; justify-content: center; position: relative;
-      background-size: cover; background-position: center;
     }
-    .char-sprite { font-size: 64px; filter: drop-shadow(4px 4px 0px #000); animation: floatSprite 1.5s infinite ease-in-out alternate; }
-    @keyframes floatSprite { from { transform: translateY(-4px); } to { transform: translateY(4px); } }
+    .char-sprite { font-size: 54px; filter: drop-shadow(4px 4px 0px #000); animation: floatSprite 1.5s infinite ease-in-out alternate; }
+    @keyframes floatSprite { from { transform: translateY(-3px); } to { transform: translateY(3px); } }
 
-    .char-title-tag { font-size: 8px; color: #ffd166; text-align: center; text-transform: uppercase; margin-top: 5px; }
-    .char-name { font-size: 12px; color: #fff; text-align: center; text-shadow: 2px 2px #ff007f; }
-    .char-class { font-size: 9px; color: #00ffcc; text-align: center; }
+    .char-title-tag { font-size: 8px; color: #ffd166; text-align: center; text-transform: uppercase; margin-top: 3px; }
+    .char-name { font-size: 13px; color: #fff; text-align: center; text-shadow: 2px 2px #ff007f; }
+    .char-class { font-size: 8.5px; color: #00ffcc; text-align: center; }
 
-    .bar-wrap { margin-top: 5px; }
-    .bar-label { font-size: 8px; margin-bottom: 4px; display: flex; justify-content: space-between; color: #fff; }
-    .pixel-bar { height: 16px; background: #000; border: 2px solid #fff; position: relative; }
+    .bar-wrap { margin-top: 4px; }
+    .bar-label { font-size: 8px; margin-bottom: 3px; display: flex; justify-content: space-between; color: #fff; }
+    .pixel-bar { height: 14px; background: #000; border: 2px solid #fff; position: relative; }
     .pixel-fill-hp { height: 100%; width: 100%; background: #ff0055; transition: width 0.3s; }
     .pixel-fill-energy { height: 100%; width: 100%; background: #00e5ff; transition: width 0.3s; }
     .pixel-fill-xp { height: 100%; width: 100%; background: #ffd700; transition: width 0.3s; }
 
-    .stats-box { background: #0c0714; border: 2px solid #7928ca; padding: 12px; display: flex; flex-direction: column; gap: 8px; font-size: 8px; }
+    .stats-box { background: #0c0714; border: 2px solid #7928ca; padding: 12px; display: flex; flex-direction: column; gap: 6px; font-size: 8px; }
     .stat-row { display: flex; justify-content: space-between; align-items: center; }
+    .stat-btn { background: #00ffcc; border: none; color: #000; font-family: inherit; font-size: 8px; padding: 2px 6px; cursor: pointer; }
+    .stat-btn:hover { background: #ff007f; color: #fff; }
 
+    .cooldowns-box { background: #08040d; border: 2px solid #3d1c73; padding: 10px; font-size: 7.5px; display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+
+    /* COLUNA DE AÇÕES */
     .action-panel {
       background: #150c22; border: 4px solid #7928ca; box-shadow: 6px 6px 0px #000;
-      padding: 20px; display: flex; flex-direction: column; gap: 20px;
+      padding: 20px; display: flex; flex-direction: column; gap: 16px;
     }
-    .action-tabs { display: flex; gap: 10px; border-bottom: 4px solid #0c0714; padding-bottom: 12px; flex-wrap: wrap; }
+    .action-tabs { display: flex; gap: 8px; border-bottom: 4px solid #0c0714; padding-bottom: 12px; flex-wrap: wrap; }
     .game-tab-btn {
       background: #1f1233; color: #b8a6d9; border: 2px solid #7928ca;
-      font-family: inherit; font-size: 9px; padding: 10px 14px; cursor: pointer; transition: 0.2s;
+      font-family: inherit; font-size: 8.5px; padding: 10px 12px; cursor: pointer; transition: 0.2s;
     }
     .game-tab-btn:hover, .game-tab-btn.active {
       background: #ff007f; color: #fff; border-color: #fff; box-shadow: 2px 2px 0px #000;
     }
 
     .arena-display {
-      height: 220px; background: #08040d; border: 4px solid #00ffcc;
+      height: 200px; background: #08040d; border: 4px solid #00ffcc;
       display: flex; flex-direction: column; justify-content: space-between; padding: 15px; position: relative;
     }
     .monster-zone { display: flex; justify-content: space-between; align-items: center; }
-    .monster-sprite { font-size: 50px; animation: monsterShake 2s infinite; }
-    @keyframes monsterShake { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.08) rotate(3deg); } }
+    .monster-sprite { font-size: 46px; animation: monsterShake 2s infinite; }
+    @keyframes monsterShake { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.06) rotate(2deg); } }
 
     .game-log-box {
       height: 140px; background: #000; border: 2px solid #7928ca;
       padding: 10px; overflow-y: auto; font-family: 'VT323', monospace; font-size: 18px; color: #00ffcc;
-      display: flex; flex-direction: column; gap: 4px;
+      display: flex; flex-direction: column; gap: 3px;
     }
-    .log-line-dmg { color: #ff0055; }
-    .log-line-loot { color: #ffd700; }
-    .log-line-win { color: #00ffcc; font-weight: bold; }
 
-    .controls-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
+    .controls-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; }
     .btn-action {
       background: #7928ca; border: 3px solid #fff; color: #fff;
-      font-family: inherit; font-size: 9px; padding: 14px 10px; cursor: pointer;
-      text-align: center; box-shadow: 4px 4px 0px #000; transition: all 0.15s;
+      font-family: inherit; font-size: 8px; padding: 12px 8px; cursor: pointer;
+      text-align: center; box-shadow: 3px 3px 0px #000; transition: all 0.15s;
     }
-    .btn-action:hover { background: #ff007f; transform: translate(-2px, -2px); box-shadow: 6px 6px 0px #000; }
-    .btn-action:active { transform: translate(2px, 2px); box-shadow: 2px 2px 0px #000; }
+    .btn-action:hover { background: #ff007f; transform: translate(-2px, -2px); box-shadow: 5px 5px 0px #000; }
+    .btn-action:active { transform: translate(1px, 1px); box-shadow: 1px 1px 0px #000; }
 
-    @media (max-width: 850px) {
+    @media (max-width: 900px) {
       .game-container { grid-template-columns: 1fr; }
     }
   </style>
@@ -634,7 +655,7 @@ export function startDashboard() {
   <div class="crt-overlay"></div>
 
   <div class="game-navbar">
-    <div class="game-logo">⚔️ SKYLINE RPG :: PIXEL EDITION</div>
+    <div class="game-logo">⚔️ SKYLINE RPG :: PIXEL WEB EDITION</div>
     <div>
       <a href="/painel" class="nav-link">⚙️ PAINEL</a>
       <a href="/" class="nav-link">🏠 INÍCIO</a>
@@ -642,11 +663,12 @@ export function startDashboard() {
   </div>
 
   <div class="game-container">
+    <!-- COLUNA DO PERSONAGEM -->
     <div class="char-panel">
       <div class="avatar-frame">
-        <div class="char-sprite" id="charSprite">🧙‍♂️</div>
+        <div class="char-sprite" id="charSprite">⚔️</div>
       </div>
-      <div class="char-title-tag" id="charTitle">⚔️ Guerreiro Iniciante</div>
+      <div class="char-title-tag" id="charTitle">« Aventureiro »</div>
       <div class="char-name" id="charName">${userName}</div>
       <div class="char-class" id="charClass">NÍVEL 1 • GUERREIRO</div>
 
@@ -663,44 +685,74 @@ export function startDashboard() {
         <div class="pixel-bar"><div class="pixel-fill-xp" id="xpBar"></div></div>
       </div>
 
+      <!-- ATRIBUTOS E DISTRIBUIÇÃO DE PONTOS -->
       <div class="stats-box">
         <div class="stat-row"><span>🪙 GOLD:</span><span id="goldVal" style="color:#ffd700;">100</span></div>
-        <div class="stat-row"><span>💪 FORÇA:</span><span id="strVal">10</span></div>
-        <div class="stat-row"><span>⚡ AGILIDADE:</span><span id="agiVal">10</span></div>
-        <div class="stat-row"><span>🧠 INTELIGÊNCIA:</span><span id="intVal">10</span></div>
-        <div class="stat-row"><span>🛡️ VITALIDADE:</span><span id="vitVal">10</span></div>
-        <div class="stat-row"><span>🍀 SORTE:</span><span id="luckVal">10</span></div>
-        <div class="stat-row" style="color:#ffd700; margin-top:4px;"><span>PONTOS:</span><span id="statPointsVal">0</span></div>
+        <div class="stat-row">
+          <span>💪 FORÇA: <b id="strVal">10</b></span>
+          <button class="stat-btn" id="btnStr" onclick="distributePoint('strength')">+</button>
+        </div>
+        <div class="stat-row">
+          <span>🏃 AGILIDADE: <b id="agiVal">10</b></span>
+          <button class="stat-btn" id="btnAgi" onclick="distributePoint('agility')">+</button>
+        </div>
+        <div class="stat-row">
+          <span>🧠 INTELIGÊNCIA: <b id="intVal">10</b></span>
+          <button class="stat-btn" id="btnInt" onclick="distributePoint('intelligence')">+</button>
+        </div>
+        <div class="stat-row">
+          <span>❤️ VITALIDADE: <b id="vitVal">10</b></span>
+          <button class="stat-btn" id="btnVit" onclick="distributePoint('vitality')">+</button>
+        </div>
+        <div class="stat-row">
+          <span>🍀 SORTE: <b id="luckVal">10</b></span>
+          <button class="stat-btn" id="btnLuck" onclick="distributePoint('luck')">+</button>
+        </div>
+        <div class="stat-row" style="color:#ffd700; margin-top:4px; font-weight:bold;">
+          <span>PONTOS DISPONÍVEIS:</span><span id="statPointsVal">0</span>
+        </div>
+      </div>
+
+      <!-- COOLDOWNS REAIS DO BACKEND -->
+      <div class="cooldowns-box" id="cooldownsArea">
+        <div>⚔️ Dungeon: <span id="cdDungeon">Pronto</span></div>
+        <div>🌍 Explorar: <span id="cdExplore">Pronto</span></div>
+        <div>🥊 Treino: <span id="cdTrain">Pronto</span></div>
+        <div>🎣 Pesca: <span id="cdFish">Pronto</span></div>
       </div>
     </div>
 
+    <!-- COLUNA DE AÇÕES E ARENA -->
     <div class="action-panel">
       <div class="action-tabs">
         <button class="game-tab-btn active" onclick="switchGameTab('dungeon')">⚔️ DUNGEON</button>
-        <button class="game-tab-btn" onclick="switchGameTab('boss')">🐉 WORLD BOSS</button>
+        <button class="game-tab-btn" onclick="switchGameTab('explore')">🌍 EXPLORAR</button>
+        <button class="game-tab-btn" onclick="switchGameTab('train')">🥊 TREINAR</button>
+        <button class="game-tab-btn" onclick="switchGameTab('fish')">🎣 PESCAR</button>
         <button class="game-tab-btn" onclick="switchGameTab('tavern')">🍺 TAVERNA</button>
+        <button class="game-tab-btn" onclick="switchGameTab('boss')">🐉 WORLD BOSS</button>
       </div>
 
       <div class="arena-display" id="arenaDisplay">
         <div class="monster-zone">
           <div>
-            <div style="font-size:10px; color:#ff0055;" id="enemyName">GOBLIN DAS SOMBRAS</div>
+            <div style="font-size:10px; color:#ff0055;" id="enemyName">GOBLIN DAS CAVERNAS</div>
             <div style="font-size:8px; color:#fff;" id="enemyHpText">HP: 80/80</div>
           </div>
           <div class="monster-sprite" id="enemySprite">👹</div>
         </div>
-        <div style="font-size:8px; color:#ffd166;" id="dungeonLocation">📍 LOCAL: CIDADE INICIAL</div>
+        <div style="font-size:8px; color:#ffd166;" id="locationName">📍 LOCAL: FLORESTA DOS INICIANTES</div>
       </div>
 
       <div class="game-log-box" id="gameLog">
-        <div>> Bem-vindo ao Skyline RPG! Selecione uma ação para começar sua jornada...</div>
+        <div>> Sistema RPG Conectado ao PostgreSQL com Sucesso.</div>
       </div>
 
-      <div class="controls-grid">
-        <button class="btn-action" onclick="sendRpgAction('attack')">⚔️ ATACAR</button>
-        <button class="btn-action" style="background:#ff007f;" onclick="sendRpgAction('skill')">⚡ HABILIDADE</button>
-        <button class="btn-action" style="background:#00b4d8;" onclick="sendRpgAction('explore')">🗺️ EXPLORAR</button>
-        <button class="btn-action" style="background:#2b9348;" onclick="sendRpgAction('rest')">💤 DESCANSAR</button>
+      <div class="controls-grid" id="controlsGrid">
+        <button class="btn-action" onclick="sendAction('dungeon_attack')">⚔️ ATACAR</button>
+        <button class="btn-action" style="background:#ff007f;" onclick="sendAction('dungeon_skill')">⚡ HABILIDADE</button>
+        <button class="btn-action" style="background:#00b4d8;" onclick="sendAction('dungeon_flee')">🏃 FUGIR</button>
+        <button class="btn-action" style="background:#2b9348;" onclick="sendAction('heal_rest')">🏥 CURAR (10G)</button>
       </div>
     </div>
   </div>
@@ -708,10 +760,10 @@ export function startDashboard() {
   <script>
     let currentTab = 'dungeon';
 
-    function addLog(msg, type = '') {
+    function addLog(msg, color = '#00ffcc') {
       const log = document.getElementById('gameLog');
       const div = document.createElement('div');
-      if (type) div.className = type;
+      div.style.color = color;
       div.innerText = '> ' + msg;
       log.appendChild(div);
       log.scrollTop = log.scrollHeight;
@@ -722,176 +774,278 @@ export function startDashboard() {
       document.querySelectorAll('.game-tab-btn').forEach(b => b.classList.remove('active'));
       event.target.classList.add('active');
 
+      const controls = document.getElementById('controlsGrid');
+
       if (tab === 'dungeon') {
-        document.getElementById('enemyName').innerText = 'GOBLIN DAS CAVERNAS';
+        document.getElementById('enemyName').innerText = 'MONSTRO DE MASMORRA';
         document.getElementById('enemySprite').innerText = '👹';
-        addLog('Entrando em masmorra hostil...', 'log-line-win');
-      } else if (tab === 'boss') {
-        document.getElementById('enemyName').innerText = 'DRAGÃO ANCESTRAL';
-        document.getElementById('enemySprite').innerText = '🐉';
-        addLog('Você está diante do World Boss da Aliança!', 'log-line-dmg');
+        controls.innerHTML = \`
+          <button class="btn-action" onclick="sendAction('dungeon_attack')">⚔️ ATACAR</button>
+          <button class="btn-action" style="background:#ff007f;" onclick="sendAction('dungeon_skill')">⚡ HABILIDADE</button>
+          <button class="btn-action" style="background:#00b4d8;" onclick="sendAction('dungeon_flee')">🏃 FUGIR</button>
+          <button class="btn-action" style="background:#2b9348;" onclick="sendAction('heal_rest')">🏥 CURAR (10G)</button>
+        \`;
+        addLog('Entrando no labirinto de batalha...', '#ff007f');
+      } else if (tab === 'explore') {
+        document.getElementById('enemyName').innerText = 'RUÍNAS & CAMINHOS';
+        document.getElementById('enemySprite').innerText = '🗺️';
+        controls.innerHTML = \`
+          <button class="btn-action" style="background:#2ecc71;" onclick="sendAction('explore')">🌍 EXPLORAR (8⚡)</button>
+          <button class="btn-action" style="background:#7928ca;" onclick="loadCharacter()">🔄 ATUALIZAR</button>
+        \`;
+        addLog('Área de exploração aberta. Custo: 8 de Energia.', '#ffd166');
+      } else if (tab === 'train') {
+        document.getElementById('enemyName').innerText = 'CENTRO DE TREINAMENTO';
+        document.getElementById('enemySprite').innerText = '🥊';
+        controls.innerHTML = \`
+          <button class="btn-action" onclick="sendAction('train_str')">💪 FORÇA (+12%)</button>
+          <button class="btn-action" onclick="sendAction('train_agi')">🏃 AGILIDADE (+12%)</button>
+          <button class="btn-action" onclick="sendAction('train_int')">🧠 MAGIA (+12%)</button>
+          <button class="btn-action" onclick="sendAction('train_vit')">❤️ DEFESA (+12%)</button>
+        \`;
+        addLog('Treinos dão buffs de 45 minutos. Cooldown de 20 min.', '#00b4d8');
+      } else if (tab === 'fish') {
+        document.getElementById('enemyName').innerText = 'LAGO DE PESCA';
+        document.getElementById('enemySprite').innerText = '🎣';
+        controls.innerHTML = \`
+          <button class="btn-action" style="background:#00b4d8;" onclick="sendAction('fish_cast')">🎣 LANÇAR ISCA (5⚡)</button>
+          <button class="btn-action" style="background:#2ecc71;" onclick="sendAction('fish_reel')">🪝 PUXAR LINHA</button>
+        \`;
+        addLog('Pesque peixes e tesouros. Lance e aguarde 2 min para puxar.', '#00e5ff');
       } else if (tab === 'tavern') {
         document.getElementById('enemyName').innerText = 'TAVERNA DA CIDADE';
         document.getElementById('enemySprite').innerText = '🍺';
-        addLog('Ambiente seguro. Descanse para restaurar HP e Energia.');
+        controls.innerHTML = \`
+          <button class="btn-action" onclick="sendAction('tavern_beer')">🍺 CERVEJA (20G)</button>
+          <button class="btn-action" onclick="sendAction('tavern_meal')">🍖 BANQUETE (80G)</button>
+          <button class="btn-action" style="background:#f1c40f; color:#000;" onclick="sendAction('tavern_dice')">🎲 DADOS (20G)</button>
+        \`;
+        addLog('Taverna da Aliança: Comidas, bebidas e jogo de dados.', '#ffd700');
+      } else if (tab === 'boss') {
+        document.getElementById('enemyName').innerText = 'DRAGÃO PRIMORDIAL';
+        document.getElementById('enemySprite').innerText = '🐉';
+        controls.innerHTML = \`
+          <button class="btn-action" style="background:#e74c3c;" onclick="sendAction('boss_attack')">⚔️ ATACAR BOSS (10⚡)</button>
+          <button class="btn-action" style="background:#7928ca;" onclick="loadCharacter()">🔄 ATUALIZAR HP</button>
+        \`;
+        addLog('World Boss da Guilda. Ataque com seus companheiros!', '#ff0055');
+      }
+    }
+
+    async function distributePoint(statName) {
+      try {
+        const res = await fetch('/api/rpg/distribute', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ stat: statName, points: 1 })
+        });
+        const data = await res.json();
+        if (data.success) {
+          addLog('Ponto distribuído em ' + statName + '!', '#2ecc71');
+          await loadCharacter();
+        } else {
+          addLog(data.message || 'Sem pontos suficientes.', '#ff0055');
+        }
+      } catch (err) {
+        addLog('Erro ao distribuir ponto.', '#ff0055');
       }
     }
 
     async function loadCharacter() {
       try {
-        const res = await fetch('/api/rpg/character');
-        const char = await res.json();
-        if (!char || char.error) return;
+        const res = await fetch('/api/rpg/data');
+        const data = await res.json();
+        if (!data || data.error) return;
+
+        const char = data.char;
+        const stats = data.stats;
+        const loc = data.location;
 
         document.getElementById('charName').innerText = char.username;
-        document.getElementById('charClass').innerText = 'NÍVEL ' + char.level + ' • ' + (char.class || 'GUERREIRO').toUpperCase();
-        document.getElementById('goldVal').innerText = char.gold;
-        document.getElementById('strVal').innerText = char.strength;
-        document.getElementById('agiVal').innerText = char.agility;
-        document.getElementById('intVal').innerText = char.intelligence;
-        document.getElementById('vitVal').innerText = char.vitality;
-        document.getElementById('luckVal').innerText = char.luck;
+        document.getElementById('charClass').innerText = 'NV.' + char.level + ' • ' + (char.class || 'GUERREIRO').toUpperCase();
+        document.getElementById('goldVal').innerText = char.gold.toLocaleString('pt-BR');
+        document.getElementById('strVal').innerText = stats.str;
+        document.getElementById('agiVal').innerText = stats.agi;
+        document.getElementById('intVal').innerText = stats.int;
+        document.getElementById('vitVal').innerText = stats.vit;
+        document.getElementById('luckVal').innerText = stats.lck;
         document.getElementById('statPointsVal').innerText = char.statPoints;
 
-        document.getElementById('hpText').innerText = char.currentHp + '/' + char.maxHp;
-        document.getElementById('hpBar').style.width = Math.max(0, Math.min(100, (char.currentHp / char.maxHp) * 100)) + '%';
+        // Desabilita botões se statPoints === 0
+        const hasPoints = char.statPoints > 0;
+        ['btnStr','btnAgi','btnInt','btnVit','btnLuck'].forEach(id => {
+          const btn = document.getElementById(id);
+          if (btn) btn.style.display = hasPoints ? 'inline-block' : 'none';
+        });
 
-        document.getElementById('energyText').innerText = char.currentEnergy + '/' + char.maxEnergy;
-        document.getElementById('energyBar').style.width = Math.max(0, Math.min(100, (char.currentEnergy / char.maxEnergy) * 100)) + '%';
+        // Barras
+        document.getElementById('hpText').innerText = char.currentHp + '/' + stats.maxHp;
+        document.getElementById('hpBar').style.width = Math.max(0, Math.min(100, (char.currentHp / stats.maxHp) * 100)) + '%';
 
-        const xpMax = char.level * 100;
+        document.getElementById('energyText').innerText = char.currentEnergy + '/' + stats.maxEnergy;
+        document.getElementById('energyBar').style.width = Math.max(0, Math.min(100, (char.currentEnergy / stats.maxEnergy) * 100)) + '%';
+
+        const xpMax = data.xpNeeded || 100;
         document.getElementById('xpText').innerText = char.xp + '/' + xpMax;
         document.getElementById('xpBar').style.width = Math.max(0, Math.min(100, (char.xp / xpMax) * 100)) + '%';
 
-        if (char.class === 'mago') document.getElementById('charSprite').innerText = '🧙‍♂️';
-        else if (char.class === 'arqueiro') document.getElementById('charSprite').innerText = '🏹';
-        else if (char.class === 'ladino') document.getElementById('charSprite').innerText = '🥷';
-        else document.getElementById('charSprite').innerText = '⚔️';
+        if (loc) {
+          document.getElementById('locationName').innerText = '📍 LOCAL: ' + loc.name.toUpperCase();
+        }
+
+        // Atualiza Cooldowns
+        if (data.cooldowns) {
+          document.getElementById('cdDungeon').innerText = data.cooldowns.dungeon || 'Pronto';
+          document.getElementById('cdExplore').innerText = data.cooldowns.explore || 'Pronto';
+          document.getElementById('cdTrain').innerText = data.cooldowns.train || 'Pronto';
+          document.getElementById('cdFish').innerText = data.cooldowns.fishing || 'Pronto';
+        }
       } catch (err) {
-        console.error('Erro ao carregar char:', err);
+        console.error('Erro ao carregar dados do RPG:', err);
       }
     }
 
-    async function sendRpgAction(actionType) {
+    async function sendAction(actionType) {
       try {
         const res = await fetch('/api/rpg/action', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action: actionType, tab: currentTab })
+          body: JSON.stringify({ action: actionType })
         });
         const data = await res.json();
-        if (data.log) {
-          addLog(data.log, data.logType || '');
+
+        if (data.message) {
+          addLog(data.message, data.success ? '#ffd700' : '#ff0055');
         }
         await loadCharacter();
       } catch (err) {
-        addLog('Erro ao executar ação.', 'log-line-dmg');
+        addLog('Erro ao comunicar com o servidor RPG.', '#ff0055');
       }
     }
 
     window.onload = () => {
       loadCharacter();
+      setInterval(loadCharacter, 15000); // Atualiza a cada 15 segundos
     };
   </script>
 </body>
 </html>`);
   });
 
-  // ─── API DO RPG WEB ──────────────────────────────────────────────────────
-  app.get('/api/rpg/character', async (req, res) => {
+  // ─── APIS REAIS CONECTADAS AO BACKEND DO BOT RPG ──────────────────────────
+  app.get('/api/rpg/data', async (req, res) => {
     const userId = req.cookies?.skyline_userid;
     const userName = req.cookies?.skyline_username || 'Aventureiro';
     if (!userId) return res.status(401).json({ error: 'Não autenticado' });
 
     try {
-      let char = await prisma.rpgCharacter.findUnique({
-        where: { discordId: userId }
-      });
+      const char = await getOrCreateCharacter(userId, userName);
+      const stats = computeStats(char);
+      const loc = getLocation(char.currentLocation);
+      const xpNeeded = rpgXpForLevel(char.level);
 
-      if (!char) {
-        char = await prisma.rpgCharacter.create({
-          data: {
-            discordId: userId,
-            username: userName,
-            class: 'guerreiro',
-            currentHp: 100,
-            maxHp: 100,
-            currentEnergy: 50,
-            maxEnergy: 50,
-            gold: 100
-          }
-        });
-      }
+      const calcCd = (date: Date | null, mins: number) => {
+        if (!date) return 'Pronto';
+        const rem = mins * 60000 - (Date.now() - date.getTime());
+        if (rem <= 0) return 'Pronto';
+        const m = Math.floor(rem / 60000);
+        const s = Math.ceil((rem % 60000) / 1000);
+        return `${m}m ${s}s`;
+      };
 
-      res.json(char);
+      const cooldowns = {
+        dungeon: calcCd(char.lastDungeon, 5),
+        explore: calcCd(char.lastExplore, 3),
+        train: calcCd(char.lastTrain, 20),
+        fishing: calcCd(char.lastFishing, 10),
+      };
+
+      res.json({ char, stats, location: loc, xpNeeded, cooldowns });
     } catch (err) {
-      res.status(500).json({ error: 'Erro ao buscar personagem.' });
+      console.error('[API RPG Data]:', err);
+      res.status(500).json({ error: 'Erro ao carregar dados do RPG.' });
+    }
+  });
+
+  app.post('/api/rpg/distribute', async (req, res) => {
+    const userId = req.cookies?.skyline_userid;
+    if (!userId) return res.status(401).json({ error: 'Não autenticado' });
+    const { stat, points } = req.body;
+
+    try {
+      const result = await distributeStatPoints(userId, stat, points || 1);
+      res.json(result);
+    } catch (err) {
+      res.status(500).json({ success: false, message: 'Erro ao distribuir pontos.' });
     }
   });
 
   app.post('/api/rpg/action', async (req, res) => {
     const userId = req.cookies?.skyline_userid;
+    const userName = req.cookies?.skyline_username || 'Aventureiro';
     if (!userId) return res.status(401).json({ error: 'Não autenticado' });
-    const { action, tab } = req.body;
+    const { action } = req.body;
 
     try {
-      const char = await prisma.rpgCharacter.findUnique({ where: { discordId: userId } });
-      if (!char) return res.status(404).json({ error: 'Personagem não encontrado.' });
-
-      if (action === 'rest') {
-        await prisma.rpgCharacter.update({
-          where: { discordId: userId },
-          data: { currentHp: char.maxHp, currentEnergy: char.maxEnergy }
-        });
-        return res.json({ log: 'Você descansou na taverna e recuperou 100% do seu HP e Energia!', logType: 'log-line-win' });
-      }
-
-      if (action === 'attack' || action === 'skill') {
-        const damage = Math.floor(Math.random() * (char.strength * 2)) + (action === 'skill' ? 25 : 10);
-        const monsterDmg = Math.floor(Math.random() * 15) + 5;
-        const xpEarned = Math.floor(Math.random() * 20) + 15;
-        const goldEarned = Math.floor(Math.random() * 12) + 5;
-
-        const newHp = Math.max(1, char.currentHp - monsterDmg);
-        const newXp = char.xp + xpEarned;
-        let newLevel = char.level;
-        let newStatPoints = char.statPoints;
-
-        if (newXp >= char.level * 100) {
-          newLevel += 1;
-          newStatPoints += 3;
-        }
-
-        await prisma.rpgCharacter.update({
-          where: { discordId: userId },
-          data: {
-            currentHp: newHp,
-            xp: newXp,
-            level: newLevel,
-            statPoints: newStatPoints,
-            gold: char.gold + goldEarned,
-            totalWins: char.totalWins + 1
-          }
-        });
-
-        return res.json({
-          log: `Golpe de ${damage} de dano! O monstro te acertou por ${monsterDmg} de dano. Você ganhou +${xpEarned} XP e +${goldEarned} Gold!`,
-          logType: 'log-line-loot'
-        });
-      }
+      let char = await getOrCreateCharacter(userId, userName);
 
       if (action === 'explore') {
-        const goldFound = Math.floor(Math.random() * 25) + 10;
-        await prisma.rpgCharacter.update({
-          where: { discordId: userId },
-          data: { gold: char.gold + goldFound }
-        });
-        return res.json({ log: `Explorando as ruínas você encontrou um baú misterioso com ${goldFound} Gold!`, logType: 'log-line-loot' });
+        const result = await doExplore(char);
+        return res.json({ success: result.success, message: result.message || 'Exploração realizada com sucesso!' });
       }
 
-      res.json({ log: 'Ação executada com sucesso.' });
+      if (action.startsWith('train_')) {
+        const statId = action.replace('train_', '');
+        const result = await doTrain(char, statId);
+        return res.json(result);
+      }
+
+      if (action === 'fish_cast') {
+        const result = await castFishingLine(char);
+        return res.json(result);
+      }
+
+      if (action === 'fish_reel') {
+        const result = await reelFishingLine(char);
+        return res.json({ success: result.success, message: result.message || 'Você puxou a linha de pesca!' });
+      }
+
+      if (action === 'tavern_beer' || action === 'tavern_meal') {
+        const itemId = action === 'tavern_beer' ? 'cerveja' : 'banquete';
+        const result = await buyTavernaItem(char, itemId);
+        return res.json(result);
+      }
+
+      if (action === 'tavern_dice') {
+        const result = await rollTavernaDice(char);
+        return res.json({ success: true, message: result.embed.data.description || 'Jogo de dados finalizado!' });
+      }
+
+      if (action === 'heal_rest') {
+        const stats = computeStats(char);
+        if (char.gold < 10) return res.json({ success: false, message: 'Ouro insuficiente para curar (Custa 10G).' });
+        await prisma.rpgCharacter.update({
+          where: { discordId: userId },
+          data: { currentHp: stats.maxHp, currentEnergy: stats.maxEnergy, gold: { decrement: 10 } }
+        });
+        return res.json({ success: true, message: '❤️ Você foi curado na cidade! HP e Energia 100% restaurados.' });
+      }
+
+      if (action === 'dungeon_attack' || action === 'dungeon_skill') {
+        const loc = getLocation(char.currentLocation);
+        const enemies = getEnemiesForLocation(loc.id, char.level);
+        if (enemies.length === 0) return res.json({ success: false, message: 'Nenhum monstro disponível nesta região.' });
+        const enemy = enemies[0];
+
+        const { doBattleEnemy } = await import('../rpg/panels/dungeon');
+        const battle = await doBattleEnemy(char, enemy.id, '', 'hunt');
+        return res.json({ success: true, message: battle.embed.data.description || 'Batalha finalizada!' });
+      }
+
+      res.json({ success: true, message: 'Ação executada.' });
     } catch (err) {
-      res.status(500).json({ error: 'Falha na ação de RPG.' });
+      console.error('[API RPG Action]:', err);
+      res.status(500).json({ success: false, message: 'Erro ao executar ação de RPG.' });
     }
   });
 

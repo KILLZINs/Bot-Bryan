@@ -240,7 +240,7 @@ export function startDashboard() {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Bryan Bot — Aliança Skyline</title>
+  <title>Bryan Bot — Moderação, IA e RPG</title>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <style>
     :root { 
@@ -296,7 +296,7 @@ export function startDashboard() {
 </head>
 <body>
   <nav>
-    <a href="/" class="brand"><img src="/skylineicon.jpg" alt="Bryan"> Aliança Skyline</a>
+    <a href="/" class="brand"><img src="/skylineicon.jpg" alt="Bryan"> Bryan Bot</a>
     <div class="nav-links">
       <a href="${botInviteUrl}">Adicionar ao Servidor</a>
       <a href="/login" class="btn-login">Acessar Painel</a>
@@ -305,8 +305,8 @@ export function startDashboard() {
   
   <header class="hero">
     <div class="hero-bg"></div>
-    <h1>O Guardião da Aliança.</h1>
-    <p>Traga o <b>Bryan</b> para o seu servidor e conecte-se à maior rede interdimensional. Inteligência Artificial por voz, Feed Social, RPG imersivo e moderação absoluta.</p>
+    <h1>O bot definitivo para o seu servidor.</h1>
+    <p>Traga o <b>Bryan</b> para a sua comunidade. Inteligência Artificial avançada por voz, Feed Social nativo, RPG imersivo e moderação absoluta em um único lugar.</p>
     <div class="btn-group">
       <a href="${botInviteUrl}" class="btn btn-primary">Adicionar ao Discord</a>
       <a href="/login" class="btn btn-secondary">Configurar Bot</a>
@@ -325,7 +325,7 @@ export function startDashboard() {
     </div>
   </section>
   
-  <footer><p>© 2026 Bryan Bot • Sistema Oficial da Aliança Skyline</p></footer>
+  <footer><p>© 2026 Bryan Bot.</p></footer>
 </body>
 </html>`);
   });
@@ -349,7 +349,7 @@ export function startDashboard() {
       const isBotOwner = userId === BOT_OWNER_ID;
       const userRoles = await prisma.allianceServerMember.findMany({ where: { userId } });
 
-      if (!isBotOwner && userRoles.length === 0) return res.status(403).send('<body style="background: #0B0D17; color: #EF4444; text-align: center; padding-top: 150px; font-family: sans-serif;"><h1>🛑 Acesso Negado</h1><p style="color:#9CA3AF;">Sem credenciais ativas na Aliança Skyline.</p><br><a href="/" style="color: #8B5CF6; font-weight: bold; text-decoration: none;">Voltar ao Início</a></body>');
+      if (!isBotOwner && userRoles.length === 0) return res.status(403).send('<body style="background: #0B0D17; color: #EF4444; text-align: center; padding-top: 150px; font-family: sans-serif;"><h1>🛑 Acesso Negado</h1><p style="color:#9CA3AF;">Sem permissão ativa na base de dados.</p><br><a href="/" style="color: #8B5CF6; font-weight: bold; text-decoration: none;">Voltar ao Início</a></body>');
 
       res.cookie('skyline_auth', 'permitido', { maxAge: 86400000 }); 
       res.cookie('skyline_userid', userId, { maxAge: 86400000 }); 

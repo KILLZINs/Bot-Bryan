@@ -389,8 +389,8 @@ client.on('interactionCreate', async (interaction) => {
   try {
     if (!interaction.guildId) return;
 
-    // 🛡️ TRAVA MASTER: Protege todas as interações do Insta se o módulo estiver desligado
-    if (interaction.customId && interaction.customId.startsWith('insta')) {
+    // 🛡️ TRAVA MASTER E CORREÇÃO TYPESCRIPT: Verifica se é botão/modal antes de ler o customId
+    if ((interaction.isMessageComponent() || interaction.isModalSubmit()) && interaction.customId.startsWith('insta')) {
       const globalCfg = await prisma.botConfig.findUnique({ where: { id: 'global' } });
       if (globalCfg?.featSocial === false) {
         await interaction.reply({ content: '❌ O sistema do Feed Social está **desativado globalmente** no momento.', ephemeral: true });

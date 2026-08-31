@@ -22,7 +22,7 @@ const SERVER_CATEGORIES = [
       { id: 'featLeveling', name: 'Sistema de XP', desc: 'Progressão por mensagens e avisos.', icon: '⭐' },
       { id: 'featGiveaways', name: 'Sorteios', desc: 'Sorteios automatizados.', icon: '🎁' },
       { id: 'featPolls', name: 'Enquetes', desc: 'Votações com contagem de votos.', icon: '📊' },
-      { id: 'featReviveChat', name: 'Reviver Chat (IA)', desc: 'Acorda o chat com perguntas geradas por IA após inatividade.', icon: '🧟' } // NOVO AQUI
+      { id: 'featReviveChat', name: 'Reviver Chat (IA)', desc: 'Acorda o chat com perguntas geradas por IA após inatividade.', icon: '🧟' }
     ]
   },
   {
@@ -59,20 +59,23 @@ const GLOBAL_CATEGORIES = [
   {
     category: "⚙️ Sistemas Centrais Globais",
     features: [
-      { id: 'featAfk', name: 'Sistema AFK Global', desc: 'Comando /afk e monitoramento de menções.' },
-      { id: 'featWelcomeDm', name: 'DM de Boas-vindas', desc: 'Mensagem privada automática aos novos membros.' }
+      { id: 'featAfk', name: 'Sistema AFK Global', desc: 'Comando /afk na rede.' },
+      { id: 'featWelcomeDm', name: 'DM de Boas-vindas', desc: 'Mensagem privada a novos membros.' }
     ]
   },
   {
     category: "🌍 Master Switches (Trava Absoluta)",
     features: [
-      { id: 'featSocial', name: 'Trava Mestre Feed Social', desc: 'Derruba o Feed do Instagram globalmente.' },
-      { id: 'featVoiceAi', name: 'Trava Mestre IA', desc: 'Proíbe a inteligência artificial globalmente.' },
-      { id: 'featRpg', name: 'Trava Mestre RPG', desc: 'Desliga todo o RPG do bot globalmente.' },
-      { id: 'featEconomy', name: 'Trava Economia', desc: 'Congela lojas e transferências de moedas.' },
-      { id: 'featTickets', name: 'Trava Tickets', desc: 'Bloqueia criação de novos atendimentos.' },
-      { id: 'featMusic', name: 'Trava Música', desc: 'Desliga o player de áudio por segurança.' },
-      { id: 'antiSpam', name: 'Trava Defesa Anti-Spam', desc: 'Desativa o bloqueador de mensagens em massa.' }
+      { id: 'featSocial', name: 'Feed Social (Insta)', desc: 'Desativa o Feed globalmente.' },
+      { id: 'featVoiceAi', name: 'IA de Voz (Callia)', desc: 'Proíbe a Callia em todos os servers.' },
+      { id: 'featRpg', name: 'Sistema RPG', desc: 'Desliga o RPG globalmente.' },
+      { id: 'featEconomy', name: 'Economia & Lojas', desc: 'Congela todas as lojas.' },
+      { id: 'featTickets', name: 'Sistema de Tickets', desc: 'Bloqueia novos atendimentos.' },
+      { id: 'featMusic', name: 'Player de Música', desc: 'Desliga o bot de música.' },
+      { id: 'antiSpam', name: 'Defesa Anti-Spam', desc: 'Desativa o bloqueador em massa.' },
+      { id: 'featGiveaways', name: 'Sorteios', desc: 'Trava todos os sorteios.' },
+      { id: 'featLeveling', name: 'Sistema de XP', desc: 'Congela ganho de XP global.' },
+      { id: 'featReviveChat', name: 'Reviver Chat (IA)', desc: 'Desliga o monitor de inatividade.' }
     ]
   }
 ];
@@ -166,13 +169,24 @@ const SERVER_SETTINGS = [
 
 const GLOBAL_SETTINGS = [
   {
-    category: "🎨 Identidade Visual Global",
+    category: "🤖 Perfil Oficial do Bryan (Configurador)",
+    desc: "Altere a aparência, bio e status dinâmicos do Bryan diretamente no Discord.",
+    items: [
+      { id: 'botAvatarUrl', name: 'Foto de Perfil (URL)', type: 'text', placeholder: 'Link da imagem (terminada em .png ou .jpg)' },
+      { id: 'botBannerUrl', name: 'Banner do Perfil (URL)', type: 'text', placeholder: 'Link do banner' },
+      { id: 'botPronouns', name: 'Pronomes', type: 'text', placeholder: 'Ex: Ele/Dele' },
+      { id: 'botBio', name: 'Biografia do Perfil', type: 'textarea', placeholder: 'Escreva a bio que aparecerá no perfil do bot' },
+      { id: 'botStatusRotation', name: 'Status Rotativo (1 por linha)', type: 'textarea', placeholder: 'Ex:\nJogando Roblox\nAssistindo Netflix\nOuvindo Spotify' }
+    ]
+  },
+  {
+    category: "🎨 Identidade Visual Global dos Embeds",
     desc: "Personalização de rodapés e cores em todos os servidores",
     items: [
-      { id: 'footerText', name: 'Texto de Rodapé Padrão', type: 'text', placeholder: 'Aparece nos embeds' },
-      { id: 'rpFooterText', name: 'Rodapé Roleplay', type: 'text', placeholder: 'Aparece no /rp' },
-      { id: 'botIconUrl', name: 'URL do Ícone do Bot', type: 'text', placeholder: 'Link da imagem' },
-      { id: 'primaryColor', name: 'Cor Primária', type: 'color', placeholder: '#5865F2' }
+      { id: 'footerText', name: 'Texto de Rodapé Padrão', type: 'text', placeholder: 'Aparece nos embeds gerais' },
+      { id: 'rpFooterText', name: 'Rodapé Roleplay', type: 'text', placeholder: 'Aparece nos comandos de /rp' },
+      { id: 'botIconUrl', name: 'URL do Ícone do Bot', type: 'text', placeholder: 'Link direto da imagem do ícone para Embeds' },
+      { id: 'primaryColor', name: 'Cor Primária dos Embeds', type: 'color', placeholder: '#5865F2' }
     ]
   }
 ];
@@ -538,7 +552,6 @@ export function startDashboard() {
         document.getElementById('global').innerHTML = globalHtml;
       }
       
-      // Iniciar os previews dos Embed Builders
       setTimeout(() => {
         document.querySelectorAll('.embed-builder-desc').forEach(el => {
            const id = el.id.replace('_desc', '');
@@ -698,7 +711,7 @@ export function startDashboard() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ type, guildId, feature, value: JSON.stringify(payload), valueType: 'text' })
       });
-      res.ok ? showToast('✅ Boas-Vindas atualizado com sucesso!') : showToast('❌ Erro ao salvar.', true);
+      res.ok ? showToast('✅ Embed salvo com sucesso!') : showToast('❌ Erro ao salvar.', true);
     }
 
     function renderModules(containerId, categories, dbData, type) { document.getElementById(containerId).innerHTML = generateModulesHtml(categories, dbData, type); }

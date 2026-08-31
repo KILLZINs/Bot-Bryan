@@ -82,14 +82,14 @@ const GLOBAL_CATEGORIES = [
 
 const SERVER_SETTINGS = [
   {
-    category: "💬 Recepção Personalizada (Boas-Vindas)",
+    category: "💬 Boas-Vindas",
     desc: "Crie um embed rico para receber os novos membros no servidor.",
     items: [
       { id: 'welcomeMessage', name: 'Construtor de Embed', type: 'embed_builder', placeholder: '' }
     ]
   },
   {
-    category: "🤖 Fábrica de IA (Bot Customizado)",
+    category: "🤖 IA Customizada",
     desc: "Configure a personalidade da IA caso este servidor não possua a Suki.",
     items: [
       { id: 'aiCustomName', name: 'Nome da IA Local', type: 'text', placeholder: 'Ex: Jarvis, Cortana...' },
@@ -99,7 +99,17 @@ const SERVER_SETTINGS = [
     ]
   },
   {
-    category: "💎 Sistema VIP & Gradientes",
+    category: "🧟 Reviver Chat",
+    desc: "O bot enviará uma pergunta gerada por IA para reanimar o chat inativo.",
+    items: [
+      { id: 'reviveChannelId', name: 'Canal Alvo (ID)', type: 'text', placeholder: 'ID do canal principal de bate-papo' },
+      { id: 'reviveRoleId', name: 'Cargo para Mencionar (ID)', type: 'text', placeholder: 'Ex: ID do cargo @Chat ou @Membros' },
+      { id: 'reviveTimeout', name: 'Tempo de Inatividade', type: 'number', placeholder: 'Tempo em minutos (Ex: 120 para 2 horas)' },
+      { id: 'revivePrompt', name: 'Prompt da IA', type: 'textarea', placeholder: 'Ex: Faça uma pergunta polêmica e divertida sobre animes ou jogos.' }
+    ]
+  },
+  {
+    category: "💎 Sistema VIP",
     desc: "Configuração do ecossistema de apoiadores e benefícios",
     items: [
       { id: 'vipRoleId', name: 'Cargo VIP Base (ID)', type: 'text', placeholder: 'ID do cargo' },
@@ -107,7 +117,7 @@ const SERVER_SETTINGS = [
     ]
   },
   {
-    category: "📸 Feed Social / Instagram",
+    category: "📸 Feed Social",
     desc: "Personalize a aparência dos posts e canais de fotos",
     items: [
       { id: 'feedChannelId', name: 'Canal do Feed (ID)', type: 'text', placeholder: 'ID do canal' },
@@ -119,24 +129,14 @@ const SERVER_SETTINGS = [
     ]
   },
   {
-    category: "🧟 Sistema de Reviver Chat",
-    desc: "O bot enviará uma pergunta gerada por IA para reanimar o chat se ninguém falar nada.",
-    items: [
-      { id: 'reviveChannelId', name: 'Canal Alvo (ID)', type: 'text', placeholder: 'ID do canal principal de bate-papo' },
-      { id: 'reviveRoleId', name: 'Cargo para Mencionar (ID)', type: 'text', placeholder: 'Ex: ID do cargo @Chat ou @Membros' },
-      { id: 'reviveTimeout', name: 'Tempo de Inatividade', type: 'number', placeholder: 'Tempo em minutos (Ex: 120 para 2 horas)' },
-      { id: 'revivePrompt', name: 'Prompt da IA', type: 'textarea', placeholder: 'Ex: Faça uma pergunta polêmica e divertida sobre animes ou jogos.' }
-    ]
-  },
-  {
-    category: "🌌 Rede Aliança Skyline",
+    category: "🌌 Rede Aliança",
     desc: "Integração oficial do servidor na rede global",
     items: [
       { id: 'allianceChannelId', name: 'Canal da Aliança (ID)', type: 'text', placeholder: 'ID do canal' }
     ]
   },
   {
-    category: "📁 Canais de Notificação & Logs",
+    category: "📁 Canais de Logs",
     desc: "Direcione onde cada sistema do bot enviará avisos",
     items: [
       { id: 'welcomeChannelId', name: 'Canal de Boas-Vindas', type: 'text', placeholder: 'ID do canal' },
@@ -148,7 +148,7 @@ const SERVER_SETTINGS = [
     ]
   },
   {
-    category: "🎫 Sistema de Tickets",
+    category: "🎫 Tickets",
     desc: "Configuração de atendimento e histórico",
     items: [
       { id: 'ticketCategoryId', name: 'Categoria dos Tickets', type: 'text', placeholder: 'ID da categoria' },
@@ -156,7 +156,7 @@ const SERVER_SETTINGS = [
     ]
   },
   {
-    category: "🛡️ Cargos de Permissão & Moderação",
+    category: "🛡️ Cargos",
     desc: "Definição de hierarquia e cargos automáticos",
     items: [
       { id: 'adminRoleId', name: 'Cargo de Administrador', type: 'text', placeholder: 'ID do cargo' },
@@ -170,7 +170,7 @@ const SERVER_SETTINGS = [
 
 const GLOBAL_SETTINGS = [
   {
-    category: "🤖 Perfil Oficial do Bryan (Configurador)",
+    category: "🤖 Perfil do Bryan",
     desc: "Altere a aparência, bio e status dinâmicos do Bryan diretamente no Discord.",
     items: [
       { id: 'botAvatarUrl', name: 'Foto de Perfil (URL)', type: 'text', placeholder: 'Link da imagem (terminada em .png ou .jpg)' },
@@ -181,7 +181,7 @@ const GLOBAL_SETTINGS = [
     ]
   },
   {
-    category: "🎨 Identidade Visual Global dos Embeds",
+    category: "🎨 Visual Global",
     desc: "Personalização de rodapés e cores em todos os servidores",
     items: [
       { id: 'footerText', name: 'Texto de Rodapé Padrão', type: 'text', placeholder: 'Aparece nos embeds gerais' },
@@ -299,7 +299,7 @@ export function startDashboard() {
       }), { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } });
 
       const userRes = await axios.get('https://discord.com/api/users/@me', { headers: { Authorization: `Bearer ${tokenRes.data.access_token}` } });
-      const { id: userId, username } = userRes.data;
+      const { id: userId, username, avatar } = userRes.data;
       
       const isBotOwner = userId === BOT_OWNER_ID;
       const userRoles = await prisma.allianceServerMember.findMany({ where: { userId } });
@@ -309,6 +309,8 @@ export function startDashboard() {
       res.cookie('skyline_auth', 'permitido', { maxAge: 86400000 }); 
       res.cookie('skyline_userid', userId, { maxAge: 86400000 }); 
       res.cookie('skyline_username', username, { maxAge: 86400000 }); 
+      if (avatar) res.cookie('skyline_avatar', avatar, { maxAge: 86400000 });
+
       res.redirect('/painel');
     } catch (error) { res.status(500).send('Erro na autenticação.'); }
   });
@@ -390,6 +392,11 @@ export function startDashboard() {
     if (req.cookies?.skyline_auth !== 'permitido') return res.redirect('/');
     const userId = req.cookies?.skyline_userid;
     const userName = req.cookies?.skyline_username || 'Administrador';
+    const avatarHash = req.cookies?.skyline_avatar;
+    
+    const avatarUrl = avatarHash 
+      ? `https://cdn.discordapp.com/avatars/${userId}/${avatarHash}.png`
+      : '/skylineicon.jpg';
 
     let authorizedServers = [];
     if (userId === BOT_OWNER_ID) {
@@ -417,28 +424,34 @@ export function startDashboard() {
     ::-webkit-scrollbar { width: 8px; }
     ::-webkit-scrollbar-track { background: var(--bg); }
     ::-webkit-scrollbar-thumb { background: #1E1F22; border-radius: 4px; }
-    .sidebar { width: 260px; background: var(--sidebar); display: flex; flex-direction: column; border-right: 1px solid var(--border); }
-    .brand { padding: 20px; font-size: 1.1rem; font-weight: 700; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 10px; color: white; box-shadow: 0 1px 2px rgba(0,0,0,0.2); }
+    
+    .sidebar { width: 280px; background: var(--sidebar); display: flex; flex-direction: column; border-right: 1px solid var(--border); }
+    .brand { padding: 20px; font-size: 1.1rem; font-weight: 700; display: flex; align-items: center; gap: 10px; color: white; }
     .brand img { width: 28px; border-radius: 50%; }
-    .nav-items { flex: 1; padding: 15px; display: flex; flex-direction: column; gap: 5px; }
-    .nav-btn { background: transparent; color: var(--text-muted); border: none; padding: 10px 14px; border-radius: 4px; text-align: left; font-size: 0.95rem; font-weight: 500; cursor: pointer; transition: 0.2s; display: flex; align-items: center; gap: 10px; }
-    .nav-btn:hover { background: rgba(255, 255, 255, 0.05); color: var(--text); }
-    .nav-btn.active { background: var(--blurple); color: white; }
+    
+    .server-selector-sidebar { padding: 0 15px 15px 15px; border-bottom: 1px solid var(--border); }
+    .server-selector-sidebar select { width: 100%; background: var(--card-hover); border: 1px solid var(--border); color: white; padding: 10px; border-radius: 6px; outline: none; font-size: 0.9rem; font-weight: 600; cursor: pointer; transition: 0.2s; }
+    .server-selector-sidebar select:focus { border-color: var(--blurple); }
+    
+    .nav-items { flex: 1; padding: 10px 0; overflow-y: auto; }
+    .nav-group { font-size: 0.75rem; text-transform: uppercase; font-weight: 800; color: var(--text-muted); margin: 15px 0 5px 20px; letter-spacing: 0.5px; }
+    .nav-btn { background: transparent; color: var(--text-muted); border: none; padding: 10px 20px 10px 30px; width: 100%; text-align: left; font-size: 0.95rem; font-weight: 500; cursor: pointer; transition: 0.1s; position: relative; }
+    .nav-btn:hover { background: rgba(255, 255, 255, 0.03); color: var(--text); }
+    .nav-btn.active { background: rgba(88, 101, 242, 0.1); color: white; border-right: 3px solid var(--blurple); }
+    
     .user-profile { padding: 15px; border-top: 1px solid var(--border); display: flex; align-items: center; gap: 12px; background: #232428; }
-    .user-profile .avatar { width: 36px; height: 36px; border-radius: 50%; background: #1E1F22 url('/skylineicon.jpg') center/cover; }
+    .user-profile .avatar { width: 36px; height: 36px; border-radius: 50%; background: #1E1F22 center/cover; }
     .user-profile .info h4 { font-size: 0.85rem; margin-bottom: 2px; color: white; }
     .user-profile .info span { font-size: 0.7rem; color: #B5BAC1; }
+    
     .main { flex: 1; display: flex; flex-direction: column; background: var(--bg); }
-    .header { padding: 15px 30px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; background: var(--sidebar); box-shadow: 0 1px 2px rgba(0,0,0,0.1); }
-    .header h2 { font-size: 1.1rem; font-weight: 600; color: white; }
-    .server-selector select { background: var(--card-hover); border: 1px solid var(--border); color: white; padding: 8px 12px; border-radius: 4px; outline: none; font-size: 0.9rem; min-width: 220px; cursor: pointer; }
-    .server-selector select:focus { border-color: var(--blurple); }
-    .content { padding: 30px 40px; overflow-y: auto; flex: 1; }
-    .tab-pane { display: none; }
-    .tab-pane.active { display: block; animation: fadeIn 0.3s; }
-    @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
-    .section-title { font-size: 1.25rem; font-weight: 700; margin-bottom: 5px; color: white; }
+    .header { padding: 20px 30px; border-bottom: 1px solid var(--border); background: var(--bg); }
+    .header h2 { font-size: 1.25rem; font-weight: 700; color: white; }
+    
+    .content { padding: 30px; overflow-y: auto; flex: 1; }
+    .section-title { font-size: 1.15rem; font-weight: 700; margin-bottom: 5px; color: white; }
     .section-desc { color: var(--text-muted); font-size: 0.9rem; margin-bottom: 20px; }
+    
     .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 15px; margin-bottom: 40px; }
     .card-toggle { background: var(--card); border-radius: 8px; padding: 15px; display: flex; justify-content: space-between; align-items: center; transition: 0.2s; border: 1px solid transparent; }
     .card-toggle:hover { background: var(--card-hover); border-color: #3f4147; }
@@ -446,12 +459,14 @@ export function startDashboard() {
     .card-icon { width: 40px; height: 40px; background: #1E1F22; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 18px; }
     .card-text h3 { font-size: 0.95rem; margin-bottom: 2px; color: white; }
     .card-text p { font-size: 0.8rem; color: var(--text-muted); max-width: 200px; line-height: 1.3; }
+    
     .switch { position: relative; width: 40px; height: 24px; }
     .switch input { opacity: 0; width: 0; height: 0; }
     .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #80848E; transition: .3s; border-radius: 34px; }
     .slider:before { position: absolute; content: ""; height: 18px; width: 18px; left: 3px; bottom: 3px; background-color: white; transition: .3s; border-radius: 50%; box-shadow: 0 2px 4px rgba(0,0,0,0.2); }
     input:checked + .slider { background-color: var(--green); }
     input:checked + .slider:before { transform: translateX(16px); }
+    
     .card-input { background: var(--card); border-radius: 8px; padding: 15px; display: flex; flex-direction: column; gap: 10px; border: 1px solid transparent; transition: 0.2s; }
     .card-input:hover { background: var(--card-hover); border-color: #3f4147; }
     .card-input label { font-size: 0.9rem; font-weight: 600; color: white; }
@@ -463,6 +478,7 @@ export function startDashboard() {
     .color-picker-wrapper input { width: 200%; height: 200%; transform: translate(-25%, -25%); cursor: pointer; }
     .btn-save { background: var(--blurple); color: white; border: none; padding: 0 15px; border-radius: 4px; font-weight: 500; font-size: 0.9rem; cursor: pointer; transition: 0.2s; white-space: nowrap; }
     .btn-save:hover { background: var(--blurple-hover); }
+    
     .tag-container { display: flex; gap: 6px; margin-top: 5px; flex-wrap: wrap; }
     .tag { background: #1E1F22; color: var(--text-muted); font-size: 0.75rem; padding: 4px 8px; border-radius: 4px; cursor: pointer; transition: 0.2s; border: 1px solid transparent; }
     .tag:hover { background: var(--blurple); color: white; }
@@ -489,13 +505,14 @@ export function startDashboard() {
 <body>
   <div class="sidebar">
     <div class="brand"><img src="/skylineicon.jpg" alt="Logo"> Bryan Bot</div>
-    <div class="nav-items">
-      <button class="nav-btn active" onclick="switchTab('modulos', this)">🧩 Módulos do Servidor</button>
-      <button class="nav-btn" onclick="switchTab('configs', this)">⚙️ Configurações Gerais</button>
-      ${userId === BOT_OWNER_ID ? `<button class="nav-btn" onclick="switchTab('global', this)">🌍 Travas Globais</button>` : ''}
+    <div class="server-selector-sidebar">
+      <select id="serverSelect" onchange="loadConfig()">${serverOptionsHTML}</select>
+    </div>
+    <div class="nav-items" id="sidebar-nav">
+      <!-- Navegação gerada por JS -->
     </div>
     <div class="user-profile">
-      <div class="avatar"></div>
+      <div class="avatar" style="background-image: url('${avatarUrl}');"></div>
       <div class="info">
         <h4>${userName}</h4>
         <span>${userId === BOT_OWNER_ID ? 'Dono do Bot' : 'Admin do Servidor'}</span>
@@ -504,34 +521,25 @@ export function startDashboard() {
   </div>
   <div class="main">
     <div class="header">
-      <h2>Painel de Controle</h2>
-      <div class="server-selector">
-        <select id="serverSelect" onchange="loadConfig()">${serverOptionsHTML}</select>
-      </div>
+      <h2 id="main-header-title">Visão Geral</h2>
     </div>
-    <div class="content">
-      <div id="modulos" class="tab-pane active"></div>
-      <div id="configs" class="tab-pane"></div>
-      ${userId === BOT_OWNER_ID ? `<div id="global" class="tab-pane"></div>` : ''}
+    <div class="content" id="main-content">
+      <!-- Conteúdo gerado por JS -->
     </div>
   </div>
   <div id="toast">Ação concluída!</div>
+  
   <script>
     const SERVER_CATEGORIES = ${JSON.stringify(SERVER_CATEGORIES)};
     const GLOBAL_CATEGORIES = ${JSON.stringify(GLOBAL_CATEGORIES)};
     const SERVER_SETTINGS = ${JSON.stringify(SERVER_SETTINGS)};
     const GLOBAL_SETTINGS = ${JSON.stringify(GLOBAL_SETTINGS)};
+    
+    let stateData = null;
 
     function intToHex(num, fallback = '#5865F2') {
       if (num === null || num === undefined || isNaN(num)) return fallback;
       return '#' + num.toString(16).padStart(6, '0').toUpperCase();
-    }
-
-    function switchTab(tabId, btn) {
-      document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
-      document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
-      document.getElementById(tabId).classList.add('active');
-      btn.classList.add('active');
     }
 
     function insertTag(inputId, tag) {
@@ -543,28 +551,83 @@ export function startDashboard() {
       const guildId = document.getElementById('serverSelect').value;
       if (!guildId) return;
       const res = await fetch('/api/config?guildId=' + guildId);
-      const data = await res.json();
-      renderModules('modulos', SERVER_CATEGORIES, data.serverConfig, 'server');
-      renderSettings('configs', SERVER_SETTINGS, data.serverConfig, 'server');
-      if (data.isOwner && document.getElementById('global')) {
-        let globalHtml = '';
-        globalHtml += generateModulesHtml(GLOBAL_CATEGORIES, data.globalConfig, 'global');
-        globalHtml += generateSettingsHtml(GLOBAL_SETTINGS, data.globalConfig, 'global');
-        document.getElementById('global').innerHTML = globalHtml;
-      }
+      stateData = await res.json();
       
+      buildNavigation(stateData.isOwner);
+    }
+
+    function buildNavigation(isOwner) {
+      const navContainer = document.getElementById('sidebar-nav');
+      let navHtml = '';
+
+      navHtml += '<div class="nav-group">Módulos do Servidor</div>';
+      SERVER_CATEGORIES.forEach((cat, i) => {
+        navHtml += \`<button class="nav-btn" onclick="renderContent('modulos', \${i}, this)">\${cat.category.substring(2)}</button>\`;
+      });
+
+      navHtml += '<div class="nav-group" style="margin-top:15px;">Configurações</div>';
+      SERVER_SETTINGS.forEach((cat, i) => {
+        navHtml += \`<button class="nav-btn" onclick="renderContent('configs', \${i}, this)">\${cat.category.substring(2)}</button>\`;
+      });
+
+      if (isOwner) {
+        navHtml += '<div class="nav-group" style="margin-top:15px;">Global: Módulos</div>';
+        GLOBAL_CATEGORIES.forEach((cat, i) => {
+          navHtml += \`<button class="nav-btn" onclick="renderContent('global_modulos', \${i}, this)">\${cat.category.substring(2)}</button>\`;
+        });
+        navHtml += '<div class="nav-group" style="margin-top:15px;">Global: Configs</div>';
+        GLOBAL_SETTINGS.forEach((cat, i) => {
+          navHtml += \`<button class="nav-btn" onclick="renderContent('global_configs', \${i}, this)">\${cat.category.substring(2)}</button>\`;
+        });
+      }
+
+      navContainer.innerHTML = navHtml;
+      
+      // Auto-click no primeiro item ao carregar
+      const firstBtn = navContainer.querySelector('.nav-btn');
+      if(firstBtn) firstBtn.click();
+    }
+
+    function renderContent(type, index, btn) {
+      document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+      if(btn) btn.classList.add('active');
+
+      const contentDiv = document.getElementById('main-content');
+      const headerTitle = document.getElementById('main-header-title');
+      let catData, html = '';
+
+      if (type === 'modulos') {
+        catData = SERVER_CATEGORIES[index];
+        headerTitle.innerText = catData.category;
+        html = generateModulesHtml([catData], stateData.serverConfig, 'server');
+      } else if (type === 'configs') {
+        catData = SERVER_SETTINGS[index];
+        headerTitle.innerText = catData.category;
+        html = generateSettingsHtml([catData], stateData.serverConfig, 'server');
+      } else if (type === 'global_modulos') {
+        catData = GLOBAL_CATEGORIES[index];
+        headerTitle.innerText = catData.category;
+        html = generateModulesHtml([catData], stateData.globalConfig, 'global');
+      } else if (type === 'global_configs') {
+        catData = GLOBAL_SETTINGS[index];
+        headerTitle.innerText = catData.category;
+        html = generateSettingsHtml([catData], stateData.globalConfig, 'global');
+      }
+
+      contentDiv.innerHTML = html;
+      
+      // Re-trigger previews if embed builder is present
       setTimeout(() => {
         document.querySelectorAll('.embed-builder-desc').forEach(el => {
            const id = el.id.replace('_desc', '');
            updatePreview(id);
         });
-      }, 200);
+      }, 100);
     }
 
     function generateModulesHtml(categories, dbData, type) {
       let html = '';
       categories.forEach(cat => {
-        html += '<h2 class="section-title">' + cat.category + '</h2>';
         if (cat.desc) html += '<p class="section-desc">' + cat.desc + '</p>';
         html += '<div class="grid">';
         cat.features.forEach(feat => {
@@ -586,7 +649,6 @@ export function startDashboard() {
     function generateSettingsHtml(categories, dbData, type) {
       let html = '';
       categories.forEach(cat => {
-        html += '<h2 class="section-title">' + cat.category + '</h2>';
         if (cat.desc) html += '<p class="section-desc">' + cat.desc + '</p>';
         html += '<div class="grid" ' + (cat.items.some(i => i.type === 'embed_builder') ? 'style="display: flex; flex-direction: column;"' : '') + '>';
         cat.items.forEach(item => {
@@ -712,11 +774,8 @@ export function startDashboard() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ type, guildId, feature, value: JSON.stringify(payload), valueType: 'text' })
       });
-      res.ok ? showToast('✅ Embed salvo com sucesso!') : showToast('❌ Erro ao salvar.', true);
+      res.ok ? showToast('✅ Salvo com sucesso!') : showToast('❌ Erro ao salvar.', true);
     }
-
-    function renderModules(containerId, categories, dbData, type) { document.getElementById(containerId).innerHTML = generateModulesHtml(categories, dbData, type); }
-    function renderSettings(containerId, categories, dbData, type) { document.getElementById(containerId).innerHTML = generateSettingsHtml(categories, dbData, type); }
 
     async function toggleFeature(type, feature, state) {
       const guildId = document.getElementById('serverSelect').value;

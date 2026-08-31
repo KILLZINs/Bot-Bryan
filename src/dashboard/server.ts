@@ -162,28 +162,479 @@ export function startDashboard() {
   const clientId = process.env.CLIENT_ID; 
   const clientSecret = process.env.CLIENT_SECRET;
 
+  const botInviteUrl = clientId 
+    ? `https://discord.com/oauth2/authorize?client_id=${clientId}&permissions=8&scope=bot%20applications.commands`
+    : 'https://discord.com';
+
   app.get('/', (req, res) => {
     res.send(`
+      <!DOCTYPE html>
       <html lang="pt-BR">
         <head>
-          <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
-          <title>Bryan Dashboard - Acesso</title>
+          <meta charset="UTF-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          <title>Bryan Bot — O Ecossistema Definitivo para seu Discord</title>
+          <link rel="preconnect" href="https://fonts.googleapis.com">
+          <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+          <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
           <style>
-            body { background: linear-gradient(rgba(11, 10, 15, 0.85), rgba(11, 10, 15, 0.98)), url('/skyline%20banner%204k.jpg') no-repeat center center fixed; background-size: cover; color: white; font-family: 'Segoe UI', sans-serif; text-align: center; padding-top: 100px; margin: 0; }
-            .icon-glow { width: 120px; height: 120px; border-radius: 50%; border: 2px solid #b388eb; box-shadow: 0 0 30px rgba(157, 78, 221, 0.6); margin-bottom: 25px; object-fit: cover; }
-            h1 { color: #ffffff; margin-bottom: 5px; font-size: 2.2rem; text-transform: uppercase; letter-spacing: 3px; text-shadow: 0 0 20px rgba(255, 255, 255, 0.3); font-weight: 800; }
-            .container { background-color: rgba(18, 15, 24, 0.75); padding: 60px 50px; border-radius: 12px; display: inline-block; box-shadow: 0 0 50px rgba(106, 13, 173, 0.3); border: 1px solid rgba(157, 78, 221, 0.3); backdrop-filter: blur(12px); }
-            .btn-discord { background-color: #7b2cbf; color: white; padding: 14px 35px; text-decoration: none; border-radius: 6px; font-weight: bold; font-size: 16px; display: inline-block; margin-top: 30px; transition: 0.3s; border: 1px solid #9d4edd; text-transform: uppercase; letter-spacing: 1px; }
-            .btn-discord:hover { background-color: #9d4edd; transform: translateY(-2px); box-shadow: 0 5px 20px rgba(157, 78, 221, 0.7); }
+            * { box-sizing: border-box; margin: 0; padding: 0; }
+            body {
+              background: #08060c;
+              color: #f1edfa;
+              font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+              overflow-x: hidden;
+              line-height: 1.6;
+            }
+
+            .bg-glow {
+              position: fixed;
+              top: 0;
+              left: 0;
+              width: 100vw;
+              height: 100vh;
+              z-index: -1;
+              background: 
+                radial-gradient(circle at 20% 15%, rgba(123, 44, 191, 0.25) 0%, transparent 40%),
+                radial-gradient(circle at 80% 80%, rgba(157, 78, 221, 0.2) 0%, transparent 45%),
+                radial-gradient(circle at 50% 50%, rgba(225, 48, 108, 0.12) 0%, transparent 50%),
+                linear-gradient(180deg, #0b0914 0%, #06050a 100%);
+            }
+
+            nav {
+              display: flex;
+              justify-content: space-between;
+              align-items: center;
+              padding: 20px 8%;
+              backdrop-filter: blur(15px);
+              background: rgba(11, 9, 20, 0.7);
+              border-bottom: 1px solid rgba(157, 78, 221, 0.18);
+              position: sticky;
+              top: 0;
+              z-index: 100;
+            }
+            .brand {
+              display: flex;
+              align-items: center;
+              gap: 14px;
+              text-decoration: none;
+              color: white;
+            }
+            .brand img {
+              width: 44px;
+              height: 44px;
+              border-radius: 50%;
+              border: 2px solid #b388eb;
+              box-shadow: 0 0 20px rgba(179, 136, 235, 0.5);
+              object-fit: cover;
+            }
+            .brand-name {
+              font-weight: 800;
+              font-size: 1.25rem;
+              letter-spacing: 1px;
+              background: linear-gradient(135deg, #ffffff 0%, #e0c3fc 100%);
+              -webkit-background-clip: text;
+              -webkit-text-fill-color: transparent;
+            }
+            .nav-actions {
+              display: flex;
+              gap: 15px;
+              align-items: center;
+            }
+
+            .btn {
+              padding: 12px 26px;
+              border-radius: 10px;
+              font-weight: 700;
+              font-size: 14px;
+              text-decoration: none;
+              display: inline-flex;
+              align-items: center;
+              gap: 10px;
+              transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+              cursor: pointer;
+              letter-spacing: 0.5px;
+            }
+            .btn-primary {
+              background: linear-gradient(135deg, #7b2cbf 0%, #9d4edd 100%);
+              color: #ffffff;
+              border: 1px solid rgba(224, 195, 252, 0.3);
+              box-shadow: 0 0 25px rgba(123, 44, 191, 0.5);
+            }
+            .btn-primary:hover {
+              transform: translateY(-3px) scale(1.02);
+              box-shadow: 0 10px 30px rgba(157, 78, 221, 0.8);
+            }
+            .btn-invite {
+              background: linear-gradient(135deg, #5865F2 0%, #4752C4 100%);
+              color: white;
+              border: 1px solid rgba(255, 255, 255, 0.2);
+              box-shadow: 0 0 20px rgba(88, 101, 242, 0.4);
+            }
+            .btn-invite:hover {
+              transform: translateY(-3px) scale(1.02);
+              box-shadow: 0 10px 30px rgba(88, 101, 242, 0.7);
+            }
+            .btn-secondary {
+              background: rgba(30, 24, 45, 0.6);
+              color: #e0c3fc;
+              border: 1px solid rgba(157, 78, 221, 0.3);
+              backdrop-filter: blur(10px);
+            }
+            .btn-secondary:hover {
+              background: rgba(45, 34, 70, 0.8);
+              border-color: #b388eb;
+              color: white;
+              transform: translateY(-2px);
+            }
+
+            .hero {
+              text-align: center;
+              padding: 90px 8% 60px 8%;
+              max-width: 1200px;
+              margin: 0 auto;
+            }
+            .hero-badge {
+              display: inline-flex;
+              align-items: center;
+              gap: 8px;
+              padding: 8px 20px;
+              background: rgba(123, 44, 191, 0.2);
+              border: 1px solid rgba(179, 136, 235, 0.4);
+              border-radius: 50px;
+              font-size: 13px;
+              font-weight: 700;
+              color: #e0c3fc;
+              margin-bottom: 30px;
+              box-shadow: 0 0 20px rgba(123, 44, 191, 0.3);
+              text-transform: uppercase;
+              letter-spacing: 1px;
+            }
+            .hero h1 {
+              font-size: clamp(2.5rem, 5vw, 4.2rem);
+              font-weight: 800;
+              line-height: 1.15;
+              margin-bottom: 25px;
+              letter-spacing: -1px;
+            }
+            .hero-gradient {
+              background: linear-gradient(135deg, #ffffff 30%, #c77dff 70%, #e1306c 100%);
+              -webkit-background-clip: text;
+              -webkit-text-fill-color: transparent;
+            }
+            .hero p {
+              font-size: clamp(1rem, 2vw, 1.25rem);
+              color: #b5a9c9;
+              max-width: 750px;
+              margin: 0 auto 45px auto;
+            }
+            .hero-buttons {
+              display: flex;
+              gap: 20px;
+              justify-content: center;
+              flex-wrap: wrap;
+            }
+
+            .stats-ribbon {
+              display: grid;
+              grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+              gap: 20px;
+              max-width: 1100px;
+              margin: 40px auto 80px auto;
+              padding: 0 5%;
+            }
+            .stat-card {
+              background: rgba(18, 14, 28, 0.6);
+              border: 1px solid rgba(157, 78, 221, 0.25);
+              padding: 25px;
+              border-radius: 16px;
+              text-align: center;
+              backdrop-filter: blur(10px);
+              transition: 0.3s;
+            }
+            .stat-card:hover {
+              border-color: #b388eb;
+              transform: translateY(-4px);
+              box-shadow: 0 10px 30px rgba(123, 44, 191, 0.25);
+            }
+            .stat-num {
+              font-size: 2.2rem;
+              font-weight: 800;
+              color: #ffffff;
+              background: linear-gradient(135deg, #fff 0%, #e0c3fc 100%);
+              -webkit-background-clip: text;
+              -webkit-text-fill-color: transparent;
+              margin-bottom: 5px;
+            }
+            .stat-label {
+              font-size: 13px;
+              color: #9a8ca8;
+              font-weight: 600;
+              text-transform: uppercase;
+              letter-spacing: 1px;
+            }
+
+            .features-section {
+              padding: 60px 8% 100px 8%;
+              max-width: 1250px;
+              margin: 0 auto;
+            }
+            .section-header {
+              text-align: center;
+              margin-bottom: 60px;
+            }
+            .section-header h2 {
+              font-size: 2.3rem;
+              font-weight: 800;
+              margin-bottom: 12px;
+              color: #ffffff;
+            }
+            .section-header p {
+              color: #a79cb7;
+              font-size: 1.05rem;
+            }
+
+            .features-grid {
+              display: grid;
+              grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+              gap: 28px;
+            }
+            .feature-card {
+              background: rgba(16, 12, 26, 0.7);
+              border: 1px solid rgba(157, 78, 221, 0.2);
+              border-radius: 18px;
+              padding: 35px 30px;
+              backdrop-filter: blur(12px);
+              transition: all 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+              position: relative;
+              overflow: hidden;
+            }
+            .feature-card::before {
+              content: '';
+              position: absolute;
+              top: 0;
+              left: 0;
+              right: 0;
+              height: 3px;
+              background: linear-gradient(90deg, transparent, #b388eb, transparent);
+              opacity: 0;
+              transition: 0.3s;
+            }
+            .feature-card:hover {
+              transform: translateY(-6px);
+              border-color: rgba(179, 136, 235, 0.5);
+              box-shadow: 0 15px 35px rgba(123, 44, 191, 0.25);
+            }
+            .feature-card:hover::before {
+              opacity: 1;
+            }
+            .feature-icon {
+              width: 58px;
+              height: 58px;
+              border-radius: 14px;
+              background: rgba(123, 44, 191, 0.25);
+              border: 1px solid rgba(179, 136, 235, 0.4);
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              font-size: 26px;
+              margin-bottom: 22px;
+              box-shadow: 0 0 20px rgba(123, 44, 191, 0.3);
+            }
+            .feature-card h3 {
+              font-size: 1.25rem;
+              font-weight: 700;
+              color: #ffffff;
+              margin-bottom: 12px;
+            }
+            .feature-card p {
+              color: #a79bb8;
+              font-size: 0.95rem;
+              line-height: 1.6;
+            }
+
+            .highlight-badge {
+              display: inline-block;
+              padding: 4px 10px;
+              background: linear-gradient(135deg, #e1306c 0%, #c13584 100%);
+              border-radius: 6px;
+              font-size: 11px;
+              font-weight: 800;
+              color: white;
+              text-transform: uppercase;
+              letter-spacing: 0.5px;
+              margin-bottom: 15px;
+            }
+
+            .cta-banner {
+              background: linear-gradient(135deg, rgba(123, 44, 191, 0.3) 0%, rgba(225, 48, 108, 0.2) 100%);
+              border: 1px solid rgba(179, 136, 235, 0.4);
+              border-radius: 24px;
+              padding: 60px 40px;
+              text-align: center;
+              max-width: 1000px;
+              margin: 40px auto 100px auto;
+              backdrop-filter: blur(15px);
+              box-shadow: 0 20px 50px rgba(0,0,0,0.5);
+            }
+            .cta-banner h2 {
+              font-size: 2.2rem;
+              font-weight: 800;
+              margin-bottom: 15px;
+              color: white;
+            }
+            .cta-banner p {
+              color: #d1c5e2;
+              font-size: 1.1rem;
+              max-width: 600px;
+              margin: 0 auto 35px auto;
+            }
+
+            footer {
+              border-top: 1px solid rgba(157, 78, 221, 0.18);
+              padding: 40px 8%;
+              text-align: center;
+              color: #7b6f8b;
+              font-size: 14px;
+              background: #050408;
+            }
+            footer a {
+              color: #b388eb;
+              text-decoration: none;
+              font-weight: 600;
+            }
+            footer a:hover {
+              text-decoration: underline;
+            }
+
+            @media (max-width: 768px) {
+              nav { padding: 15px 5%; }
+              .hero { padding: 60px 5% 40px 5%; }
+              .features-grid { grid-template-columns: 1fr; }
+              .nav-actions .btn-invite { display: none; }
+            }
           </style>
         </head>
         <body>
-          <div class="container">
-            <img src="/skylineicon.jpg" class="icon-glow">
-            <h1>Bryan Dashboard</h1>
-            <p style="color: #b0a8ba; font-weight: 500;">SISTEMA CENTRAL DE COMANDO</p>
-            <a href="/login" class="btn-discord">Autenticar Credenciais</a>
+          <div class="bg-glow"></div>
+
+          <!-- Navbar -->
+          <nav>
+            <a href="/" class="brand">
+              <img src="/skylineicon.jpg" alt="Bryan Bot Icon">
+              <span class="brand-name">Bryan Bot</span>
+            </a>
+            <div class="nav-actions">
+              <a href="${botInviteUrl}" target="_blank" class="btn btn-invite">
+                <span>➕ Adicionar Bot</span>
+              </a>
+              <a href="/login" class="btn btn-primary">
+                <span>⚡ Painel Web</span>
+              </a>
+            </div>
+          </nav>
+
+          <!-- Hero Header -->
+          <section class="hero">
+            <div class="hero-badge">✨ Sistema Central de Comando • Aliança Skyline</div>
+            <h1>O Bot Definitivo para transformar o seu <span class="hero-gradient">Servidor Discord</span></h1>
+            <p>Um ecossistema completo com RPG multiplayer, Feed Social no estilo Instagram, suporte por tickets, moderação avançada e painel web em tempo real.</p>
+            
+            <div class="hero-buttons">
+              <a href="${botInviteUrl}" target="_blank" class="btn btn-invite" style="padding: 16px 36px; font-size: 16px;">
+                <span>➕ Adicionar ao Discord</span>
+              </a>
+              <a href="/login" class="btn btn-secondary" style="padding: 16px 36px; font-size: 16px;">
+                <span>⚙️ Gerenciar Servidores</span>
+              </a>
+            </div>
+          </section>
+
+          <!-- Estatísticas & Status -->
+          <div class="stats-ribbon">
+            <div class="stat-card">
+              <div class="stat-num">100%</div>
+              <div class="stat-label">Uptime no Railway</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-num">0ms</div>
+              <div class="stat-label">Latência Otimizada</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-num">12+</div>
+              <div class="stat-label">Módulos Dinâmicos</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-num">v2.1</div>
+              <div class="stat-label">Nova Geração Skyline</div>
+            </div>
           </div>
+
+          <!-- Grade de Funcionalidades -->
+          <section class="features-section">
+            <div class="section-header">
+              <h2>Poderoso, Rápido e Completo</h2>
+              <p>Explore as principais ferramentas integradas ao Bryan Bot</p>
+            </div>
+
+            <div class="features-grid">
+              <div class="feature-card">
+                <span class="highlight-badge">🔥 Exclusivo</span>
+                <div class="feature-icon" style="background: rgba(225, 48, 108, 0.2); border-color: rgba(225, 48, 108, 0.4);">📸</div>
+                <h3>Feed Social / Instagram</h3>
+                <p>Transforme fotos enviadas em publicações estéticas estilo Instagram. Sistema interativo de curtidas, comentários via modal, seguidores e <strong>notificações automáticas no PV</strong>.</p>
+              </div>
+
+              <div class="feature-card">
+                <div class="feature-icon">⚔️</div>
+                <h3>Ecossistema RPG & Economia</h3>
+                <p>Crie seu personagem, dispute dungeons, enfrente World Bosses, aprenda talentos divinos, suba de nível e compre cosméticos e títulos na loja do servidor.</p>
+              </div>
+
+              <div class="feature-card">
+                <div class="feature-icon">🎫</div>
+                <h3>Sistema de Suporte & Tickets</h3>
+                <p>Criação de salas de atendimento privadas por categoria, geração de transcrições em canais de logs e controle total de permissões para a equipe de Staff.</p>
+              </div>
+
+              <div class="feature-card">
+                <div class="feature-icon">🛡️</div>
+                <h3>Segurança & Auto-Mod</h3>
+                <p>Proteção ativa contra spams, links maliciosos e convites externos. Logs detalhados de moderação, sistema de avisos (warns) e controle rigoroso de hierarquia.</p>
+              </div>
+
+              <div class="feature-card">
+                <div class="feature-icon">🎵</div>
+                <h3>Motor de Música FFmpeg</h3>
+                <p>Reprodução de áudio sem travamentos em canais de voz com suporte a múltiplas fontes, controle de filas, reprodução contínua e equalização precisa.</p>
+              </div>
+
+              <div class="feature-card">
+                <div class="feature-icon">⭐</div>
+                <h3>Leveling & Ranking</h3>
+                <p>Progressão por mensagens enviadas com cooldown inteligente. Avisos de Level Up personalizáveis em canais de texto ou <strong>fóruns dedicados</strong>.</p>
+              </div>
+            </div>
+
+            <!-- Banner CTA Final -->
+            <div class="cta-banner">
+              <h2>Pronto para revolucionar seu servidor?</h2>
+              <p>Adicione o Bryan Bot agora mesmo e configure tudo facilmente pelo nosso painel online.</p>
+              <div style="display: flex; gap: 15px; justify-content: center; flex-wrap: wrap;">
+                <a href="${botInviteUrl}" target="_blank" class="btn btn-invite" style="padding: 15px 32px;">
+                  <span>➕ Convidar Bryan Bot</span>
+                </a>
+                <a href="/login" class="btn btn-primary" style="padding: 15px 32px;">
+                  <span>⚡ Acessar Painel</span>
+                </a>
+              </div>
+            </div>
+          </section>
+
+          <footer>
+            <p>© 2026 <strong>Bryan Bot</strong> • Desenvolvido para a <strong>Aliança Skyline</strong>.</p>
+            <p style="margin-top: 8px; font-size: 13px;">Hospedado com alta performance no Railway & PostgreSQL.</p>
+          </footer>
         </body>
       </html>
     `);
@@ -287,9 +738,8 @@ export function startDashboard() {
     }
     if (value === "") finalValue = null;
 
-    // 🛡️ Segurança: primaryColor é Int obrigatório no Prisma, não pode ser null.
     if (feature === 'primaryColor' && finalValue === null) finalValue = 10180278;
-    if (feature === 'feedEmbedColor' && finalValue === null) finalValue = 14757996; // Padrão #E1306C
+    if (feature === 'feedEmbedColor' && finalValue === null) finalValue = 14757996;
 
     try {
       if (type === 'server') await prisma.guildConfig.update({ where: { guildId }, data: { [feature]: finalValue } });

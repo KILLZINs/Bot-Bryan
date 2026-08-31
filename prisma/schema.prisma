@@ -269,7 +269,13 @@ model WeeklyMission {
 model GuildConfig {
   id                    String   @id @default(cuid())
   guildId               String   @unique
-  
+
+ // 🧟 Sistema de Reviver Chat
+  reviveChannelId       String?
+  reviveRoleId          String?
+  reviveTimeout         Int?     @default(120) // Tempo em minutos
+  revivePrompt          String?  @db.Text
+  featReviveChat        Boolean  @default(false)
   // 🤖 Fábrica de IA (Custom Callia)
   aiCustomName          String?
   aiCustomVoice         String?

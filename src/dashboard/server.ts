@@ -18,10 +18,11 @@ const SERVER_CATEGORIES = [
     category: "📸 Social & Comunidade",
     desc: "Engajamento, interações e rede social interna",
     features: [
-      { id: 'featSocial', name: 'Feed Social / Instagram', desc: 'Postagens de fotos com curtidas e comentários.', icon: '📸' },
-      { id: 'featLeveling', name: 'Sistema de XP & Leveling', desc: 'Progressão por mensagens e avisos.', icon: '⭐' },
+      { id: 'featSocial', name: 'Feed Social / Insta', desc: 'Postagens de fotos com curtidas e comentários.', icon: '📸' },
+      { id: 'featLeveling', name: 'Sistema de XP', desc: 'Progressão por mensagens e avisos.', icon: '⭐' },
       { id: 'featGiveaways', name: 'Sorteios', desc: 'Sorteios automatizados.', icon: '🎁' },
-      { id: 'featPolls', name: 'Enquetes Interativas', desc: 'Votações com estatísticas.', icon: '📊' }
+      { id: 'featPolls', name: 'Enquetes', desc: 'Votações com contagem de votos.', icon: '📊' },
+      { id: 'featReviveChat', name: 'Reviver Chat (IA)', desc: 'Acorda o chat com perguntas geradas por IA após inatividade.', icon: '🧟' } // NOVO AQUI
     ]
   },
   {
@@ -111,6 +112,16 @@ const SERVER_SETTINGS = [
       { id: 'feedFollowEmoji', name: 'Emoji de Seguir', type: 'text', placeholder: '🔔' },
       { id: 'feedCommentEmoji', name: 'Emoji de Comentar', type: 'text', placeholder: '💬' },
       { id: 'feedFooterText', name: 'Rodapé das Postagens', type: 'text', placeholder: '📸 Instagram Skyline' }
+    ]
+  },
+  {
+    category: "🧟 Sistema de Reviver Chat",
+    desc: "O bot enviará uma pergunta gerada por IA para reanimar o chat se ninguém falar nada.",
+    items: [
+      { id: 'reviveChannelId', name: 'Canal Alvo (ID)', type: 'text', placeholder: 'ID do canal principal de bate-papo' },
+      { id: 'reviveRoleId', name: 'Cargo para Mencionar (ID)', type: 'text', placeholder: 'Ex: ID do cargo @Chat ou @Membros' },
+      { id: 'reviveTimeout', name: 'Tempo de Inatividade', type: 'number', placeholder: 'Tempo em minutos (Ex: 120 para 2 horas)' },
+      { id: 'revivePrompt', name: 'Prompt da IA', type: 'textarea', placeholder: 'Ex: Faça uma pergunta polêmica e divertida sobre animes ou jogos.' }
     ]
   },
   {

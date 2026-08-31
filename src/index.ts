@@ -628,31 +628,29 @@ process.on('uncaughtException', (error) => {
 });
 
 // 🔄 MOTOR DE STATUS E PERFIL DO BOT
+// 🔄 MOTOR DE STATUS ROTATIVO (Liberado pela API)
 async function updateBotPresence(client: Client) {
   try {
     const globalCfg = await prisma.botConfig.findUnique({ where: { id: 'global' }});
-    if (!globalCfg || !client.user) return;
-    
-    // Atualiza Avatar e Banner se foram configurados no Painel
-    if (globalCfg.botAvatarUrl && client.user.avatarURL() !== globalCfg.botAvatarUrl) {
-      await client.user.setAvatar(globalCfg.botAvatarUrl).catch(() => {});
-    }
-    if (globalCfg.botBannerUrl && client.user.bannerURL() !== globalCfg.botBannerUrl) {
-      // Nota: Alterar banner só funciona em bots se a feature não estiver em cache do lado do discord.
-      // E é rate-limited pesadamente, mas o comando é este:
-      try { await client.user.setBanner(globalCfg.botBannerUrl); } catch {}
-    }
+    if (!globalCfg || !globalCfg.botStatusRotation || !client.user) return;
 
-    // Rotaciona o Status
-    if (globalCfg.botStatusRotation) {
-      const statuses = globalCfg.botStatusRotation.split('\n').map(s => s.trim()).filter(Boolean);
-      if (statuses.length > 0) {
-        const randomStatus = statuses[Math.floor(Math.random() * statuses.length)];
-        client.user.setActivity(randomStatus);
-      }
+    // Separa os status criados no painel e sorteia um
+    const statuses = globalCfg.botStatusRotation.split('\n').map(s => s.trim()).filter(Boolean);
+    if (statuses.length > 0) {
+      const randomStatus = statuses[Math.floor(Math.random() * statuses.length)];
+      
+      client.user.setActivity({
+        name: randomStatus,
+        type: 0 // 0 = Jogando, 2 = Ouvindo, 3 = Assistindo
+      });
     }
-  } catch (error) {}
+  } catch (error) {
+    console.error('[STATUS] Erro ao rotacionar:', error);
+  }
 }
+
+// Roda a cada 5 minutos
+setInterval(() => updateBotPresence(client), 5 * 60 * 1000);
 
 async function start() {
   try {

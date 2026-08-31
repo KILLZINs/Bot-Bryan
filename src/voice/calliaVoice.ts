@@ -11,6 +11,7 @@ import {
 import { GuildMember, VoiceBasedChannel } from 'discord.js';
 import prism from 'prism-media';
 import { Readable } from 'node:stream';
+import { prisma } from '../database/client';
 
 export type CalliaPersona = 'bryan' | 'suki' | 'custom';
 
@@ -71,7 +72,7 @@ function pcmToWav(pcm: Buffer, sampleRate = 48_000, channels = 2): Buffer {
   return Buffer.concat([header, pcm]);
 }
 
-// 🎤 O BOT OUVE PELA ELEVENLABS (Gasta pouquíssimo crédito)
+// 🎤 O BOT OUVE PELA ELEVENLABS
 async function transcribe(wav: Buffer): Promise<string> {
   const apiKey = requireElevenLabs();
   const form = new FormData();
@@ -95,11 +96,25 @@ async function transcribe(wav: Buffer): Promise<string> {
   return data.text?.trim() ?? '';
 }
 
-// 🤖 O BOT FALA: STREAMELEMENTS (Plano A) + GOOGLE TRADUTOR (Plano B)
-async function synthesize(text: string, persona: CalliaPersona): Promise<Buffer> {
-  // Bryan é Masculino. Suki ou Custom assumem Feminino como padrão no grátis.
-  const voice = persona === 'bryan' ? 'Ricardo' : 'Vitoria';
-  const chunks = text.match(/.{1,200}(\s|$|[.?!])/g) || [text];
+// 🤖 O BOT FALA: STREAMELEMENTS (Corrigido com Anti-Bloqueio)
+async function synthesize(text: string, persona: CalliaPersona, guildId: string): Promise<Buffer> {
+  // Define a voz baseada no personagem escolhido ou painel
+  let voice = 'Vitoria'; // Padrão Feminino
+  
+  if (persona === 'bryan') {
+    voice = 'Ricardo'; // Padrão Masculino
+  } else if (persona === 'custom') {
+    try {
+      const cfg = await prisma.guildConfig.findUnique({ where: { guildId } });
+      // Se no painel estiver configurado como Masculina ("M", "m", "masc"), muda para Ricardo
+      if (cfg?.aiCustomVoice && cfg.aiCustomVoice.toLowerCase().startsWith('m')) {
+        voice = 'Ricardo';
+      }
+    } catch (e) { console.error('Erro ao ler voz customizada', e); }
+  }
+
+  // Corta em pedaços de 400 caracteres para não sobrecarregar a API
+  const chunks = text.match(/.{1,400}(\s|$|[.?!])/g) || [text];
   
   const audioBuffers: Buffer[] = [];
   let streamElementsFailed = false;
@@ -110,17 +125,26 @@ async function synthesize(text: string, persona: CalliaPersona): Promise<Buffer>
     try {
       const url = `https://api.streamelements.com/kappa/v2/speech?voice=${voice}&text=${encodeURIComponent(chunk.trim())}`;
       
-      const response = await fetch(url);
+      const response = await fetch(url, {
+        headers: {
+          // Engana o Cloudflare fingindo ser um navegador real
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+        }
+      });
+      
       const contentType = response.headers.get('content-type');
 
       if (!response.ok || !contentType?.includes('audio')) {
-        console.error(`[CALLIA] Bloqueio na StreamElements. Content-Type recebido: ${contentType}`);
+        console.error(`[CALLIA] Bloqueio na StreamElements. Status: ${response.status}`);
         streamElementsFailed = true;
         break;
       }
 
       const arrayBuffer = await response.arrayBuffer();
       audioBuffers.push(Buffer.from(arrayBuffer));
+
+      // Pequena pausa para evitar bloqueio por Rate Limit na API Gratuita
+      await new Promise(r => setTimeout(r, 300));
     } catch (e) {
       console.error('[CALLIA] Falha de conexão com a StreamElements:', e);
       streamElementsFailed = true;
@@ -132,7 +156,7 @@ async function synthesize(text: string, persona: CalliaPersona): Promise<Buffer>
     return Buffer.concat(audioBuffers);
   }
 
-  // 🚨 PLANO B: GOOGLE TRADUTOR
+  // 🚨 PLANO B: GOOGLE TRADUTOR (Se a StreamElements estiver fora do ar)
   console.log('[CALLIA] Ativando Plano B: Voz do Google Tradutor...');
   const fallbackBuffers: Buffer[] = [];
 
@@ -273,7 +297,7 @@ class CalliaSession implements SessionLike {
 
       await this.status(`${aiName} está falando...`);
 
-      const audio = await synthesize(response, this.persona);
+      const audio = await synthesize(response, this.persona, this.member.guild.id);
       const resource = createAudioResource(Readable.from(audio), { inputType: StreamType.Arbitrary });
 
       this.player.play(resource);

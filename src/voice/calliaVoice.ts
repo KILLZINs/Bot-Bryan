@@ -12,7 +12,7 @@ import { GuildMember, VoiceBasedChannel } from 'discord.js';
 import prism from 'prism-media';
 import { Readable } from 'node:stream';
 
-export type CalliaPersona = 'bryan' | 'suki';
+export type CalliaPersona = 'bryan' | 'suki' | 'custom';
 
 export type CalliaMemoryMessage = {
   role: 'user' | 'assistant';
@@ -20,16 +20,9 @@ export type CalliaMemoryMessage = {
 };
 
 export type CalliaAiHandlers = {
-  askBryan: (
-    message: string,
-    username: string,
-    memory: CalliaMemoryMessage[],
-  ) => Promise<string>;
-  askSuki: (
-    message: string,
-    username: string,
-    memory: CalliaMemoryMessage[],
-  ) => Promise<string>;
+  askBryan: (message: string, username: string, memory: CalliaMemoryMessage[]) => Promise<string>;
+  askSuki: (message: string, username: string, memory: CalliaMemoryMessage[]) => Promise<string>;
+  askCustomAi: (message: string, username: string, memory: CalliaMemoryMessage[], guildId: string) => Promise<string>;
 };
 
 type CalliaSessionOptions = {
@@ -104,24 +97,22 @@ async function transcribe(wav: Buffer): Promise<string> {
 
 // 🤖 O BOT FALA: STREAMELEMENTS (Plano A) + GOOGLE TRADUTOR (Plano B)
 async function synthesize(text: string, persona: CalliaPersona): Promise<Buffer> {
+  // Bryan é Masculino. Suki ou Custom assumem Feminino como padrão no grátis.
   const voice = persona === 'bryan' ? 'Ricardo' : 'Vitoria';
   const chunks = text.match(/.{1,200}(\s|$|[.?!])/g) || [text];
   
   const audioBuffers: Buffer[] = [];
   let streamElementsFailed = false;
 
-  // TENTA O PLANO A: STREAMELEMENTS (Duas vozes)
   for (const chunk of chunks) {
     if (!chunk.trim()) continue;
 
     try {
       const url = `https://api.streamelements.com/kappa/v2/speech?voice=${voice}&text=${encodeURIComponent(chunk.trim())}`;
       
-      // Removemos o disfarce de navegador para o Cloudflare não achar que somos um bot invasor
       const response = await fetch(url);
       const contentType = response.headers.get('content-type');
 
-      // Proteção contra a falha "Invisível" do HTML
       if (!response.ok || !contentType?.includes('audio')) {
         console.error(`[CALLIA] Bloqueio na StreamElements. Content-Type recebido: ${contentType}`);
         streamElementsFailed = true;
@@ -141,7 +132,7 @@ async function synthesize(text: string, persona: CalliaPersona): Promise<Buffer>
     return Buffer.concat(audioBuffers);
   }
 
-  // 🚨 PLANO B: GOOGLE TRADUTOR (Se a StreamElements der erro, ele assume na hora)
+  // 🚨 PLANO B: GOOGLE TRADUTOR
   console.log('[CALLIA] Ativando Plano B: Voz do Google Tradutor...');
   const fallbackBuffers: Buffer[] = [];
 
@@ -255,15 +246,24 @@ class CalliaSession implements SessionLike {
       await this.status('Ouvindo...');
       const text = await transcribe(wav);
 
-      if (!text) {
-        return;
-      }
+      if (!text) return;
 
       const username = this.member.displayName || this.member.user.username;
-      const ask = this.persona === 'bryan' ? this.ai.askBryan : this.ai.askSuki;
+      
+      let aiName = 'Bryan';
+      if (this.persona === 'suki') aiName = 'Suki';
+      if (this.persona === 'custom') aiName = 'A IA Local';
 
-      await this.status(`${this.persona === 'bryan' ? 'Bryan' : 'Suki'} está pensando...`);
-      const response = await ask(text, username, this.memory);
+      await this.status(`${aiName} está pensando...`);
+      
+      let response = '';
+      if (this.persona === 'bryan') {
+        response = await this.ai.askBryan(text, username, this.memory);
+      } else if (this.persona === 'suki') {
+        response = await this.ai.askSuki(text, username, this.memory);
+      } else {
+        response = await this.ai.askCustomAi(text, username, this.memory, this.member.guild.id);
+      }
 
       this.memory.push(
         { role: 'user', content: text },
@@ -271,9 +271,8 @@ class CalliaSession implements SessionLike {
       );
       this.memory = this.memory.slice(-8);
 
-      await this.status(`${this.persona === 'bryan' ? 'Bryan' : 'Suki'} está falando...`);
+      await this.status(`${aiName} está falando...`);
 
-      // GERAÇÃO DO ÁUDIO PROTEGIDA CONTRA HTML FALSO
       const audio = await synthesize(response, this.persona);
       const resource = createAudioResource(Readable.from(audio), { inputType: StreamType.Arbitrary });
 

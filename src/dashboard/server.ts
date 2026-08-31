@@ -1,4 +1,4 @@
-full_code_to_deliver = r'''import express from 'express';
+import express from 'express';
 import axios from 'axios';
 import cookieParser from 'cookie-parser';
 import path from 'path';
@@ -1625,25 +1625,3 @@ export function startDashboard() {
 
   app.listen(port, '0.0.0.0', () => console.log(`🌐 Dashboard Web rodando na porta ${port}`));
 }
-'''
-
-def check_brackets_detailed(code):
-    stack = []
-    pairs = {')': '(', '}': '{', ']': '['}
-    lines = code.split('\n')
-    for line_no, line in enumerate(lines, 1):
-        for col_no, char in enumerate(line, 1):
-            if char in '({[':
-                stack.append((char, line_no, col_no))
-            elif char in ')}]':
-                if not stack:
-                    return f"Unexpected closing '{char}' at line {line_no}:{col_no}"
-                top, l, c = stack.pop()
-                if pairs[char] != top:
-                    return f"Mismatched '{top}' (line {l}:{c}) with '{char}' at line {line_no}:{col_no}"
-    if stack:
-        top, l, c = stack[-1]
-        return f"Unclosed '{top}' from line {l}:{c}"
-    return "OK"
-
-print("Syntax validation:", check_brackets_detailed(full_code_to_deliver))

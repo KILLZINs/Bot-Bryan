@@ -1,8 +1,9 @@
 import 'dotenv/config';
-
 import { setDefaultResultOrder } from 'dns';
 setDefaultResultOrder('ipv4first');
+
 import { startReviveChatMonitor, lastMessageTime } from './systems/reviveChat';
+
 import {
   Client,
   Collection,
@@ -28,12 +29,7 @@ import ffmpegPath from 'ffmpeg-static';
 import { readdirSync } from 'fs';
 import { join } from 'path';
 
-import {
-  Command,
-  PrefixCommand,
-  ExtendedClient,
-} from './types';
-
+import { Command, PrefixCommand, ExtendedClient } from './types';
 import { prisma } from './database/client';
 import { startDashboard } from './dashboard/server';
 
@@ -57,10 +53,7 @@ const client = new Client({
 
 client.commands = new Collection<string, Command>();
 client.prefixCommands = new Collection<string, PrefixCommand>();
-client.cooldowns = new Collection<
-  string,
-  Collection<string, number>
->();
+client.cooldowns = new Collection<string, Collection<string, number>>();
 
 const player = new Player(client, {
   ffmpegPath: ffmpegPath ?? undefined,
@@ -72,9 +65,7 @@ player.events.on('error', (queue, error) => {
   console.error('[ERRO NA FILA]', error);
   const metadata = queue.metadata as any;
   if (metadata?.channel?.send) {
-    metadata.channel
-      .send(`❌ **Erro na fila de música:** \`${error.message}\``)
-      .catch(() => {});
+    metadata.channel.send(`❌ **Erro na fila de música:** \`${error.message}\``).catch(() => {});
   }
 });
 
@@ -82,9 +73,7 @@ player.events.on('playerError', (queue, error) => {
   console.error('[ERRO DE ÁUDIO/STREAM]', error);
   const metadata = queue.metadata as any;
   if (metadata?.channel?.send) {
-    metadata.channel
-      .send(`❌ **O áudio falhou:** \`${error.message}\``)
-      .catch(() => {});
+    metadata.channel.send(`❌ **O áudio falhou:** \`${error.message}\``).catch(() => {});
   }
 });
 
@@ -113,18 +102,13 @@ const commandsPath = join(__dirname, 'commands');
 for (const entry of readdirSync(commandsPath, { withFileTypes: true })) {
   if (entry.isDirectory()) {
     const folderPath = join(commandsPath, entry.name);
-    for (const file of readdirSync(folderPath).filter(
-      (fileName) => fileName.endsWith('.js') || fileName.endsWith('.ts'),
-    )) {
+    for (const file of readdirSync(folderPath).filter((f) => f.endsWith('.js') || f.endsWith('.ts'))) {
       const command: Command = require(join(folderPath, file)).default;
       if (command?.data && typeof command.execute === 'function') {
         client.commands.set(command.data.name, command);
       }
     }
-  } else if (
-    entry.isFile() &&
-    (entry.name.endsWith('.js') || entry.name.endsWith('.ts'))
-  ) {
+  } else if (entry.isFile() && (entry.name.endsWith('.js') || entry.name.endsWith('.ts'))) {
     const command: Command = require(join(commandsPath, entry.name)).default;
     if (command?.data && typeof command.execute === 'function') {
       client.commands.set(command.data.name, command);
@@ -135,9 +119,7 @@ for (const entry of readdirSync(commandsPath, { withFileTypes: true })) {
 const prefixCommandsPath = join(__dirname, 'prefix-commands');
 
 try {
-  for (const file of readdirSync(prefixCommandsPath).filter(
-    (fileName) => fileName.endsWith('.js') || fileName.endsWith('.ts'),
-  )) {
+  for (const file of readdirSync(prefixCommandsPath).filter((f) => f.endsWith('.js') || f.endsWith('.ts'))) {
     const command: PrefixCommand = require(join(prefixCommandsPath, file)).default;
     if (command?.name && typeof command.execute === 'function') {
       client.prefixCommands.set(command.name, command);
@@ -150,9 +132,7 @@ try {
 const eventsPath = join(__dirname, 'events');
 
 try {
-  for (const file of readdirSync(eventsPath).filter(
-    (fileName) => fileName.endsWith('.js') || fileName.endsWith('.ts'),
-  )) {
+  for (const file of readdirSync(eventsPath).filter((f) => f.endsWith('.js') || f.endsWith('.ts'))) {
     const event = require(join(eventsPath, file)).default;
     if (event && event.name) {
       if (event.once) {
@@ -216,14 +196,14 @@ const INVITE_REGEX = /(discord\.(gg|io|me|li)|discordapp\.com\/invite|discord\.c
 const PHISHING_REGEX = /(grabify|iplogger|leak|nitro-free|steam-gift)/i;
 
 client.on('messageCreate', async (message) => {
-  if (message.author.bot || !message.guild) return;
+  if (message.author.bot || !message.guild || !message.guild.id) return;
 
   // Salva a hora da última mensagem para o sistema de Reviver Chat
   lastMessageTime.set(message.guild.id, Date.now());
 
   try {
     const cfg: any = await prisma.guildConfig.findUnique({
-      where: { guildId: message.guildId },
+      where: { guildId: message.guild.id },
     });
 
     if (!cfg || !cfg.feedChannelId || message.channel.id !== cfg.feedChannelId) {
@@ -298,7 +278,7 @@ client.on('messageCreate', async (message) => {
     await message.delete().catch(() => null);
 
     const followersCount = await prisma.socialFollow.count({
-      where: { guildId: message.guildId, targetUserId: message.author.id },
+      where: { guildId: message.guild.id, targetUserId: message.author.id },
     });
 
     const embedColor = cfg.feedEmbedColor || 0xE1306C;
@@ -308,7 +288,7 @@ client.on('messageCreate', async (message) => {
       .setColor(embedColor)
       .setAuthor({
         name: `${message.author.displayName} (@${message.author.username})`,
-        iconURL: message.author.displayAvatarURL({ forceStatic: false }),
+        iconURL: message.author.displayAvatarURL({ forceStatic: false }) || undefined,
       })
       .setDescription(caption.length > 0 ? caption : null)
       .addFields({
@@ -339,13 +319,13 @@ client.on('messageCreate', async (message) => {
 
     const savedPost = await prisma.socialPost.create({
       data: {
-        guildId: message.guildId,
+        guildId: message.guild.id,
         channelId: channel.id,
         messageId: sentMessage.id,
         authorId: message.author.id,
         authorName: message.author.displayName || message.author.username,
-        authorAvatar: message.author.displayAvatarURL({ forceStatic: false }),
-        caption: caption.length > 0 ? caption : null,
+        authorAvatar: message.author.displayAvatarURL({ forceStatic: false }) || '',
+        caption: caption.length > 0 ? caption : '',
         mediaUrl: savedMediaUrl,
       },
     });
@@ -359,7 +339,7 @@ client.on('messageCreate', async (message) => {
     await sentMessage.edit({ components: [realRow] }).catch(() => null);
 
     const followers = await prisma.socialFollow.findMany({
-      where: { guildId: message.guildId, targetUserId: message.author.id },
+      where: { guildId: message.guild.id, targetUserId: message.author.id },
     });
 
     if (followers.length > 0) {
@@ -392,7 +372,7 @@ client.on('interactionCreate', async (interaction) => {
   try {
     if (!interaction.guildId) return;
 
-    // 🛡️ TRAVA MASTER E CORREÇÃO TYPESCRIPT: Verifica se é botão/modal antes de ler o customId
+    // 🛡️ TRAVA MASTER: Verifica se é botão/modal antes de ler o customId
     if ((interaction.isMessageComponent() || interaction.isModalSubmit()) && interaction.customId.startsWith('insta')) {
       const globalCfg = await prisma.botConfig.findUnique({ where: { id: 'global' } });
       if (globalCfg?.featSocial === false) {
@@ -444,7 +424,7 @@ client.on('interactionCreate', async (interaction) => {
 
         if (post.authorId !== interaction.user.id) {
           const authorUser = await client.users.fetch(post.authorId).catch(() => null);
-          if (authorUser) {
+          if (authorUser && interaction.message) {
             const likeNotify = new EmbedBuilder()
               .setColor(cfg?.feedEmbedColor || 0xE1306C)
               .setTitle(`${customEmojis.like} Nova curtida na sua foto!`)
@@ -618,7 +598,9 @@ client.on('interactionCreate', async (interaction) => {
       }
 
       await prisma.socialPost.delete({ where: { id: postId } });
-      await interaction.message.delete().catch(() => null);
+      if (interaction.message) {
+        await interaction.message.delete().catch(() => null);
+      }
       await interaction.reply({ content: '🗑️ Foto apagada com sucesso!', ephemeral: true });
       return;
     }
@@ -645,6 +627,33 @@ process.on('uncaughtException', (error) => {
   console.error('[EXCEÇÃO NÃO TRATADA]', error);
 });
 
+// 🔄 MOTOR DE STATUS E PERFIL DO BOT
+async function updateBotPresence(client: Client) {
+  try {
+    const globalCfg = await prisma.botConfig.findUnique({ where: { id: 'global' }});
+    if (!globalCfg || !client.user) return;
+    
+    // Atualiza Avatar e Banner se foram configurados no Painel
+    if (globalCfg.botAvatarUrl && client.user.avatarURL() !== globalCfg.botAvatarUrl) {
+      await client.user.setAvatar(globalCfg.botAvatarUrl).catch(() => {});
+    }
+    if (globalCfg.botBannerUrl && client.user.bannerURL() !== globalCfg.botBannerUrl) {
+      // Nota: Alterar banner só funciona em bots se a feature não estiver em cache do lado do discord.
+      // E é rate-limited pesadamente, mas o comando é este:
+      try { await client.user.setBanner(globalCfg.botBannerUrl); } catch {}
+    }
+
+    // Rotaciona o Status
+    if (globalCfg.botStatusRotation) {
+      const statuses = globalCfg.botStatusRotation.split('\n').map(s => s.trim()).filter(Boolean);
+      if (statuses.length > 0) {
+        const randomStatus = statuses[Math.floor(Math.random() * statuses.length)];
+        client.user.setActivity(randomStatus);
+      }
+    }
+  } catch (error) {}
+}
+
 async function start() {
   try {
     await player.extractors.loadMulti(DefaultExtractors);
@@ -663,6 +672,10 @@ async function start() {
   // LIGA O MONITOR DE CHAT AQUI 👇
   startReviveChatMonitor(client);
   console.log('🧟 Monitor de Reviver Chat ativado!');
+
+  // LIGA O MOTOR DE STATUS E PERFIL AQUI 👇
+  setInterval(() => updateBotPresence(client), 5 * 60 * 1000);
+  console.log('🤖 Motor de Perfil e Status ativado!');
 }
 
 start().catch((error) => {

@@ -52,8 +52,6 @@ export function startDashboard() {
   const dashboardUrl = process.env.DASHBOARD_URL || 'https://bryanbot.up.railway.app';
   const clientId = process.env.CLIENT_ID;
   const clientSecret = process.env.CLIENT_SECRET;
-  
-  // A CHAVE CORRETA E OFICIAL DO TMDB:
   const TMDB_KEY = '15d2ea6d0dc1d476efbcaa3bf51fd921'; 
 
   const botInviteUrl = clientId
@@ -61,21 +59,8 @@ export function startDashboard() {
     : 'https://discord.com';
 
   // =====================================================================
-  // 🛡️ PROXY DA API DO BRYANFLIX (Bypass seguro)
+  // 🛡️ API DO BRYANFLIX (Busca e Imagens)
   // =====================================================================
-  app.get('/api/bryanflix/trending', async (req, res) => {
-    try {
-      const [moviesRes, tvRes] = await Promise.all([
-        axios.get(`https://api.themoviedb.org/3/trending/movie/week?api_key=${TMDB_KEY}&language=pt-BR`),
-        axios.get(`https://api.themoviedb.org/3/trending/tv/week?api_key=${TMDB_KEY}&language=pt-BR`)
-      ]);
-      res.json({ movies: moviesRes.data.results, tv: tvRes.data.results });
-    } catch (err: any) {
-      console.error('[Bryanflix] Erro no TMDB Trending:', err.message);
-      res.json({ movies: [], tv: [] });
-    }
-  });
-
   app.get('/api/bryanflix/search', async (req, res) => {
     try {
       const query = req.query.q;
@@ -118,9 +103,24 @@ export function startDashboard() {
   });
 
   // =====================================================================
-  // 🍿 FRONTEND DO BRYANFLIX (Interface)
+  // 🍿 FRONTEND DO BRYANFLIX (Interface com SSR Ativado)
   // =====================================================================
-  app.get('/bryanflix', (req, res) => {
+  app.get('/bryanflix', async (req, res) => {
+    let trendingMovies: any[] = [];
+    let trendingTv: any[] = [];
+    
+    // SSR: O bot baixa os filmes ANTES de entregar a página, evitando o erro de proxy do Discord!
+    try {
+      const [moviesRes, tvRes] = await Promise.all([
+        axios.get(`https://api.themoviedb.org/3/trending/movie/week?api_key=${TMDB_KEY}&language=pt-BR`),
+        axios.get(`https://api.themoviedb.org/3/trending/tv/week?api_key=${TMDB_KEY}&language=pt-BR`)
+      ]);
+      trendingMovies = moviesRes.data.results || [];
+      trendingTv = tvRes.data.results || [];
+    } catch (err: any) {
+      console.error('[Bryanflix] Erro no TMDB Trending SSR:', err.message);
+    }
+
     res.send(`<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
@@ -193,12 +193,12 @@ export function startDashboard() {
 
   <div class="section">
     <h2>🔥 Filmes em Alta</h2>
-    <div class="movie-row" id="trending-movies"><p style="color:#9CA3AF; padding:20px;">Carregando catálogo de filmes...</p></div>
+    <div class="movie-row" id="trending-movies"></div>
   </div>
 
   <div class="section">
     <h2>📺 Séries Populares</h2>
-    <div class="movie-row" id="trending-tv"><p style="color:#9CA3AF; padding:20px;">Carregando catálogo de séries...</p></div>
+    <div class="movie-row" id="trending-tv"></div>
   </div>
 
   <div id="player-modal">
@@ -210,12 +210,23 @@ export function startDashboard() {
   </div>
 
   <script>
+    // Recupera os filmes que o servidor do Bryan injetou!
+    const initialMovies = ${JSON.stringify(trendingMovies).replace(/</g, '\\u003c')};
+    const initialTv = ${JSON.stringify(trendingTv).replace(/</g, '\\u003c')};
+    
+    // Caminho dinâmico para burlar o proxy do Discord
+    const basePath = window.location.pathname.endsWith('/bryanflix') 
+      ? window.location.pathname.slice(0, -10) 
+      : '';
+
     function createCard(item, type) {
       if (!item.poster_path) return '';
-      const title = item.title || item.name;
+      const title = item.title || item.name || '';
+      const safeTitle = encodeURIComponent(title);
+      
       return \`
-        <div class="movie-card" onclick="openPlayer('\${type}', '\${item.id}', '\${title.replace(/'/g, "\\'")}')">
-          <img src="/api/bryanflix/image?path=\${item.poster_path}" alt="\${title}">
+        <div class="movie-card" onclick="openPlayer('\${type}', '\${item.id}', decodeURIComponent('\${safeTitle}'))">
+          <img src="\${basePath}/api/bryanflix/image?path=\${item.poster_path}" alt="Capa">
           <div class="movie-info">
             <h4>\${title}</h4>
             <span style="color:var(--primary); font-weight:bold; font-size:0.8rem;">⭐ \${item.vote_average ? item.vote_average.toFixed(1) : 'N/A'}</span>
@@ -224,20 +235,16 @@ export function startDashboard() {
       \`;
     }
 
-    async function loadHome() {
-      try {
-        const res = await fetch('/api/bryanflix/trending');
-        const data = await res.json();
-        
-        if(data.movies.length > 0) {
-          document.getElementById('trending-movies').innerHTML = data.movies.map(m => createCard(m, 'movie')).join('');
-          document.getElementById('trending-tv').innerHTML = data.tv.map(s => createCard(s, 'tv')).join('');
-        } else {
-          document.getElementById('trending-movies').innerHTML = '<p style="color:#EF4444">Erro ao conectar com a API de Filmes.</p>';
-          document.getElementById('trending-tv').innerHTML = '<p style="color:#EF4444">Erro ao conectar com a API de Séries.</p>';
-        }
-      } catch (e) {
-        console.error('Falha ao carregar catálogo', e);
+    function loadHome() {
+      const moviesGrid = document.getElementById('trending-movies');
+      const tvGrid = document.getElementById('trending-tv');
+
+      if(initialMovies.length > 0) {
+        moviesGrid.innerHTML = initialMovies.map(m => createCard(m, 'movie')).join('');
+        tvGrid.innerHTML = initialTv.map(s => createCard(s, 'tv')).join('');
+      } else {
+        moviesGrid.innerHTML = '<p style="color:#EF4444; padding:20px;">Erro ao carregar o catálogo de filmes. Verifique o servidor.</p>';
+        tvGrid.innerHTML = '<p style="color:#EF4444; padding:20px;">Erro ao carregar o catálogo de séries.</p>';
       }
     }
 
@@ -255,7 +262,7 @@ export function startDashboard() {
 
       searchTimeout = setTimeout(async () => {
         try {
-          const res = await fetch(\`/api/bryanflix/search?q=\${encodeURIComponent(query)}\`);
+          const res = await fetch(\`\${basePath}/api/bryanflix/search?q=\${encodeURIComponent(query)}\`);
           const data = await res.json();
           const validResults = data.results.filter(r => r.media_type === 'movie' || r.media_type === 'tv');
           
@@ -281,6 +288,7 @@ export function startDashboard() {
       document.getElementById('player-modal').classList.remove('active');
     }
 
+    // Inicia a renderização
     loadHome();
   </script>
 </body>
@@ -288,7 +296,7 @@ export function startDashboard() {
   });
 
   // =====================================================================
-  // ROTAS ANTIGAS DO PAINEL DE CONTROLE
+  // ROTAS ANTIGAS DO PAINEL DE CONTROLE (Dashboard)
   // =====================================================================
   app.get('/api/discord-data', async (req, res) => {
     const { guildId } = req.query;
@@ -377,8 +385,8 @@ export function startDashboard() {
   
   <header class="hero">
     <div class="hero-bg"></div>
-    <h1>O bot definitivo para o seu servidor.</h1>
-    <p>Traga o <b>Bryan</b> para a sua comunidade. Inteligência Artificial avançada por voz, Feed Social nativo, RPG imersivo e moderação absoluta em um único lugar.</p>
+    <h1>O Guardião da Aliança.</h1>
+    <p>Traga o <b>Bryan</b> para o seu servidor e conecte-se à maior rede interdimensional. Inteligência Artificial por voz, Feed Social, RPG imersivo e moderação absoluta.</p>
     <div class="btn-group">
       <a href="${botInviteUrl}" class="btn btn-primary">Adicionar ao Discord</a>
       <a href="/login" class="btn btn-secondary">Configurar Bot</a>
@@ -397,7 +405,7 @@ export function startDashboard() {
     </div>
   </section>
   
-  <footer><p>© 2026 Bryan Bot.</p></footer>
+  <footer><p>© 2026 Bryan Bot • Sistema Oficial da Aliança Skyline</p></footer>
 </body>
 </html>`);
   });

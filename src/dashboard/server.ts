@@ -6,6 +6,7 @@ import { prisma } from '../database/client';
 
 const BOT_OWNER_ID = '1195254699943796791';
 const TMDB_KEY = '3fd2be6f0c70a2a598f084ddfb75487c'; 
+const RAILWAY_URL = 'https://bryanbot.up.railway.app'; // Força a rota segura
 
 const SERVER_CATEGORIES = [
   { category: "🤖 Inteligência Artificial", desc: "Sistemas de voz e conversação avançada", features: [{ id: 'featVoiceAi', name: 'Callia (IA de Voz)', desc: 'Permite que os membros chamem o Bryan ou a IA Local.', icon: '🎙️' }] },
@@ -123,6 +124,7 @@ async function renderBryanflix(res: express.Response) {
 <header class="hero">
   <h1>Lançamentos da Aliança</h1>
   <p>Assista aos melhores filmes e séries com os seus amigos direto nas calls de voz do servidor, sem sair do Discord. Sem anúncios, sem interrupções.</p>
+  <!-- O Botão Assistir Agora foi protegido contra aspas simples! -->
   <div><button class="btn-play" onclick="openPlayer('movie', '550', 'Clube da Luta')">▶ Assistir Agora</button></div>
 </header>
 
@@ -150,17 +152,22 @@ async function renderBryanflix(res: express.Response) {
 </div>
 
 <script>
+  // Constante absoluta que impede o Discord de quebrar as URLs das imagens e da pesquisa!
+  const RAILWAY_URL = '${RAILWAY_URL}';
+
   const initialMovies = ${JSON.stringify(trendingMovies).replace(/</g, '\\u003c')};
   const initialTv = ${JSON.stringify(trendingTv).replace(/</g, '\\u003c')};
 
   function createCard(item, type) {
     if (!item.poster_path) return '';
-    const title = item.title || item.name || '';
-    const safeTitle = encodeURIComponent(title);
+    const title = item.title || item.name || 'Sem Título';
+    
+    // O pulo do gato: Escapa aspas simples e duplas para que o JavaScript não crashe o HTML
+    const safeTitle = encodeURIComponent(title).replace(/'/g, "%27");
     
     return \`
-      <div class="movie-card" onclick="openPlayer('\${type}', '\${item.id}', decodeURIComponent('\${safeTitle}'))">
-        <img src="/api/bryanflix/image?path=\${item.poster_path}" alt="Capa">
+      <div class="movie-card" onclick="openPlayer('\${type}', '\${item.id}', '\${safeTitle}')">
+        <img src="\${RAILWAY_URL}/api/bryanflix/image?path=\${item.poster_path}" alt="Capa" onerror="this.src='https://via.placeholder.com/160x240?text=Capa'">
         <div class="movie-info">
           <h4>\${title}</h4>
           <span style="color:var(--primary); font-weight:bold; font-size:0.8rem;">⭐ \${item.vote_average ? item.vote_average.toFixed(1) : 'N/A'}</span>
@@ -177,7 +184,7 @@ async function renderBryanflix(res: express.Response) {
       moviesGrid.innerHTML = initialMovies.map(m => createCard(m, 'movie')).join('');
       tvGrid.innerHTML = initialTv.map(s => createCard(s, 'tv')).join('');
     } else {
-      moviesGrid.innerHTML = '<p style="color:#EF4444; padding:20px;">Erro ao carregar o catálogo de filmes. Verifique o servidor.</p>';
+      moviesGrid.innerHTML = '<p style="color:#EF4444; padding:20px;">Erro ao carregar o catálogo de filmes. Recarregue a página.</p>';
       tvGrid.innerHTML = '<p style="color:#EF4444; padding:20px;">Erro ao carregar o catálogo de séries.</p>';
     }
   }
@@ -196,7 +203,8 @@ async function renderBryanflix(res: express.Response) {
 
     searchTimeout = setTimeout(async () => {
       try {
-        const res = await fetch(\`/api/bryanflix/search?q=\${encodeURIComponent(query)}\`);
+        // Usa a URL fixa do Railway para burlar a trava de Proxy do Discord
+        const res = await fetch(\`\${RAILWAY_URL}/api/bryanflix/search?q=\${encodeURIComponent(query)}\`);
         const data = await res.json();
         const validResults = data.results.filter(r => r.media_type === 'movie' || r.media_type === 'tv');
         
@@ -210,17 +218,16 @@ async function renderBryanflix(res: express.Response) {
     }, 600);
   }
 
-  // =======================================================
-  // 💡 CONEXÃO COM PIPOCACINE
-  // =======================================================
-  function openPlayer(type, id, title = 'Reproduzindo') {
+  // Função Consertada!
+  function openPlayer(type, id, encodedTitle) {
+    const title = decodeURIComponent(encodedTitle); // Desfaz a codificação das aspas e espaços
     document.getElementById('player-title').innerText = title;
-    const iframe = document.getElementById('video-frame');
     
+    const iframe = document.getElementById('video-frame');
     let rota = type === 'movie' ? \`/embed/movie/\${id}\` : \`/embed/tv/\${id}/1/1\`;
     
-    // O Iframe aponta para o Prefixo /player
-    iframe.src = \`/player\${rota}\`;
+    // Dispara a requisição pelo túnel do Discord (para o Pipocacine)
+    iframe.src = \`/players-source\${rota}\`;
     
     document.getElementById('player-modal').classList.add('active');
   }
@@ -238,6 +245,18 @@ async function renderBryanflix(res: express.Response) {
 
 export function startDashboard() {
   const app = express();
+  
+  // =====================================================================
+  // 🛡️ CORS GLOBAL: Permite que o Discord puxe os filmes do Railway
+  // =====================================================================
+  app.use((req, res, next) => {
+    res.header('Access-Control-Allow-Origin', '*');
+    res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    res.header('Access-Control-Allow-Headers', 'Content-Type');
+    if (req.method === 'OPTIONS') return res.sendStatus(200);
+    next();
+  });
+
   app.use(cookieParser());
   app.use(express.json());
   app.use(express.static(path.join(process.cwd(), 'public')));
@@ -281,12 +300,12 @@ export function startDashboard() {
   // 🎭 ROTEADOR INTELIGENTE (Detecta se é Foguetinho ou Navegador)
   // =====================================================================
   app.get('/', async (req, res) => {
-    // Se o Discord enviar o frame_id, significa que abriram pela Atividade (Foguetinho)
+    // Se o Discord enviar o frame_id, ele está abrindo como Atividade (Foguetinho)
     if (req.query.frame_id || req.query.instance_id) {
       return renderBryanflix(res);
     }
     
-    // Se for um usuário normal no Chrome, carrega o Site de Controle (Dashboard)
+    // Se não, é alguém abrindo o link do bot pelo Chrome (Abre a Landing Page)
     res.send(`<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
@@ -378,7 +397,7 @@ export function startDashboard() {
 </html>`);
   });
 
-  // Também mantemos a rota caso alguém queira testar direto
+  // Mantido caso o usuário queira testar a rota diretamente
   app.get('/bryanflix', (req, res) => {
     return renderBryanflix(res);
   });
@@ -1032,5 +1051,5 @@ export function startDashboard() {
 </html>`);
   });
 
-  app.listen(port, '0.0.0.0', () => console.log(`🌐 Dashboard Web rodando na porta ${port}`));
+  app.listen(port, '0.0.0.0', () => console.log(`🌐 Servidor rodando na porta ${port}`));
 }

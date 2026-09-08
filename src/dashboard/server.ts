@@ -5,7 +5,9 @@ import path from 'path';
 import { prisma } from '../database/client';
 
 const BOT_OWNER_ID = '1195254699943796791';
-const TMDB_KEY = '15d2ea6d0dc1d476efbcaa3bf51fd921'; 
+
+// A CHAVE RESTAURADA: Essa era a sua chave original que funciona 100%!
+const TMDB_KEY = '3fd2be6f0c70a2a598f084ddfb75487c'; 
 
 const SERVER_CATEGORIES = [
   { category: "🤖 Inteligência Artificial", desc: "Sistemas de voz e conversação avançada", features: [{ id: 'featVoiceAi', name: 'Callia (IA de Voz)', desc: 'Permite que os membros chamem o Bryan ou a IA Local.', icon: '🎙️' }] },
@@ -44,23 +46,9 @@ async function validateGuildAccess(userId: string, guildId: string): Promise<boo
 }
 
 // =====================================================================
-// 🍿 RENDERIZADOR DO BRYANFLIX (O Core da Netflix)
+// 🍿 RENDERIZADOR DO BRYANFLIX (Página base HTML)
 // =====================================================================
-async function renderBryanflix(res: express.Response) {
-  let trendingMovies: any[] = [];
-  let trendingTv: any[] = [];
-  
-  try {
-    const [moviesRes, tvRes] = await Promise.all([
-      axios.get(`https://api.themoviedb.org/3/trending/movie/week?api_key=${TMDB_KEY}&language=pt-BR`),
-      axios.get(`https://api.themoviedb.org/3/trending/tv/week?api_key=${TMDB_KEY}&language=pt-BR`)
-    ]);
-    trendingMovies = moviesRes.data.results || [];
-    trendingTv = tvRes.data.results || [];
-  } catch (err: any) {
-    console.error('[Bryanflix] Erro no TMDB Trending SSR:', err.message);
-  }
-
+function renderBryanflix(res: express.Response) {
   res.send(`<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
@@ -133,12 +121,17 @@ async function renderBryanflix(res: express.Response) {
 
 <div class="section">
   <h2>🔥 Filmes em Alta</h2>
-  <div class="movie-row" id="trending-movies"></div>
+  <div class="movie-row" id="trending-movies">
+    <!-- Feedback visual super legal! -->
+    <p style="color:#9CA3AF; padding:20px; font-weight:600;">⏳ Carregando os melhores filmes...</p>
+  </div>
 </div>
 
 <div class="section">
   <h2>📺 Séries Populares</h2>
-  <div class="movie-row" id="trending-tv"></div>
+  <div class="movie-row" id="trending-tv">
+    <p style="color:#9CA3AF; padding:20px; font-weight:600;">⏳ Carregando as melhores séries...</p>
+  </div>
 </div>
 
 <div id="player-modal">
@@ -150,14 +143,11 @@ async function renderBryanflix(res: express.Response) {
 </div>
 
 <script>
-  const initialMovies = ${JSON.stringify(trendingMovies).replace(/</g, '\\u003c')};
-  const initialTv = ${JSON.stringify(trendingTv).replace(/</g, '\\u003c')};
-
   function createCard(item, type) {
     if (!item.poster_path) return '';
     const title = item.title || item.name || 'Sem Título';
     
-    // O pulo do gato: Dados limpos no dataset impedem o HTML de quebrar com aspas
+    // Dataset limpo impede quebras de HTML!
     return \`
       <div class="movie-card" data-type="\${type}" data-id="\${item.id}" data-title="\${title.replace(/"/g, '&quot;')}" onclick="openPlayerFromEvent(this)">
         <img src="/api/bryanflix/image?path=\${item.poster_path}" alt="Capa" onerror="this.src='https://via.placeholder.com/160x240?text=Capa'">
@@ -169,15 +159,24 @@ async function renderBryanflix(res: express.Response) {
     \`;
   }
 
-  function loadHome() {
+  // Carrega dinamicamente a página direto do servidor!
+  async function loadHome() {
     const moviesGrid = document.getElementById('trending-movies');
     const tvGrid = document.getElementById('trending-tv');
 
-    if(initialMovies.length > 0) {
-      moviesGrid.innerHTML = initialMovies.map(m => createCard(m, 'movie')).join('');
-      tvGrid.innerHTML = initialTv.map(s => createCard(s, 'tv')).join('');
-    } else {
-      moviesGrid.innerHTML = '<p style="color:#EF4444; padding:20px;">Erro ao carregar catálogo. Verifique a chave da API.</p>';
+    try {
+      const res = await fetch('/api/bryanflix/trending');
+      const data = await res.json();
+
+      if(data.movies && data.movies.length > 0) {
+        moviesGrid.innerHTML = data.movies.map(m => createCard(m, 'movie')).join('');
+        tvGrid.innerHTML = data.tv.map(s => createCard(s, 'tv')).join('');
+      } else {
+        moviesGrid.innerHTML = '<p style="color:#EF4444; padding:20px;">Falha ao obter catálogo. A API retornou uma lista vazia.</p>';
+        tvGrid.innerHTML = '';
+      }
+    } catch (e) {
+      moviesGrid.innerHTML = '<p style="color:#EF4444; padding:20px;">Erro de conexão com o servidor do Bryanflix.</p>';
       tvGrid.innerHTML = '';
     }
   }
@@ -211,7 +210,7 @@ async function renderBryanflix(res: express.Response) {
   }
 
   // =======================================================
-  // 💡 NÚCLEO DO PLAYER (Conexão direta com pipocacine pelo túnel)
+  // 💡 O NÚCLEO DO PLAYER (Bypass de Segurança do Discord)
   // =======================================================
   function openPlayerFromEvent(element) {
     const type = element.getAttribute('data-type');
@@ -221,11 +220,11 @@ async function renderBryanflix(res: express.Response) {
     document.getElementById('player-title').innerText = title;
     const iframe = document.getElementById('video-frame');
     
-    // Formato de rotas padrão do Pipocacine (embeds)
+    // Rotas do Pipocacine formatadas para a busca correta
     let rota = type === 'movie' ? \`/embed/movie/\${id}\` : \`/embed/tv/\${id}/1/1\`;
     
     // Dispara a requisição para o Prefixo do Discord
-    iframe.src = \`/players-source\${rota}\`;
+    iframe.src = \`/player\${rota}\`;
     
     document.getElementById('player-modal').classList.add('active');
   }
@@ -235,6 +234,7 @@ async function renderBryanflix(res: express.Response) {
     document.getElementById('player-modal').classList.remove('active');
   }
 
+  // Inicia o catálogo quando a página abre!
   loadHome();
 </script>
 </body>
@@ -244,9 +244,10 @@ async function renderBryanflix(res: express.Response) {
 export function startDashboard() {
   const app = express();
   
-  // Habilita o bypass no express para imagens carregarem rápido
+  // CORS Bypass para as requisições seguras
   app.use((req, res, next) => {
     res.header('Access-Control-Allow-Origin', '*');
+    res.header('Access-Control-Allow-Methods', 'GET, POST');
     next();
   });
 
@@ -264,8 +265,21 @@ export function startDashboard() {
     : 'https://discord.com';
 
   // =====================================================================
-  // 🛡️ API DO BRYANFLIX (Busca)
+  // 🛡️ API DO BRYANFLIX (Busca, Tendências e Imagens)
   // =====================================================================
+  app.get('/api/bryanflix/trending', async (req, res) => {
+    try {
+      const [moviesRes, tvRes] = await Promise.all([
+        axios.get(`https://api.themoviedb.org/3/trending/movie/week?api_key=${TMDB_KEY}&language=pt-BR`),
+        axios.get(`https://api.themoviedb.org/3/trending/tv/week?api_key=${TMDB_KEY}&language=pt-BR`)
+      ]);
+      res.json({ movies: moviesRes.data.results, tv: tvRes.data.results });
+    } catch (err: any) {
+      console.error('[Bryanflix] Erro Backend Trending:', err.message);
+      res.json({ movies: [], tv: [] });
+    }
+  });
+
   app.get('/api/bryanflix/search', async (req, res) => {
     try {
       const query = req.query.q;
@@ -277,9 +291,6 @@ export function startDashboard() {
     }
   });
 
-  // =====================================================================
-  // 📸 PROXY DE IMAGENS CORRIGIDO (.PIPE)
-  // =====================================================================
   app.get('/api/bryanflix/image', async (req, res) => {
     try {
       let imgPath = req.query.path as string;
@@ -301,14 +312,30 @@ export function startDashboard() {
   });
 
   // =====================================================================
-  // 🎭 ROTEADOR INTELIGENTE (Detecta se é Foguetinho ou Navegador)
+  // 🎭 AVISO DO PLAYER SE ABERTO NO CHROME
+  // =====================================================================
+  app.get('/player/*', (req, res) => {
+    res.send(`
+      <body style="background:#05050A; color:white; font-family:sans-serif; display:flex; justify-content:center; align-items:center; height:100vh; text-align:center;">
+        <div>
+          <h1 style="color:#EF4444; font-size:2.5rem; margin-bottom:10px;">⚠️ Acesso Bloqueado</h1>
+          <p style="color:#9CA3AF; max-width: 400px; margin: 0 auto; line-height: 1.6; font-size:1.1rem;">
+            O player de vídeo utiliza um túnel seguro do Discord e não funciona em navegadores normais.<br><br>
+            Volte para o Discord, entre em um canal de voz e abra o <b>Bryanflix pelo Foguetinho 🚀</b> para assistir!
+          </p>
+        </div>
+      </body>
+    `);
+  });
+
+  // =====================================================================
+  // 🧭 ROTEADOR (Se for Foguetinho = Bryanflix | Se for Chrome = Dashboard)
   // =====================================================================
   app.get('/', async (req, res) => {
     if (req.query.frame_id || req.query.instance_id) {
       return renderBryanflix(res);
     }
     
-    // Landing Page Normal (Chrome)
     res.send(`<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
@@ -400,7 +427,7 @@ export function startDashboard() {
 </html>`);
   });
 
-  // Também mantemos a rota caso alguém queira testar direto
+  // Também mantemos a rota caso alguém queira testar direto no navegador
   app.get('/bryanflix', (req, res) => {
     return renderBryanflix(res);
   });

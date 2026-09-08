@@ -5,8 +5,6 @@ import path from 'path';
 import { prisma } from '../database/client';
 
 const BOT_OWNER_ID = '1195254699943796791';
-
-// SUA CHAVE ORIGINAL E 100% FUNCIONAL RESTAURADA!
 const TMDB_KEY = '3fd2be6f0c70a2a598f084ddfb75487c'; 
 
 const SERVER_CATEGORIES = [
@@ -46,7 +44,7 @@ async function validateGuildAccess(userId: string, guildId: string): Promise<boo
 }
 
 // =====================================================================
-// 🍿 RENDERIZADOR DO BRYANFLIX (A Netflix Definitiva)
+// 🍿 RENDERIZADOR DO BRYANFLIX (A Netflix 100% Nativa Discord)
 // =====================================================================
 async function renderBryanflix(res: express.Response) {
   let trendingMovies: any[] = [];
@@ -97,25 +95,19 @@ async function renderBryanflix(res: express.Response) {
   .movie-row { display: flex; gap: 15px; overflow-x: auto; padding-bottom: 20px; scroll-behavior: smooth; }
   .movie-row::-webkit-scrollbar { height: 6px; }
   .movie-card { min-width: 160px; width: 160px; cursor: pointer; transition: 0.3s; position: relative; border-radius: 8px; overflow: hidden; background: #131521; box-shadow: 0 4px 10px rgba(0,0,0,0.3); }
-  .movie-card img { width: 100%; height: 240px; object-fit: cover; border-radius: 8px; transition: 0.3s; }
+  .movie-card img { width: 100%; height: 240px; object-fit: cover; border-radius: 8px; pointer-events: none; }
   .movie-card:hover { transform: scale(1.05); z-index: 10; box-shadow: 0 10px 20px rgba(139, 92, 246, 0.3); }
   
-  .movie-info { position: absolute; bottom: 0; padding: 20px 10px 10px 10px; background: linear-gradient(to top, rgba(0,0,0,0.95) 0%, rgba(0,0,0,0.7) 50%, transparent 100%); width: 100%; transition: 0.3s; }
+  .movie-info { position: absolute; bottom: 0; padding: 20px 10px 10px 10px; background: linear-gradient(to top, rgba(0,0,0,0.95) 0%, rgba(0,0,0,0.7) 50%, transparent 100%); width: 100%; transition: 0.3s; pointer-events: none; }
   .movie-card:hover .movie-info { background: linear-gradient(to top, rgba(139, 92, 246, 0.9) 0%, rgba(0,0,0,0.7) 60%, transparent 100%); }
   .movie-info h4 { font-size: 0.9rem; margin-bottom: 5px; color: white; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; text-shadow: 1px 1px 3px black; }
 
-  /* Modal do Player Fixo e à prova de quebras */
-  #player-modal { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: #05050A; z-index: 999999; display: none; flex-direction: column; }
+  #player-modal { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: black; z-index: 9999; display: none; flex-direction: column; }
   #player-modal.active { display: flex !important; }
-  .player-header { padding: 15px 25px; display: flex; justify-content: space-between; align-items: center; background: #131521; border-bottom: 1px solid var(--border); }
-  .btn-close { background: rgba(239, 68, 68, 0.2); color: #EF4444; border: 1px solid #EF4444; padding: 8px 20px; border-radius: 6px; font-weight: bold; cursor: pointer; transition: 0.2s; }
-  .btn-close:hover { background: #EF4444; color: white; }
-  
-  /* Botão Extra para abrir fora do Discord se falhar */
-  .btn-external { background: rgba(139, 92, 246, 0.2); color: #8B5CF6; border: 1px solid #8B5CF6; text-decoration: none; padding: 8px 20px; border-radius: 6px; font-weight: bold; transition: 0.2s; display: inline-block; margin-right: 15px; }
-  .btn-external:hover { background: #8B5CF6; color: white; }
-  
-  iframe { flex: 1; width: 100%; height: 100%; border: none; background: black; }
+  .player-header { padding: 15px; display: flex; justify-content: space-between; align-items: center; background: linear-gradient(to bottom, rgba(0,0,0,0.8), transparent); position: absolute; top: 0; width: 100%; z-index: 10; }
+  .btn-close { background: rgba(255,0,0,0.7); color: white; border: none; padding: 8px 15px; border-radius: 4px; font-weight: bold; cursor: pointer; transition: 0.2s; }
+  .btn-close:hover { background: red; }
+  iframe { flex: 1; width: 100%; height: 100%; border: none; background: #000; }
 </style>
 </head>
 <body>
@@ -124,14 +116,14 @@ async function renderBryanflix(res: express.Response) {
   <div class="brand">🍿 BRYANFLIX</div>
   <div class="search-box">
     <span>🔍</span>
-    <input type="text" id="searchInput" placeholder="Buscar filmes ou séries..." oninput="searchMovies()">
+    <input type="text" id="searchInput" placeholder="Buscar filmes ou séries...">
   </div>
 </nav>
 
 <header class="hero">
   <h1>Lançamentos da Aliança</h1>
   <p>Assista aos melhores filmes e séries com os seus amigos direto nas calls de voz do servidor, sem sair do Discord. Sem anúncios, sem interrupções.</p>
-  <div><button class="btn-play" data-type="movie" data-id="550" data-title="Clube da Luta" onclick="openPlayerFromEvent(this)">▶ Assistir Agora</button></div>
+  <div><button id="btn-hero-play" class="btn-play" data-type="movie" data-id="550" data-title="Clube da Luta">▶ Assistir Agora</button></div>
 </header>
 
 <div class="section" id="search-section" style="display: none;">
@@ -155,24 +147,23 @@ async function renderBryanflix(res: express.Response) {
 
 <div id="player-modal">
   <div class="player-header">
-    <h3 style="color:white;" id="player-title">Carregando Filme...</h3>
-    <div>
-      <a id="external-link" href="#" target="_blank" class="btn-external">Abrir no Navegador</a>
-      <button class="btn-close" onclick="closePlayer()">X FECHAR</button>
-    </div>
+    <h3 style="color:white; text-shadow: 1px 1px 3px black;" id="player-title">Carregando Filme...</h3>
+    <button id="btn-close-player" class="btn-close">X FECHAR</button>
   </div>
   <iframe id="video-frame" allowfullscreen></iframe>
 </div>
 
 <script>
+  // O servidor injetou os dados originais aqui de forma segura:
   const initialMovies = ${JSON.stringify(trendingMovies).replace(/</g, '\\u003c')};
   const initialTv = ${JSON.stringify(trendingTv).replace(/</g, '\\u003c')};
 
   function createCard(item, type) {
     if (!item.poster_path) return '';
     const title = item.title || item.name || 'Sem Título';
+    // Removemos os onClick. Tudo será via AddEventListener para evitar bloqueios de CSP do Discord.
     return \`
-      <div class="movie-card" data-type="\${type}" data-id="\${item.id}" data-title="\${title.replace(/"/g, '&quot;')}" onclick="openPlayerFromEvent(this)">
+      <div class="movie-card clickable-movie" data-type="\${type}" data-id="\${item.id}" data-title="\${encodeURIComponent(title).replace(/'/g, "%27")}">
         <img src="/api/bryanflix/image?path=\${item.poster_path}" alt="Capa" onerror="this.src='https://via.placeholder.com/160x240?text=Capa'">
         <div class="movie-info">
           <h4>\${title}</h4>
@@ -182,31 +173,42 @@ async function renderBryanflix(res: express.Response) {
     \`;
   }
 
-  async function loadHome() {
+  // O Coração do Player (Escuta os cliques nativamente)
+  function handleMovieClick(e) {
+    const element = e.currentTarget;
+    const type = element.getAttribute('data-type');
+    const id = element.getAttribute('data-id');
+    const title = decodeURIComponent(element.getAttribute('data-title'));
+    
+    document.getElementById('player-title').innerText = title;
+    const iframe = document.getElementById('video-frame');
+    
+    let rota = type === 'movie' ? \`/embed/movie/\${id}\` : \`/embed/tv/\${id}/1/1\`;
+    
+    // Dispara a requisição para o Prefixo do Discord Portal (/player)
+    iframe.src = \`/player\${rota}\`;
+    
+    document.getElementById('player-modal').classList.add('active');
+  }
+
+  // Atribui funcionalidade a todos os filmes carregados
+  function bindMovieClicks() {
+    document.querySelectorAll('.clickable-movie').forEach(el => {
+      el.removeEventListener('click', handleMovieClick);
+      el.addEventListener('click', handleMovieClick);
+    });
+  }
+
+  function loadHome() {
     const moviesGrid = document.getElementById('trending-movies');
     const tvGrid = document.getElementById('trending-tv');
 
-    // Tentativa 1: Usar dados do Servidor (Rápido)
     if(initialMovies && initialMovies.length > 0) {
       moviesGrid.innerHTML = initialMovies.map(m => createCard(m, 'movie')).join('');
       tvGrid.innerHTML = initialTv.map(s => createCard(s, 'tv')).join('');
-      return;
-    }
-
-    // Tentativa 2: Busca da API pela internet se o servidor dormiu
-    try {
-      const res = await fetch('/api/bryanflix/trending');
-      const data = await res.json();
-
-      if(data.movies && data.movies.length > 0) {
-        moviesGrid.innerHTML = data.movies.map(m => createCard(m, 'movie')).join('');
-        tvGrid.innerHTML = data.tv.map(s => createCard(s, 'tv')).join('');
-      } else {
-        moviesGrid.innerHTML = '<p style="color:#EF4444; padding:20px;">A chave da API do TMDB parece ter sido bloqueada ou está inválida.</p>';
-        tvGrid.innerHTML = '';
-      }
-    } catch (e) {
-      moviesGrid.innerHTML = '<p style="color:#EF4444; padding:20px;">Erro de conexão com o servidor.</p>';
+      bindMovieClicks();
+    } else {
+      moviesGrid.innerHTML = '<p style="color:#EF4444; padding:20px;">Falha ao carregar catálogo. A API não retornou dados.</p>';
       tvGrid.innerHTML = '';
     }
   }
@@ -231,6 +233,7 @@ async function renderBryanflix(res: express.Response) {
         
         if(validResults.length > 0) {
           searchGrid.innerHTML = validResults.map(r => createCard(r, r.media_type)).join('');
+          bindMovieClicks();
         } else {
           searchGrid.innerHTML = '<p style="color:#9CA3AF; padding:20px;">Nenhum resultado encontrado para "' + query + '".</p>';
         }
@@ -239,31 +242,17 @@ async function renderBryanflix(res: express.Response) {
     }, 600);
   }
 
-  function openPlayerFromEvent(element) {
-    const type = element.getAttribute('data-type');
-    const id = element.getAttribute('data-id');
-    const title = element.getAttribute('data-title');
-    
-    document.getElementById('player-title').innerText = title;
-    const iframe = document.getElementById('video-frame');
-    const externalLink = document.getElementById('external-link');
-    
-    let rota = type === 'movie' ? \`/embed/movie/\${id}\` : \`/embed/tv/\${id}/1/1\`;
-    
-    // Tenta abrir o iframe pelo Túnel do Discord
-    iframe.src = \`/player\${rota}\`;
-    
-    // Deixa o link externo pronto usando o embed.su (Garantido de funcionar fora do iframe)
-    externalLink.href = \`https://embed.su\${rota}\`;
-    
-    document.getElementById('player-modal').classList.add('active');
-  }
-
-  function closePlayer() {
+  // Registra os botões estáticos sem usar onclick no HTML
+  document.getElementById('btn-hero-play').addEventListener('click', handleMovieClick);
+  
+  document.getElementById('btn-close-player').addEventListener('click', () => {
     document.getElementById('video-frame').src = '';
     document.getElementById('player-modal').classList.remove('active');
-  }
+  });
 
+  document.getElementById('searchInput').addEventListener('input', searchMovies);
+
+  // Inicia tudo
   loadHome();
 </script>
 </body>
@@ -303,7 +292,6 @@ export function startDashboard() {
       ]);
       res.json({ movies: moviesRes.data.results, tv: tvRes.data.results });
     } catch (err: any) {
-      console.error('[Bryanflix] Erro Backend Trending:', err.message);
       res.json({ movies: [], tv: [] });
     }
   });
@@ -357,7 +345,7 @@ export function startDashboard() {
   });
 
   // =====================================================================
-  // 🧭 ROTEAMENTO INTELIGENTE DE DOMÍNIOS (A MÁGICA CONTINUA)
+  // 🧭 ROTEAMENTO INTELIGENTE DE DOMÍNIOS
   // =====================================================================
   app.get('/', async (req, res) => {
     // 1. O DOMÍNIO DA ATIVIDADE: Se for bryanflix, abre a Netflix!
@@ -366,7 +354,7 @@ export function startDashboard() {
       return;
     }
     
-    // 2. O DOMÍNIO DO BOT: Se for bryanbot, abre a Landing Page Oficial (Sua tela inicial volta!)
+    // 2. O DOMÍNIO DO BOT: Se for bryanbot, abre a Landing Page Oficial
     res.send(`<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
@@ -427,7 +415,7 @@ export function startDashboard() {
     <a href="/" class="brand"><img src="/skylineicon.jpg" alt="Bryan"> Bryan Bot</a>
     <div class="nav-links">
       <a href="${botInviteUrl}">Adicionar ao Servidor</a>
-      <a href="/login" class="btn-login">Acessar Painel</a>
+      <a href="/painel" class="btn-login">Acessar Painel</a>
     </div>
   </nav>
   
@@ -437,7 +425,7 @@ export function startDashboard() {
     <p>Traga o <b>Bryan</b> para o seu servidor e conecte-se à maior rede interdimensional. Inteligência Artificial por voz, Feed Social, RPG imersivo e moderação absoluta.</p>
     <div class="btn-group">
       <a href="${botInviteUrl}" class="btn btn-primary">Adicionar ao Discord</a>
-      <a href="/login" class="btn btn-secondary">Configurar Bot</a>
+      <a href="/painel" class="btn btn-secondary">Configurar Bot</a>
     </div>
   </header>
   

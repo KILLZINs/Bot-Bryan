@@ -7,148 +7,33 @@ import { prisma } from '../database/client';
 const BOT_OWNER_ID = '1195254699943796791';
 
 const SERVER_CATEGORIES = [
-  {
-    category: "🤖 Inteligência Artificial",
-    desc: "Sistemas de voz e conversação avançada",
-    features: [{ id: 'featVoiceAi', name: 'Callia (IA de Voz)', desc: 'Permite que os membros chamem o Bryan ou a IA Local.', icon: '🎙️' }]
-  },
-  {
-    category: "📸 Social & Comunidade",
-    desc: "Engajamento, interações e rede social interna",
-    features: [
-      { id: 'featSocial', name: 'Feed Social / Insta', desc: 'Postagens de fotos com curtidas e comentários.', icon: '📸' },
-      { id: 'featLeveling', name: 'Sistema de XP', desc: 'Progressão por mensagens e avisos.', icon: '⭐' },
-      { id: 'featGiveaways', name: 'Sorteios', desc: 'Sorteios automatizados.', icon: '🎁' },
-      { id: 'featPolls', name: 'Enquetes', desc: 'Votações com contagem de votos.', icon: '📊' },
-      { id: 'featReviveChat', name: 'Reviver Chat (IA)', desc: 'Acorda o chat com perguntas geradas por IA após inatividade.', icon: '🧟' }
-    ]
-  },
-  {
-    category: "⚔️ RPG & Economia",
-    desc: "Sistemas de progressão, missões e mercado",
-    features: [
-      { id: 'featRpg', name: 'Sistema RPG', desc: 'Ativa todo o ecossistema RPG.', icon: '⚔️' },
-      { id: 'featEconomy', name: 'Economia & Loja', desc: 'Sistema de moedas e loja de itens.', icon: '🪙' },
-      { id: 'featMissions', name: 'Missões Diárias', desc: 'Desafios automáticos com recompensas.', icon: '📜' }
-    ]
-  },
-  {
-    category: "🛡️ Segurança & Moderação",
-    desc: "Proteção em tempo real contra ataques e spam",
-    features: [
-      { id: 'featMod', name: 'Módulo de Moderação', desc: 'Comandos administrativos, ban, kick e warns.', icon: '🔨' },
-      { id: 'antiSpam', name: 'Defesa Anti-Spam', desc: 'Bloqueia envio rápido de mensagens.', icon: '⚡' },
-      { id: 'antiLinks', name: 'Filtro Anti-Links', desc: 'Remove convites e links suspeitos.', icon: '🔗' }
-    ]
-  },
-  {
-    category: "🎫 Atendimento & Utilidades",
-    desc: "Suporte aos membros e streaming",
-    features: [
-      { id: 'featTickets', name: 'Tickets de Suporte', desc: 'Salas privadas de atendimento.', icon: '🎫' },
-      { id: 'featSelfRole', name: 'Registro de Auto-Cargos', desc: 'Menus de seleção para cargos.', icon: '🎭' },
-      { id: 'featMusic', name: 'Player de Música', desc: 'Streaming de áudio em canais de voz.', icon: '🎵' },
-      { id: 'featAnnouncements', name: 'Anúncios & Eventos', desc: 'Transmissão de comunicados.', icon: '📢' }
-    ]
-  }
+  { category: "🤖 Inteligência Artificial", desc: "Sistemas de voz e conversação avançada", features: [{ id: 'featVoiceAi', name: 'Callia (IA de Voz)', desc: 'Permite que os membros chamem o Bryan ou a IA Local.', icon: '🎙️' }] },
+  { category: "📸 Social & Comunidade", desc: "Engajamento, interações e rede social interna", features: [{ id: 'featSocial', name: 'Feed Social / Insta', desc: 'Postagens de fotos com curtidas e comentários.', icon: '📸' }, { id: 'featLeveling', name: 'Sistema de XP', desc: 'Progressão por mensagens e avisos.', icon: '⭐' }, { id: 'featGiveaways', name: 'Sorteios', desc: 'Sorteios automatizados.', icon: '🎁' }, { id: 'featPolls', name: 'Enquetes', desc: 'Votações com contagem de votos.', icon: '📊' }, { id: 'featReviveChat', name: 'Reviver Chat (IA)', desc: 'Acorda o chat com perguntas geradas por IA após inatividade.', icon: '🧟' }] },
+  { category: "⚔️ RPG & Economia", desc: "Sistemas de progressão, missões e mercado", features: [{ id: 'featRpg', name: 'Sistema RPG', desc: 'Ativa todo o ecossistema RPG.', icon: '⚔️' }, { id: 'featEconomy', name: 'Economia & Loja', desc: 'Sistema de moedas e loja de itens.', icon: '🪙' }, { id: 'featMissions', name: 'Missões Diárias', desc: 'Desafios automáticos com recompensas.', icon: '📜' }] },
+  { category: "🛡️ Segurança & Moderação", desc: "Proteção em tempo real contra ataques e spam", features: [{ id: 'featMod', name: 'Módulo de Moderação', desc: 'Comandos administrativos, ban, kick e warns.', icon: '🔨' }, { id: 'antiSpam', name: 'Defesa Anti-Spam', desc: 'Bloqueia envio rápido de mensagens.', icon: '⚡' }, { id: 'antiLinks', name: 'Filtro Anti-Links', desc: 'Remove convites e links suspeitos.', icon: '🔗' }] },
+  { category: "🎫 Atendimento & Utilidades", desc: "Suporte aos membros e streaming", features: [{ id: 'featTickets', name: 'Tickets de Suporte', desc: 'Salas privadas de atendimento.', icon: '🎫' }, { id: 'featSelfRole', name: 'Registro de Auto-Cargos', desc: 'Menus de seleção para cargos.', icon: '🎭' }, { id: 'featMusic', name: 'Player de Música', desc: 'Streaming de áudio em canais de voz.', icon: '🎵' }, { id: 'featAnnouncements', name: 'Anúncios & Eventos', desc: 'Transmissão de comunicados.', icon: '📢' }] }
 ];
 
 const GLOBAL_CATEGORIES = [
   { category: "⚙️ Sistemas Centrais Globais", features: [{ id: 'featAfk', name: 'Sistema AFK Global', desc: 'Comando /afk na rede.' }, { id: 'featWelcomeDm', name: 'DM de Boas-vindas', desc: 'Mensagem privada a novos membros.' }] },
-  {
-    category: "🌍 Master Switches (Trava Absoluta)",
-    features: [
-      { id: 'featSocial', name: 'Feed Social (Insta)', desc: 'Desativa o Feed globalmente.' },
-      { id: 'featVoiceAi', name: 'IA de Voz (Callia)', desc: 'Proíbe a Callia em todos os servers.' },
-      { id: 'featRpg', name: 'Sistema RPG', desc: 'Desliga o RPG globalmente.' },
-      { id: 'featEconomy', name: 'Economia & Lojas', desc: 'Congela todas as lojas.' },
-      { id: 'featTickets', name: 'Sistema de Tickets', desc: 'Bloqueia novos atendimentos.' },
-      { id: 'featMusic', name: 'Player de Música', desc: 'Desliga o bot de música.' },
-      { id: 'antiSpam', name: 'Defesa Anti-Spam', desc: 'Desativa o bloqueador em massa.' },
-      { id: 'featGiveaways', name: 'Sorteios', desc: 'Trava todos os sorteios.' },
-      { id: 'featLeveling', name: 'Sistema de XP', desc: 'Congela ganho de XP global.' },
-      { id: 'featReviveChat', name: 'Reviver Chat (IA)', desc: 'Desliga o monitor de inatividade.' }
-    ]
-  }
+  { category: "🌍 Master Switches (Trava Absoluta)", features: [{ id: 'featSocial', name: 'Feed Social (Insta)', desc: 'Desativa o Feed globalmente.' }, { id: 'featVoiceAi', name: 'IA de Voz (Callia)', desc: 'Proíbe a Callia em todos os servers.' }, { id: 'featRpg', name: 'Sistema RPG', desc: 'Desliga o RPG globalmente.' }, { id: 'featEconomy', name: 'Economia & Lojas', desc: 'Congela todas as lojas.' }, { id: 'featTickets', name: 'Sistema de Tickets', desc: 'Bloqueia novos atendimentos.' }, { id: 'featMusic', name: 'Player de Música', desc: 'Desliga o bot de música.' }, { id: 'antiSpam', name: 'Defesa Anti-Spam', desc: 'Desativa o bloqueador em massa.' }, { id: 'featGiveaways', name: 'Sorteios', desc: 'Trava todos os sorteios.' }, { id: 'featLeveling', name: 'Sistema de XP', desc: 'Congela ganho de XP global.' }, { id: 'featReviveChat', name: 'Reviver Chat (IA)', desc: 'Desliga o monitor de inatividade.' }] }
 ];
 
 const SERVER_SETTINGS = [
   { category: "💬 Boas-Vindas", desc: "Crie um embed rico para receber os novos membros no servidor.", items: [{ id: 'welcomeMessage', name: 'Construtor de Embed', type: 'embed_builder', placeholder: '' }] },
-  {
-    category: "🤖 IA Customizada", desc: "Configure a personalidade da IA caso este servidor não possua a Suki.",
-    items: [
-      { id: 'aiCustomName', name: 'Nome da IA Local', type: 'text', placeholder: 'Ex: Jarvis, Cortana...' },
-      { id: 'aiCustomVoice', name: 'Voz da IA (M/F)', type: 'text', placeholder: 'Masculina ou Feminina' },
-      { id: 'aiCustomAvatar', name: 'Avatar da IA (URL)', type: 'text', placeholder: 'Link de uma imagem png/jpg' },
-      { id: 'aiSystemPrompt', name: 'Prompt de Comportamento Base', type: 'textarea', placeholder: 'Descreva a personalidade da IA para este servidor...' }
-    ]
-  },
-  {
-    category: "🧟 Reviver Chat", desc: "O bot enviará uma pergunta gerada por IA para reanimar o chat inativo.",
-    items: [
-      { id: 'reviveChannelId', name: 'Canal Alvo', type: 'channel', placeholder: 'Selecione o canal' },
-      { id: 'reviveRoleId', name: 'Cargo para Mencionar', type: 'role', placeholder: 'Selecione o cargo' },
-      { id: 'reviveTimeout', name: 'Tempo de Inatividade', type: 'number', placeholder: 'Tempo em minutos (Ex: 120 para 2 horas)' },
-      { id: 'revivePrompt', name: 'Prompt da IA', type: 'textarea', placeholder: 'Ex: Faça uma pergunta polêmica e divertida sobre animes ou jogos.' }
-    ]
-  },
+  { category: "🤖 IA Customizada", desc: "Configure a personalidade da IA caso este servidor não possua a Suki.", items: [{ id: 'aiCustomName', name: 'Nome da IA Local', type: 'text', placeholder: 'Ex: Jarvis, Cortana...' }, { id: 'aiCustomVoice', name: 'Voz da IA (M/F)', type: 'text', placeholder: 'Masculina ou Feminina' }, { id: 'aiCustomAvatar', name: 'Avatar da IA (URL)', type: 'text', placeholder: 'Link de uma imagem png/jpg' }, { id: 'aiSystemPrompt', name: 'Prompt de Comportamento Base', type: 'textarea', placeholder: 'Descreva a personalidade da IA para este servidor...' }] },
+  { category: "🧟 Reviver Chat", desc: "O bot enviará uma pergunta gerada por IA para reanimar o chat inativo.", items: [{ id: 'reviveChannelId', name: 'Canal Alvo', type: 'channel', placeholder: 'Selecione o canal' }, { id: 'reviveRoleId', name: 'Cargo para Mencionar', type: 'role', placeholder: 'Selecione o cargo' }, { id: 'reviveTimeout', name: 'Tempo de Inatividade', type: 'number', placeholder: 'Tempo em minutos (Ex: 120 para 2 horas)' }, { id: 'revivePrompt', name: 'Prompt da IA', type: 'textarea', placeholder: 'Ex: Faça uma pergunta polêmica e divertida sobre animes ou jogos.' }] },
   { category: "💎 Sistema VIP", desc: "Configuração do ecossistema de apoiadores e benefícios", items: [{ id: 'vipRoleId', name: 'Cargo VIP Base', type: 'role', placeholder: 'Selecione o cargo' }, { id: 'vipTicketCategoryId', name: 'Cat. de Gradiente', type: 'channel', placeholder: 'Selecione a categoria' }] },
-  {
-    category: "📸 Feed Social", desc: "Personalize a aparência dos posts e canais de fotos",
-    items: [
-      { id: 'feedChannelId', name: 'Canal do Feed', type: 'channel', placeholder: 'Selecione o canal' },
-      { id: 'feedEmbedColor', name: 'Cor do Card (HEX)', type: 'color', placeholder: '#8B5CF6' },
-      { id: 'feedLikeEmoji', name: 'Emoji de Curtir', type: 'text', placeholder: '❤️' },
-      { id: 'feedFollowEmoji', name: 'Emoji de Seguir', type: 'text', placeholder: '🔔' },
-      { id: 'feedCommentEmoji', name: 'Emoji de Comentar', type: 'text', placeholder: '💬' },
-      { id: 'feedFooterText', name: 'Rodapé das Postagens', type: 'text', placeholder: '📸 Instagram Skyline' }
-    ]
-  },
+  { category: "📸 Feed Social", desc: "Personalize a aparência dos posts e canais de fotos", items: [{ id: 'feedChannelId', name: 'Canal do Feed', type: 'channel', placeholder: 'Selecione o canal' }, { id: 'feedEmbedColor', name: 'Cor do Card (HEX)', type: 'color', placeholder: '#8B5CF6' }, { id: 'feedLikeEmoji', name: 'Emoji de Curtir', type: 'text', placeholder: '❤️' }, { id: 'feedFollowEmoji', name: 'Emoji de Seguir', type: 'text', placeholder: '🔔' }, { id: 'feedCommentEmoji', name: 'Emoji de Comentar', type: 'text', placeholder: '💬' }, { id: 'feedFooterText', name: 'Rodapé das Postagens', type: 'text', placeholder: '📸 Instagram Skyline' }] },
   { category: "🌌 Rede Aliança", desc: "Integração oficial do servidor na rede global", items: [{ id: 'allianceChannelId', name: 'Canal da Aliança', type: 'channel', placeholder: 'Selecione o canal' }] },
-  {
-    category: "📁 Canais de Logs", desc: "Direcione onde cada sistema do bot enviará avisos",
-    items: [
-      { id: 'welcomeChannelId', name: 'Canal de Boas-Vindas', type: 'channel', placeholder: 'Selecione o canal' },
-      { id: 'announcementChannelId', name: 'Canal de Anúncios', type: 'channel', placeholder: 'Selecione o canal' },
-      { id: 'logChannelId', name: 'Canal de Logs Gerais', type: 'channel', placeholder: 'Selecione o canal' },
-      { id: 'levelUpChannelId', name: 'Canal de Level Up', type: 'channel', placeholder: 'Selecione o canal' },
-      { id: 'suggestionChannelId', name: 'Canal de Sugestões', type: 'channel', placeholder: 'Selecione o canal' },
-      { id: 'feedbackChannelId', name: 'Canal de Feedback', type: 'channel', placeholder: 'Selecione o canal' }
-    ]
-  },
+  { category: "📁 Canais de Logs", desc: "Direcione onde cada sistema do bot enviará avisos", items: [{ id: 'welcomeChannelId', name: 'Canal de Boas-Vindas', type: 'channel', placeholder: 'Selecione o canal' }, { id: 'announcementChannelId', name: 'Canal de Anúncios', type: 'channel', placeholder: 'Selecione o canal' }, { id: 'logChannelId', name: 'Canal de Logs Gerais', type: 'channel', placeholder: 'Selecione o canal' }, { id: 'levelUpChannelId', name: 'Canal de Level Up', type: 'channel', placeholder: 'Selecione o canal' }, { id: 'suggestionChannelId', name: 'Canal de Sugestões', type: 'channel', placeholder: 'Selecione o canal' }, { id: 'feedbackChannelId', name: 'Canal de Feedback', type: 'channel', placeholder: 'Selecione o canal' }] },
   { category: "🎫 Tickets", desc: "Configuração de atendimento e histórico", items: [{ id: 'ticketCategoryId', name: 'Categoria dos Tickets', type: 'channel', placeholder: 'Selecione a categoria' }, { id: 'ticketLogChannelId', name: 'Canal de Transcrições', type: 'channel', placeholder: 'Selecione o canal' }] },
-  {
-    category: "🛡️ Cargos", desc: "Definição de hierarquia e cargos automáticos",
-    items: [
-      { id: 'adminRoleId', name: 'Cargo de Administrador', type: 'role', placeholder: 'Selecione o cargo' },
-      { id: 'modRoleId', name: 'Cargo de Moderador', type: 'role', placeholder: 'Selecione o cargo' },
-      { id: 'autoRoleId', name: 'Cargo Automático', type: 'role', placeholder: 'Selecione o cargo' },
-      { id: 'memberRoleId', name: 'Membro Registrado', type: 'role', placeholder: 'Selecione o cargo' },
-      { id: 'mutedRoleId', name: 'Silenciado (Muted)', type: 'role', placeholder: 'Selecione o cargo' }
-    ]
-  }
+  { category: "🛡️ Cargos", desc: "Definição de hierarquia e cargos automáticos", items: [{ id: 'adminRoleId', name: 'Cargo de Administrador', type: 'role', placeholder: 'Selecione o cargo' }, { id: 'modRoleId', name: 'Cargo de Moderador', type: 'role', placeholder: 'Selecione o cargo' }, { id: 'autoRoleId', name: 'Cargo Automático', type: 'role', placeholder: 'Selecione o cargo' }, { id: 'memberRoleId', name: 'Membro Registrado', type: 'role', placeholder: 'Selecione o cargo' }, { id: 'mutedRoleId', name: 'Silenciado (Muted)', type: 'role', placeholder: 'Selecione o cargo' }] }
 ];
 
 const GLOBAL_SETTINGS = [
-  {
-    category: "🤖 Perfil do Bryan", desc: "Altere a aparência, bio e status dinâmicos do Bryan diretamente no Discord.",
-    items: [
-      { id: 'botAvatarUrl', name: 'Foto de Perfil (URL)', type: 'text', placeholder: 'Link da imagem (terminada em .png ou .jpg)' },
-      { id: 'botBannerUrl', name: 'Banner do Perfil (URL)', type: 'text', placeholder: 'Link do banner' },
-      { id: 'botPronouns', name: 'Pronomes', type: 'text', placeholder: 'Ex: Ele/Dele' },
-      { id: 'botBio', name: 'Biografia do Perfil', type: 'textarea', placeholder: 'Escreva a bio que aparecerá no perfil do bot' },
-      { id: 'botStatusRotation', name: 'Status Rotativo (1 por linha)', type: 'textarea', placeholder: 'Ex:\nJogando Roblox\nAssistindo Netflix\nOuvindo Spotify' }
-    ]
-  },
-  {
-    category: "🎨 Visual Global", desc: "Personalização de rodapés e cores em todos os servidores",
-    items: [
-      { id: 'footerText', name: 'Texto de Rodapé Padrão', type: 'text', placeholder: 'Aparece nos embeds gerais' },
-      { id: 'rpFooterText', name: 'Rodapé Roleplay', type: 'text', placeholder: 'Aparece nos comandos de /rp' },
-      { id: 'botIconUrl', name: 'URL do Ícone do Bot', type: 'text', placeholder: 'Link direto da imagem do ícone para Embeds' },
-      { id: 'primaryColor', name: 'Cor Primária dos Embeds', type: 'color', placeholder: '#8B5CF6' }
-    ]
-  }
+  { category: "🤖 Perfil do Bryan", desc: "Altere a aparência, bio e status dinâmicos do Bryan diretamente no Discord.", items: [{ id: 'botAvatarUrl', name: 'Foto de Perfil (URL)', type: 'text', placeholder: 'Link da imagem (terminada em .png ou .jpg)' }, { id: 'botBannerUrl', name: 'Banner do Perfil (URL)', type: 'text', placeholder: 'Link do banner' }, { id: 'botPronouns', name: 'Pronomes', type: 'text', placeholder: 'Ex: Ele/Dele' }, { id: 'botBio', name: 'Biografia do Perfil', type: 'textarea', placeholder: 'Escreva a bio que aparecerá no perfil do bot' }, { id: 'botStatusRotation', name: 'Status Rotativo (1 por linha)', type: 'textarea', placeholder: 'Ex:\nJogando Roblox\nAssistindo Netflix\nOuvindo Spotify' }] },
+  { category: "🎨 Visual Global", desc: "Personalização de rodapés e cores em todos os servidores", items: [{ id: 'footerText', name: 'Texto de Rodapé Padrão', type: 'text', placeholder: 'Aparece nos embeds gerais' }, { id: 'rpFooterText', name: 'Rodapé Roleplay', type: 'text', placeholder: 'Aparece nos comandos de /rp' }, { id: 'botIconUrl', name: 'URL do Ícone do Bot', type: 'text', placeholder: 'Link direto da imagem do ícone para Embeds' }, { id: 'primaryColor', name: 'Cor Primária dos Embeds', type: 'color', placeholder: '#8B5CF6' }] }
 ];
 
 async function validateGuildAccess(userId: string, guildId: string): Promise<boolean> {
@@ -167,33 +52,58 @@ export function startDashboard() {
   const dashboardUrl = process.env.DASHBOARD_URL || 'https://bryanbot.up.railway.app';
   const clientId = process.env.CLIENT_ID;
   const clientSecret = process.env.CLIENT_SECRET;
+  const TMDB_KEY = '3fd2be6f0c70a2a598f084ddfb75487c'; // Chave Oficial para o Catálogo
 
   const botInviteUrl = clientId
     ? `https://discord.com/oauth2/authorize?client_id=${clientId}&permissions=8&scope=bot%20applications.commands`
     : 'https://discord.com';
 
-  app.get('/api/discord-data', async (req, res) => {
-    const { guildId } = req.query;
-    const token = process.env.DISCORD_TOKEN;
-    if (!guildId || !token) return res.json({ channels: [], roles: [] });
-
+  // =====================================================================
+  // 🛡️ PROXY DA API DO BRYANFLIX (Ignora o bloqueio do Discord)
+  // =====================================================================
+  
+  // Puxar Filmes em Alta
+  app.get('/api/bryanflix/trending', async (req, res) => {
     try {
-      const [channelsRes, rolesRes] = await Promise.all([
-        axios.get(`https://discord.com/api/v10/guilds/${guildId}/channels`, { headers: { Authorization: `Bot ${token}` } }).catch(() => ({ data: [] })),
-        axios.get(`https://discord.com/api/v10/guilds/${guildId}/roles`, { headers: { Authorization: `Bot ${token}` } }).catch(() => ({ data: [] }))
+      const [moviesRes, tvRes] = await Promise.all([
+        axios.get(`https://api.themoviedb.org/3/trending/movie/week?api_key=${TMDB_KEY}&language=pt-BR`),
+        axios.get(`https://api.themoviedb.org/3/trending/tv/week?api_key=${TMDB_KEY}&language=pt-BR`)
       ]);
+      res.json({ movies: moviesRes.data.results, tv: tvRes.data.results });
+    } catch (err) {
+      console.error('[Bryanflix] Erro no TMDB Trending');
+      res.json({ movies: [], tv: [] });
+    }
+  });
 
-      const channels = channelsRes.data.map((c: any) => ({ id: c.id, name: c.name, type: c.type }));
-      const roles = rolesRes.data.map((r: any) => ({ id: r.id, name: r.name }));
+  // Pesquisar Filmes
+  app.get('/api/bryanflix/search', async (req, res) => {
+    try {
+      const query = req.query.q;
+      if (!query) return res.json({ results: [] });
+      const searchRes = await axios.get(`https://api.themoviedb.org/3/search/multi?api_key=${TMDB_KEY}&language=pt-BR&query=${encodeURIComponent(query as string)}`);
+      res.json({ results: searchRes.data.results });
+    } catch (err) {
+      console.error('[Bryanflix] Erro no TMDB Search');
+      res.json({ results: [] });
+    }
+  });
 
-      res.json({ channels, roles });
-    } catch (error) {
-      res.json({ channels: [], roles: [] });
+  // Puxar Imagens com Bypass de Segurança
+  app.get('/api/bryanflix/image', async (req, res) => {
+    try {
+      const imgPath = req.query.path;
+      if (!imgPath) return res.status(404).end();
+      const imgRes = await axios.get(`https://image.tmdb.org/t/p/w342${imgPath}`, { responseType: 'arraybuffer' });
+      res.set('Content-Type', 'image/jpeg');
+      res.send(imgRes.data);
+    } catch (e) {
+      res.status(404).end();
     }
   });
 
   // =====================================================================
-  // 🍿 BRYANFLIX - A PLATAFORMA DE STREAMING NATIVA DO BOT (NOVA ROTA)
+  // 🍿 FRONTEND DO BRYANFLIX (Interface)
   // =====================================================================
   app.get('/bryanflix', (req, res) => {
     res.send(`<!DOCTYPE html>
@@ -214,13 +124,13 @@ export function startDashboard() {
     /* Nav */
     nav { display: flex; justify-content: space-between; align-items: center; padding: 15px 4%; background: linear-gradient(to bottom, rgba(5,5,10,0.9) 0%, transparent 100%); position: fixed; top: 0; width: 100%; z-index: 100; }
     .brand { display: flex; align-items: center; gap: 10px; font-weight: 800; font-size: 1.5rem; color: var(--primary); text-transform: uppercase; letter-spacing: 1px; }
-    .brand img { width: 34px; height: 34px; border-radius: 50%; }
     
-    .search-box { background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 30px; padding: 8px 15px; display: flex; gap: 10px; width: 300px; }
+    .search-box { background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 30px; padding: 8px 15px; display: flex; gap: 10px; width: 300px; transition: 0.2s; }
+    .search-box:focus-within { border-color: var(--primary); box-shadow: 0 0 10px rgba(139, 92, 246, 0.3); }
     .search-box input { background: transparent; border: none; outline: none; color: white; width: 100%; font-size: 0.9rem; }
     
     /* Hero */
-    .hero { height: 60vh; display: flex; flex-direction: column; justify-content: flex-end; padding: 5% 4%; background: linear-gradient(to top, var(--bg) 0%, transparent 80%), url('https://image.tmdb.org/t/p/original/mBaXZ95R2OxueZhvQbcEWy2DqyO.jpg') center/cover; }
+    .hero { height: 60vh; display: flex; flex-direction: column; justify-content: flex-end; padding: 5% 4%; background: linear-gradient(to top, var(--bg) 0%, transparent 80%), radial-gradient(circle at center, rgba(139, 92, 246, 0.15) 0%, #05050A 100%); }
     .hero h1 { font-size: 3rem; font-weight: 800; margin-bottom: 10px; text-shadow: 2px 2px 10px rgba(0,0,0,0.8); }
     .hero p { font-size: 1.1rem; max-width: 600px; color: #ddd; margin-bottom: 20px; text-shadow: 1px 1px 5px rgba(0,0,0,0.8); }
     .hero .btn-play { background: var(--primary); color: white; padding: 12px 30px; border-radius: 6px; font-weight: 800; font-size: 1.1rem; border: none; cursor: pointer; display: inline-flex; gap: 10px; align-items: center; transition: 0.2s; box-shadow: 0 4px 15px rgba(139, 92, 246, 0.4); }
@@ -228,11 +138,11 @@ export function startDashboard() {
 
     /* Sections */
     .section { padding: 20px 4%; }
-    .section h2 { font-size: 1.3rem; margin-bottom: 15px; font-weight: 600; display: flex; align-items: center; gap: 10px; }
+    .section h2 { font-size: 1.3rem; margin-bottom: 15px; font-weight: 600; display: flex; align-items: center; gap: 10px; border-left: 4px solid var(--primary); padding-left: 10px; }
     
     .movie-row { display: flex; gap: 15px; overflow-x: auto; padding-bottom: 15px; scroll-behavior: smooth; }
     .movie-row::-webkit-scrollbar { height: 6px; }
-    .movie-card { min-width: 160px; width: 160px; cursor: pointer; transition: 0.3s; position: relative; border-radius: 8px; overflow: hidden; }
+    .movie-card { min-width: 160px; width: 160px; cursor: pointer; transition: 0.3s; position: relative; border-radius: 8px; overflow: hidden; background: #131521; }
     .movie-card img { width: 100%; height: 240px; object-fit: cover; border-radius: 8px; transition: 0.3s; }
     .movie-card:hover { transform: scale(1.05); z-index: 10; box-shadow: 0 10px 20px rgba(139, 92, 246, 0.3); }
     .movie-card:hover img { filter: brightness(0.7); }
@@ -252,7 +162,7 @@ export function startDashboard() {
 <body>
 
   <nav>
-    <div class="brand"><img src="/skylineicon.jpg"> Bryanflix</div>
+    <div class="brand">🍿 BRYANFLIX</div>
     <div class="search-box">
       <span>🔍</span>
       <input type="text" id="searchInput" placeholder="Buscar filmes ou séries..." oninput="searchMovies()">
@@ -262,7 +172,7 @@ export function startDashboard() {
   <header class="hero">
     <h1>Lançamentos da Aliança</h1>
     <p>Assista aos melhores filmes e séries com os seus amigos direto nas calls de voz do servidor, sem sair do Discord. Sem anúncios, sem interrupções.</p>
-    <div><button class="btn-play" onclick="openPlayer('movie', '550')">▶ Assistir Agora</button></div>
+    <div><button class="btn-play" onclick="openPlayer('movie', '550', 'Clube da Luta')">▶ Assistir Agora</button></div>
   </header>
 
   <div class="section" id="search-section" style="display: none;">
@@ -272,12 +182,12 @@ export function startDashboard() {
 
   <div class="section">
     <h2>🔥 Filmes em Alta</h2>
-    <div class="movie-row" id="trending-movies"></div>
+    <div class="movie-row" id="trending-movies"><p style="color:#9CA3AF">Carregando catálogo...</p></div>
   </div>
 
   <div class="section">
     <h2>📺 Séries Populares</h2>
-    <div class="movie-row" id="trending-tv"></div>
+    <div class="movie-row" id="trending-tv"><p style="color:#9CA3AF">Carregando catálogo...</p></div>
   </div>
 
   <!-- Reprodutor de Vídeo -->
@@ -286,41 +196,35 @@ export function startDashboard() {
       <h3 style="color:white; text-shadow: 1px 1px 3px black;" id="player-title">Carregando Filme...</h3>
       <button class="btn-close" onclick="closePlayer()">X FECHAR</button>
     </div>
-    <!-- O SRC mágico do Discord Proxy aponta para o /player -->
+    <!-- O SRC é interceptado pelo Discord Developer Portal no prefixo /player -->
     <iframe id="video-frame" allowfullscreen></iframe>
   </div>
 
   <script>
-    // API Publica do TMDB (Apenas para puxar capas e sinopses - 100% gratuita)
-    const TMDB_KEY = '15d2ea6d0dc1d476efbcaa3bf51fd921'; 
-
-    async function fetchTMDB(endpoint) {
-      const res = await fetch(\`https://api.themoviedb.org/3\${endpoint}?api_key=\${TMDB_KEY}&language=pt-BR\`);
-      return res.json();
-    }
-
     function createCard(item, type) {
       if (!item.poster_path) return '';
       const title = item.title || item.name;
+      // Puxa a imagem passando pelo nosso Proxy Seguro do Bot!
       return \`
         <div class="movie-card" onclick="openPlayer('\${type}', '\${item.id}', '\${title.replace(/'/g, "\\'")}')">
-          <img src="https://image.tmdb.org/t/p/w342\${item.poster_path}" alt="\${title}">
+          <img src="/api/bryanflix/image?path=\${item.poster_path}" alt="\${title}">
           <div class="movie-info">
             <h4>\${title}</h4>
-            <span style="color:var(--primary); font-weight:bold; font-size:0.8rem;">⭐ \${item.vote_average.toFixed(1)}</span>
+            <span style="color:var(--primary); font-weight:bold; font-size:0.8rem;">⭐ \${item.vote_average ? item.vote_average.toFixed(1) : 'N/A'}</span>
           </div>
         </div>
       \`;
     }
 
     async function loadHome() {
-      const [movies, tv] = await Promise.all([
-        fetchTMDB('/trending/movie/week'),
-        fetchTMDB('/trending/tv/week')
-      ]);
-
-      document.getElementById('trending-movies').innerHTML = movies.results.map(m => createCard(m, 'movie')).join('');
-      document.getElementById('trending-tv').innerHTML = tv.results.map(s => createCard(s, 'tv')).join('');
+      try {
+        const res = await fetch('/api/bryanflix/trending');
+        const data = await res.json();
+        document.getElementById('trending-movies').innerHTML = data.movies.map(m => createCard(m, 'movie')).join('');
+        document.getElementById('trending-tv').innerHTML = data.tv.map(s => createCard(s, 'tv')).join('');
+      } catch (e) {
+        console.error('Falha ao carregar catálogo', e);
+      }
     }
 
     let searchTimeout;
@@ -336,11 +240,16 @@ export function startDashboard() {
       }
 
       searchTimeout = setTimeout(async () => {
-        const res = await fetchTMDB(\`/search/multi?query=\${encodeURIComponent(query)}\`);
-        const validResults = res.results.filter(r => r.media_type === 'movie' || r.media_type === 'tv');
-        
-        searchGrid.innerHTML = validResults.map(r => createCard(r, r.media_type)).join('');
-        searchSection.style.display = 'block';
+        try {
+          const res = await fetch(\`/api/bryanflix/search?q=\${encodeURIComponent(query)}\`);
+          const data = await res.json();
+          const validResults = data.results.filter(r => r.media_type === 'movie' || r.media_type === 'tv');
+          
+          if(validResults.length > 0) {
+            searchGrid.innerHTML = validResults.map(r => createCard(r, r.media_type)).join('');
+            searchSection.style.display = 'block';
+          }
+        } catch (e) {}
       }, 500);
     }
 
@@ -348,9 +257,7 @@ export function startDashboard() {
       document.getElementById('player-title').innerText = title;
       const iframe = document.getElementById('video-frame');
       
-      // AQUI ESTÁ O SEGREDO DO DISCORD:
-      // Quando a atividade rodar, o "/player" vai ser interceptado pelo proxy do Discord
-      // e redirecionado para o "embed.su" com os IPs protegidos!
+      // O Discord vai capturar essa URL "/player" e enviar pro "embed.su" via Proxy
       iframe.src = \`/player/embed/\${type}/\${id}\`;
       
       document.getElementById('player-modal').classList.add('active');
@@ -365,6 +272,29 @@ export function startDashboard() {
   </script>
 </body>
 </html>`);
+  });
+
+  // =====================================================================
+  // ROTAS ANTIGAS DO PAINEL DE CONTROLE (Painel do Bryan)
+  // =====================================================================
+  app.get('/api/discord-data', async (req, res) => {
+    const { guildId } = req.query;
+    const token = process.env.DISCORD_TOKEN;
+    if (!guildId || !token) return res.json({ channels: [], roles: [] });
+
+    try {
+      const [channelsRes, rolesRes] = await Promise.all([
+        axios.get(`https://discord.com/api/v10/guilds/${guildId}/channels`, { headers: { Authorization: `Bot ${token}` } }).catch(() => ({ data: [] })),
+        axios.get(`https://discord.com/api/v10/guilds/${guildId}/roles`, { headers: { Authorization: `Bot ${token}` } }).catch(() => ({ data: [] }))
+      ]);
+
+      const channels = channelsRes.data.map((c: any) => ({ id: c.id, name: c.name, type: c.type }));
+      const roles = rolesRes.data.map((r: any) => ({ id: r.id, name: r.name }));
+
+      res.json({ channels, roles });
+    } catch (error) {
+      res.json({ channels: [], roles: [] });
+    }
   });
 
   app.get('/', (req, res) => {
@@ -434,8 +364,8 @@ export function startDashboard() {
   
   <header class="hero">
     <div class="hero-bg"></div>
-    <h1>O Guardião da Aliança.</h1>
-    <p>Traga o <b>Bryan</b> para o seu servidor e conecte-se à maior rede interdimensional. Inteligência Artificial por voz, Feed Social, RPG imersivo e moderação absoluta.</p>
+    <h1>O bot definitivo para o seu servidor.</h1>
+    <p>Traga o <b>Bryan</b> para a sua comunidade. Inteligência Artificial avançada por voz, Feed Social nativo, RPG imersivo e moderação absoluta em um único lugar.</p>
     <div class="btn-group">
       <a href="${botInviteUrl}" class="btn btn-primary">Adicionar ao Discord</a>
       <a href="/login" class="btn btn-secondary">Configurar Bot</a>
@@ -454,7 +384,7 @@ export function startDashboard() {
     </div>
   </section>
   
-  <footer><p>© 2026 Bryan Bot • Sistema Oficial da Aliança Skyline</p></footer>
+  <footer><p>© 2026 Bryan Bot.</p></footer>
 </body>
 </html>`);
   });
@@ -478,7 +408,7 @@ export function startDashboard() {
       const isBotOwner = userId === BOT_OWNER_ID;
       const userRoles = await prisma.allianceServerMember.findMany({ where: { userId } });
 
-      if (!isBotOwner && userRoles.length === 0) return res.status(403).send('<body style="background: #0B0D17; color: #EF4444; text-align: center; padding-top: 150px; font-family: sans-serif;"><h1>🛑 Acesso Negado</h1><p style="color:#9CA3AF;">Sem credenciais ativas na Aliança Skyline.</p><br><a href="/" style="color: #8B5CF6; font-weight: bold; text-decoration: none;">Voltar ao Início</a></body>');
+      if (!isBotOwner && userRoles.length === 0) return res.status(403).send('<body style="background: #0B0D17; color: #EF4444; text-align: center; padding-top: 150px; font-family: sans-serif;"><h1>🛑 Acesso Negado</h1><p style="color:#9CA3AF;">Sem permissão ativa na base de dados.</p><br><a href="/" style="color: #8B5CF6; font-weight: bold; text-decoration: none;">Voltar ao Início</a></body>');
 
       res.cookie('skyline_auth', 'permitido', { maxAge: 86400000 }); 
       res.cookie('skyline_userid', userId, { maxAge: 86400000 }); 
@@ -967,7 +897,6 @@ export function startDashboard() {
       return html;
     }
 
-    // Lógicas de Auto-Complete
     function showOptions(inputEl, entityType) {
       const listEl = document.getElementById(inputEl.id + '-list');
       renderOptions(inputEl.id, entityType, inputEl.value);
@@ -1007,9 +936,9 @@ export function startDashboard() {
       listEl.innerHTML = filtered.map(d => {
         let icon = '🛡️';
         if (entityType === 'channel') {
-           if (d.type === 0) icon = '💬'; // Texto
-           else if (d.type === 4) icon = '📁'; // Categoria
-           else if (d.type === 2) icon = '🔊'; // Voz
+           if (d.type === 0) icon = '💬'; 
+           else if (d.type === 4) icon = '📁'; 
+           else if (d.type === 2) icon = '🔊'; 
         }
         return \`<div class="autocomplete-item" onclick="selectOption('\${inputId}', '\${d.id}')">\${icon} <span>\${d.name}</span> <small style="opacity:0.5; font-size:0.7rem; margin-left:auto;">\${d.id}</small></div>\`;
       }).join('');

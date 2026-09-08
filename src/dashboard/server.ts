@@ -44,9 +44,24 @@ async function validateGuildAccess(userId: string, guildId: string): Promise<boo
 }
 
 // =====================================================================
-// 🍿 RENDERIZADOR DO BRYANFLIX (A Netflix)
+// 🍿 RENDERIZADOR DO BRYANFLIX (SSR INJETADO NO HTML)
 // =====================================================================
 async function renderBryanflix(res: express.Response) {
+  let trendingMovies: any[] = [];
+  let trendingTv: any[] = [];
+  
+  try {
+    // O SERVIDOR baixa os filmes ANTES de entregar a página pro Discord
+    const [moviesRes, tvRes] = await Promise.all([
+      axios.get(`https://api.themoviedb.org/3/trending/movie/week?api_key=${TMDB_KEY}&language=pt-BR`),
+      axios.get(`https://api.themoviedb.org/3/trending/tv/week?api_key=${TMDB_KEY}&language=pt-BR`)
+    ]);
+    trendingMovies = moviesRes.data.results || [];
+    trendingTv = tvRes.data.results || [];
+  } catch (err: any) {
+    console.error('[Bryanflix] Erro no TMDB Trending SSR:', err.message);
+  }
+
   res.send(`<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
@@ -119,16 +134,12 @@ async function renderBryanflix(res: express.Response) {
 
 <div class="section">
   <h2>🔥 Filmes em Alta</h2>
-  <div class="movie-row" id="trending-movies">
-    <p style="color:#9CA3AF; padding:20px; font-weight:600;">⏳ Carregando os melhores filmes...</p>
-  </div>
+  <div class="movie-row" id="trending-movies"></div>
 </div>
 
 <div class="section">
   <h2>📺 Séries Populares</h2>
-  <div class="movie-row" id="trending-tv">
-    <p style="color:#9CA3AF; padding:20px; font-weight:600;">⏳ Carregando as melhores séries...</p>
-  </div>
+  <div class="movie-row" id="trending-tv"></div>
 </div>
 
 <div id="player-modal">
@@ -140,6 +151,10 @@ async function renderBryanflix(res: express.Response) {
 </div>
 
 <script>
+  // AQUI É A MÁGICA: Os filmes já vêm prontos no HTML enviados pelo servidor!
+  const initialMovies = ${JSON.stringify(trendingMovies).replace(/</g, '\\u003c')};
+  const initialTv = ${JSON.stringify(trendingTv).replace(/</g, '\\u003c')};
+
   function createCard(item, type) {
     if (!item.poster_path) return '';
     const title = item.title || item.name || 'Sem Título';
@@ -154,24 +169,15 @@ async function renderBryanflix(res: express.Response) {
     \`;
   }
 
-  async function loadHome() {
+  function loadHome() {
     const moviesGrid = document.getElementById('trending-movies');
     const tvGrid = document.getElementById('trending-tv');
 
-    try {
-      // Usa rota absoluta no JS pra evitar quebras pelo túnel do Discord!
-      const res = await fetch('/api/bryanflix/trending');
-      const data = await res.json();
-
-      if(data.movies && data.movies.length > 0) {
-        moviesGrid.innerHTML = data.movies.map(m => createCard(m, 'movie')).join('');
-        tvGrid.innerHTML = data.tv.map(s => createCard(s, 'tv')).join('');
-      } else {
-        moviesGrid.innerHTML = '<p style="color:#EF4444; padding:20px;">Falha ao obter catálogo da API.</p>';
-        tvGrid.innerHTML = '';
-      }
-    } catch (e) {
-      moviesGrid.innerHTML = '<p style="color:#EF4444; padding:20px;">Erro de conexão com o servidor.</p>';
+    if(initialMovies && initialMovies.length > 0) {
+      moviesGrid.innerHTML = initialMovies.map(m => createCard(m, 'movie')).join('');
+      tvGrid.innerHTML = initialTv.map(s => createCard(s, 'tv')).join('');
+    } else {
+      moviesGrid.innerHTML = '<p style="color:#EF4444; padding:20px;">Catálogo indisponível no momento.</p>';
       tvGrid.innerHTML = '';
     }
   }
@@ -204,9 +210,6 @@ async function renderBryanflix(res: express.Response) {
     }, 600);
   }
 
-  // =======================================================
-  // 💡 O NÚCLEO DO PLAYER (Bypass do Discord)
-  // =======================================================
   function openPlayerFromEvent(element) {
     const type = element.getAttribute('data-type');
     const id = element.getAttribute('data-id');
@@ -215,7 +218,6 @@ async function renderBryanflix(res: express.Response) {
     document.getElementById('player-title').innerText = title;
     const iframe = document.getElementById('video-frame');
     
-    // Rotas do Pipocacine formatadas
     let rota = type === 'movie' ? \`/embed/movie/\${id}\` : \`/embed/tv/\${id}/1/1\`;
     
     // Dispara a requisição para o Prefixo do Discord Portal (/player)
@@ -229,6 +231,7 @@ async function renderBryanflix(res: express.Response) {
     document.getElementById('player-modal').classList.remove('active');
   }
 
+  // Já renderiza os filmes injetados sem fazer fetch!
   loadHome();
 </script>
 </body>
@@ -238,7 +241,7 @@ async function renderBryanflix(res: express.Response) {
 export function startDashboard() {
   const app = express();
   
-  // CORS Bypass para as requisições seguras
+  // CORS Bypass Global
   app.use((req, res, next) => {
     res.header('Access-Control-Allow-Origin', '*');
     res.header('Access-Control-Allow-Methods', 'GET, POST');
@@ -259,21 +262,8 @@ export function startDashboard() {
     : 'https://discord.com';
 
   // =====================================================================
-  // 🛡️ API DO BRYANFLIX (Busca, Tendências e Imagens)
+  // 🛡️ API DO BRYANFLIX (Busca, Imagens)
   // =====================================================================
-  app.get('/api/bryanflix/trending', async (req, res) => {
-    try {
-      const [moviesRes, tvRes] = await Promise.all([
-        axios.get(`https://api.themoviedb.org/3/trending/movie/week?api_key=${TMDB_KEY}&language=pt-BR`),
-        axios.get(`https://api.themoviedb.org/3/trending/tv/week?api_key=${TMDB_KEY}&language=pt-BR`)
-      ]);
-      res.json({ movies: moviesRes.data.results, tv: tvRes.data.results });
-    } catch (err: any) {
-      console.error('[Bryanflix] Erro Backend Trending:', err.message);
-      res.json({ movies: [], tv: [] });
-    }
-  });
-
   app.get('/api/bryanflix/search', async (req, res) => {
     try {
       const query = req.query.q;
@@ -306,32 +296,10 @@ export function startDashboard() {
   });
 
   // =====================================================================
-  // 🎭 AVISO DO PLAYER SE ABERTO NO CHROME
-  // =====================================================================
-  app.get('/player/*', (req, res) => {
-    res.send(`
-      <body style="background:#05050A; color:white; font-family:sans-serif; display:flex; justify-content:center; align-items:center; height:100vh; text-align:center;">
-        <div>
-          <h1 style="color:#EF4444; font-size:2.5rem; margin-bottom:10px;">⚠️ Acesso Bloqueado</h1>
-          <p style="color:#9CA3AF; max-width: 400px; margin: 0 auto; line-height: 1.6; font-size:1.1rem;">
-            O player de vídeo utiliza um túnel seguro do Discord e não funciona em navegadores normais.<br><br>
-            Volte para o Discord, entre em um canal de voz e abra o <b>Bryanflix pelo Foguetinho 🚀</b> para assistir!
-          </p>
-        </div>
-      </body>
-    `);
-  });
-
-  // =====================================================================
-  // 🧭 ROTEADOR RAIZ: AGORA O BRYANFLIX É O SISTEMA PRINCIPAL!
+  // 🌐 A RAIZ (TELA INICIAL) DO SITE
   // =====================================================================
   app.get('/', async (req, res) => {
-    // Agora o Bryanflix abre SEMPRE, seja no Discord ou na Raiz!
-    return renderBryanflix(res);
-  });
-
-  // A Rota "Antiga" da Raiz agora é o dashboard, acessado via /dashboard
-  app.get('/dashboard', async (req, res) => {
+    // Restaurando a sua TELA INICIAL padrão e linda!
     res.send(`<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
@@ -424,7 +392,14 @@ export function startDashboard() {
   });
 
   // =====================================================================
-  // ROTAS ANTIGAS DO PAINEL DE CONTROLE (Painel Logado)
+  // 🍿 ROTA ISOLADA PARA O BRYANFLIX (A Netflix em si)
+  // =====================================================================
+  app.get('/bryanflix', (req, res) => {
+    return renderBryanflix(res);
+  });
+
+  // =====================================================================
+  // ROTAS DO PAINEL DE CONTROLE (Dashboard)
   // =====================================================================
   app.get('/api/discord-data', async (req, res) => {
     const { guildId } = req.query;
@@ -550,7 +525,7 @@ export function startDashboard() {
   });
 
   app.get('/painel', async (req, res) => {
-    if (req.cookies?.skyline_auth !== 'permitido') return res.redirect('/dashboard');
+    if (req.cookies?.skyline_auth !== 'permitido') return res.redirect('/');
     const userId = req.cookies?.skyline_userid;
     const userName = req.cookies?.skyline_username || 'Administrador';
     const avatarHash = req.cookies?.skyline_avatar;

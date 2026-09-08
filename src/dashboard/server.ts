@@ -15,23 +15,6 @@ const SERVER_CATEGORIES = [
   { category: "🎫 Atendimento & Utilidades", desc: "Suporte aos membros e streaming", features: [{ id: 'featTickets', name: 'Tickets de Suporte', desc: 'Salas privadas de atendimento.', icon: '🎫' }, { id: 'featSelfRole', name: 'Registro de Auto-Cargos', desc: 'Menus de seleção para cargos.', icon: '🎭' }, { id: 'featMusic', name: 'Player de Música', desc: 'Streaming de áudio em canais de voz.', icon: '🎵' }, { id: 'featAnnouncements', name: 'Anúncios & Eventos', desc: 'Transmissão de comunicados.', icon: '📢' }] }
 ];
 
-const GLOBAL_CATEGORIES = [
-  { category: "⚙️ Sistemas Centrais Globais", features: [{ id: 'featAfk', name: 'Sistema AFK Global', desc: 'Comando /afk na rede.' }, { id: 'featWelcomeDm', name: 'DM de Boas-vindas', desc: 'Mensagem privada a novos membros.' }] },
-  { category: "🌍 Master Switches (Trava Absoluta)", features: [{ id: 'featSocial', name: 'Feed Social (Insta)', desc: 'Desativa o Feed globalmente.' }, { id: 'featVoiceAi', name: 'IA de Voz (Callia)', desc: 'Proíbe a Callia em todos os servers.' }, { id: 'featRpg', name: 'Sistema RPG', desc: 'Desliga o RPG globalmente.' }, { id: 'featEconomy', name: 'Economia & Lojas', desc: 'Congela todas as lojas.' }, { id: 'featTickets', name: 'Sistema de Tickets', desc: 'Bloqueia novos atendimentos.' }, { id: 'featMusic', name: 'Player de Música', desc: 'Desliga o bot de música.' }, { id: 'antiSpam', name: 'Defesa Anti-Spam', desc: 'Desativa o bloqueador em massa.' }, { id: 'featGiveaways', name: 'Sorteios', desc: 'Trava todos os sorteios.' }, { id: 'featLeveling', name: 'Sistema de XP', desc: 'Congela ganho de XP global.' }, { id: 'featReviveChat', name: 'Reviver Chat (IA)', desc: 'Desliga o monitor de inatividade.' }] }
-];
-
-const SERVER_SETTINGS = [
-  { category: "💬 Boas-Vindas", desc: "Crie um embed rico para receber os novos membros no servidor.", items: [{ id: 'welcomeMessage', name: 'Construtor de Embed', type: 'embed_builder', placeholder: '' }] },
-  { category: "🤖 IA Customizada", desc: "Configure a personalidade da IA caso este servidor não possua a Suki.", items: [{ id: 'aiCustomName', name: 'Nome da IA Local', type: 'text', placeholder: 'Ex: Jarvis, Cortana...' }, { id: 'aiCustomVoice', name: 'Voz da IA (M/F)', type: 'text', placeholder: 'Masculina ou Feminina' }, { id: 'aiCustomAvatar', name: 'Avatar da IA (URL)', type: 'text', placeholder: 'Link de uma imagem png/jpg' }, { id: 'aiSystemPrompt', name: 'Prompt de Comportamento Base', type: 'textarea', placeholder: 'Descreva a personalidade da IA para este servidor...' }] },
-  { category: "🧟 Reviver Chat", desc: "O bot enviará uma pergunta gerada por IA para reanimar o chat inativo.", items: [{ id: 'reviveChannelId', name: 'Canal Alvo', type: 'channel', placeholder: 'Selecione o canal' }, { id: 'reviveRoleId', name: 'Cargo para Mencionar', type: 'role', placeholder: 'Selecione o cargo' }, { id: 'reviveTimeout', name: 'Tempo de Inatividade', type: 'number', placeholder: 'Tempo em minutos (Ex: 120 para 2 horas)' }, { id: 'revivePrompt', name: 'Prompt da IA', type: 'textarea', placeholder: 'Ex: Faça uma pergunta polêmica e divertida sobre animes ou jogos.' }] },
-  { category: "💎 Sistema VIP", desc: "Configuração do ecossistema de apoiadores e benefícios", items: [{ id: 'vipRoleId', name: 'Cargo VIP Base', type: 'role', placeholder: 'Selecione o cargo' }, { id: 'vipTicketCategoryId', name: 'Cat. de Gradiente', type: 'channel', placeholder: 'Selecione a categoria' }] },
-  { category: "📸 Feed Social", desc: "Personalize a aparência dos posts e canais de fotos", items: [{ id: 'feedChannelId', name: 'Canal do Feed', type: 'channel', placeholder: 'Selecione o canal' }, { id: 'feedEmbedColor', name: 'Cor do Card (HEX)', type: 'color', placeholder: '#8B5CF6' }, { id: 'feedLikeEmoji', name: 'Emoji de Curtir', type: 'text', placeholder: '❤️' }, { id: 'feedFollowEmoji', name: 'Emoji de Seguir', type: 'text', placeholder: '🔔' }, { id: 'feedCommentEmoji', name: 'Emoji de Comentar', type: 'text', placeholder: '💬' }, { id: 'feedFooterText', name: 'Rodapé das Postagens', type: 'text', placeholder: '📸 Instagram Skyline' }] },
-  { category: "🌌 Rede Aliança", desc: "Integração oficial do servidor na rede global", items: [{ id: 'allianceChannelId', name: 'Canal da Aliança', type: 'channel', placeholder: 'Selecione o canal' }] },
-  { category: "📁 Canais de Logs", desc: "Direcione onde cada sistema do bot enviará avisos", items: [{ id: 'welcomeChannelId', name: 'Canal de Boas-Vindas', type: 'channel', placeholder: 'Selecione o canal' }, { id: 'announcementChannelId', name: 'Canal de Anúncios', type: 'channel', placeholder: 'Selecione o canal' }, { id: 'logChannelId', name: 'Canal de Logs Gerais', type: 'channel', placeholder: 'Selecione o canal' }, { id: 'levelUpChannelId', name: 'Canal de Level Up', type: 'channel', placeholder: 'Selecione o canal' }, { id: 'suggestionChannelId', name: 'Canal de Sugestões', type: 'channel', placeholder: 'Selecione o canal' }, { id: 'feedbackChannelId', name: 'Canal de Feedback', type: 'channel', placeholder: 'Selecione o canal' }] },
-  { category: "🎫 Tickets", desc: "Configuração de atendimento e histórico", items: [{ id: 'ticketCategoryId', name: 'Categoria dos Tickets', type: 'channel', placeholder: 'Selecione a categoria' }, { id: 'ticketLogChannelId', name: 'Canal de Transcrições', type: 'channel', placeholder: 'Selecione o canal' }] },
-  { category: "🛡️ Cargos", desc: "Definição de hierarquia e cargos automáticos", items: [{ id: 'adminRoleId', name: 'Cargo de Administrador', type: 'role', placeholder: 'Selecione o cargo' }, { id: 'modRoleId', name: 'Cargo de Moderador', type: 'role', placeholder: 'Selecione o cargo' }, { id: 'autoRoleId', name: 'Cargo Automático', type: 'role', placeholder: 'Selecione o cargo' }, { id: 'memberRoleId', name: 'Membro Registrado', type: 'role', placeholder: 'Selecione o cargo' }, { id: 'mutedRoleId', name: 'Silenciado (Muted)', type: 'role', placeholder: 'Selecione o cargo' }] }
-];
-
 const GLOBAL_SETTINGS = [
   { category: "🤖 Perfil do Bryan", desc: "Altere a aparência, bio e status dinâmicos do Bryan diretamente no Discord.", items: [{ id: 'botAvatarUrl', name: 'Foto de Perfil (URL)', type: 'text', placeholder: 'Link da imagem (terminada em .png ou .jpg)' }, { id: 'botBannerUrl', name: 'Banner do Perfil (URL)', type: 'text', placeholder: 'Link do banner' }, { id: 'botPronouns', name: 'Pronomes', type: 'text', placeholder: 'Ex: Ele/Dele' }, { id: 'botBio', name: 'Biografia do Perfil', type: 'textarea', placeholder: 'Escreva a bio que aparecerá no perfil do bot' }, { id: 'botStatusRotation', name: 'Status Rotativo (1 por linha)', type: 'textarea', placeholder: 'Ex:\nJogando Roblox\nAssistindo Netflix\nOuvindo Spotify' }] },
   { category: "🎨 Visual Global", desc: "Personalização de rodapés e cores em todos os servidores", items: [{ id: 'footerText', name: 'Texto de Rodapé Padrão', type: 'text', placeholder: 'Aparece nos embeds gerais' }, { id: 'rpFooterText', name: 'Rodapé Roleplay', type: 'text', placeholder: 'Aparece nos comandos de /rp' }, { id: 'botIconUrl', name: 'URL do Ícone do Bot', type: 'text', placeholder: 'Link direto da imagem do ícone para Embeds' }, { id: 'primaryColor', name: 'Cor Primária dos Embeds', type: 'color', placeholder: '#8B5CF6' }] }
@@ -44,7 +27,7 @@ async function validateGuildAccess(userId: string, guildId: string): Promise<boo
 }
 
 // =====================================================================
-// 🍿 RENDERIZADOR DO BRYANFLIX (A Netflix)
+// 🍿 RENDERIZADOR DO BRYANFLIX (Agora com Seletor Nativo de Episódios)
 // =====================================================================
 async function renderBryanflix(res: express.Response) {
   let trendingMovies: any[] = [];
@@ -57,9 +40,7 @@ async function renderBryanflix(res: express.Response) {
     ]);
     trendingMovies = moviesRes.data.results || [];
     trendingTv = tvRes.data.results || [];
-  } catch (err: any) {
-    console.error('[Bryanflix] Erro no TMDB Trending SSR:', err.message);
-  }
+  } catch (err: any) {}
 
   res.send(`<!DOCTYPE html>
 <html lang="pt-BR">
@@ -102,16 +83,15 @@ async function renderBryanflix(res: express.Response) {
   .movie-card:hover .movie-info { background: linear-gradient(to top, rgba(139, 92, 246, 0.9) 0%, rgba(0,0,0,0.7) 60%, transparent 100%); }
   .movie-info h4 { font-size: 0.9rem; margin-bottom: 5px; color: white; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; text-shadow: 1px 1px 3px black; }
 
-  /* Modal do Player Fixo e à prova de quebras */
+  /* Modal do Player Fixo e SELETOR NATIVO DE EPISÓDIOS */
   #player-modal { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: #05050A; z-index: 999999; display: none; flex-direction: column; }
   #player-modal.active { display: flex !important; }
   .player-header { padding: 15px 25px; display: flex; justify-content: space-between; align-items: center; background: #131521; border-bottom: 1px solid var(--border); }
   .btn-close { background: rgba(239, 68, 68, 0.2); color: #EF4444; border: 1px solid #EF4444; padding: 8px 20px; border-radius: 6px; font-weight: bold; cursor: pointer; transition: 0.2s; }
   .btn-close:hover { background: #EF4444; color: white; }
   
-  /* Botão Extra para abrir fora do Discord se falhar */
-  .btn-external { background: rgba(139, 92, 246, 0.2); color: #8B5CF6; border: 1px solid #8B5CF6; text-decoration: none; padding: 8px 20px; border-radius: 6px; font-weight: bold; transition: 0.2s; display: inline-block; margin-right: 15px; }
-  .btn-external:hover { background: #8B5CF6; color: white; }
+  .tv-controls { display: none; gap: 10px; margin-left: 20px; flex: 1; }
+  .tv-controls select { background: #1A1D2D; color: white; border: 1px solid var(--primary); padding: 8px 12px; border-radius: 6px; outline: none; font-weight: 600; cursor: pointer; max-width: 250px;}
   
   iframe { flex: 1; width: 100%; height: 100%; border: none; background: black; }
 </style>
@@ -151,28 +131,31 @@ async function renderBryanflix(res: express.Response) {
   </div>
 </div>
 
-<!-- Modal do Player -->
+<!-- Modal do Player Otimizado -->
 <div id="player-modal">
   <div class="player-header">
-    <h3 style="color:white;" id="player-title">Carregando Filme...</h3>
-    <div>
-      <a id="btn-external-link" href="#" target="_blank" class="btn-external">Abrir no Navegador (Se não carregar)</a>
-      <button id="btn-close-player" class="btn-close">X FECHAR</button>
+    <h3 style="color:white; text-shadow: 1px 1px 3px black; white-space: nowrap;" id="player-title">Carregando Filme...</h3>
+    
+    <!-- SELETOR NATIVO DE SÉRIES (Injetado por nós!) -->
+    <div id="tv-controls" class="tv-controls">
+      <select id="season-select"></select>
+      <select id="episode-select"></select>
     </div>
+
+    <button id="btn-close-player" class="btn-close">X FECHAR</button>
   </div>
   <iframe id="video-frame" allowfullscreen></iframe>
 </div>
 
 <script>
-  // O servidor injetou os dados originais aqui de forma segura:
   const initialMovies = ${JSON.stringify(trendingMovies).replace(/</g, '\\u003c')};
   const initialTv = ${JSON.stringify(trendingTv).replace(/</g, '\\u003c')};
+  let currentTvId = null; // Armazena a série atual para o seletor
 
   function createCard(item, type) {
     if (!item.poster_path) return '';
     const title = item.title || item.name || 'Sem Título';
     
-    // As aspas não quebram mais nada!
     return \`
       <div class="movie-card clickable-movie" data-type="\${type}" data-id="\${item.id}" data-title="\${encodeURIComponent(title).replace(/'/g, "%27")}">
         <img src="/api/bryanflix/image?path=\${item.poster_path}" alt="Capa" onerror="this.src='https://via.placeholder.com/160x240?text=Capa'">
@@ -186,13 +169,12 @@ async function renderBryanflix(res: express.Response) {
 
   function setupHero() {
     if (initialMovies && initialMovies.length > 0) {
-      const topMovie = initialMovies[0]; // Pega o filme Top 1
+      const topMovie = initialMovies[0]; 
       const title = topMovie.title || topMovie.name;
       
       document.getElementById('hero-title').innerText = title;
       document.getElementById('hero-desc').innerText = (topMovie.overview || '').substring(0, 150) + '...';
       
-      // Atualiza o botão para tocar o filme em alta
       const heroBtn = document.getElementById('btn-hero-play');
       heroBtn.setAttribute('data-id', topMovie.id);
       heroBtn.setAttribute('data-title', encodeURIComponent(title).replace(/'/g, "%27"));
@@ -211,6 +193,7 @@ async function renderBryanflix(res: express.Response) {
       moviesGrid.innerHTML = initialMovies.map(m => createCard(m, 'movie')).join('');
       tvGrid.innerHTML = initialTv.map(s => createCard(s, 'tv')).join('');
       setupHero();
+      bindMovieClicks();
     } else {
       moviesGrid.innerHTML = '<p style="color:#EF4444; padding:20px;">Falha ao obter catálogo da API.</p>';
       tvGrid.innerHTML = '';
@@ -237,8 +220,9 @@ async function renderBryanflix(res: express.Response) {
         
         if(validResults.length > 0) {
           searchGrid.innerHTML = validResults.map(r => createCard(r, r.media_type)).join('');
+          bindMovieClicks();
         } else {
-          searchGrid.innerHTML = '<p style="color:#9CA3AF; padding:20px;">Nenhum resultado encontrado para "' + query + '".</p>';
+          searchGrid.innerHTML = '<p style="color:#9CA3AF; padding:20px;">Nenhum resultado encontrado.</p>';
         }
         searchSection.style.display = 'block';
       } catch (e) {}
@@ -246,33 +230,77 @@ async function renderBryanflix(res: express.Response) {
   });
 
   // =======================================================
-  // 💡 NÚCLEO DO PLAYER (Bypass do Discord e embed.su)
+  // 💡 NÚCLEO DO PLAYER NATIVO (Séries + Filmes via Vidsrc)
   // =======================================================
-  document.addEventListener('click', function(e) {
-    const card = e.target.closest('.clickable-movie');
-    if (card) {
-      const type = card.getAttribute('data-type');
-      const id = card.getAttribute('data-id');
-      const title = decodeURIComponent(card.getAttribute('data-title'));
-      
-      document.getElementById('player-title').innerText = title;
-      const iframe = document.getElementById('video-frame');
-      const externalLink = document.getElementById('btn-external-link');
-      
-      // O embed.su usa esse formato oficial
-      let rota = type === 'movie' ? \`/embed/movie/\${id}\` : \`/embed/tv/\${id}/1/1\`;
-      
-      // Se for discord, vai pelo proxy /player. 
-      // Se for navegador, vai direto pro player externo no link do botão
-      const isDiscordActivity = window.location.search.includes('frame_id') || window.location.search.includes('instance_id');
-      
-      iframe.src = isDiscordActivity ? \`/player\${rota}\` : \`https://embed.su\${rota}\`;
-      externalLink.href = \`https://embed.su\${rota}\`;
-      
-      document.getElementById('player-modal').classList.add('active');
-    }
-  });
+  async function handleMovieClick(e) {
+    const element = e.currentTarget;
+    const type = element.getAttribute('data-type');
+    const id = element.getAttribute('data-id');
+    const title = decodeURIComponent(element.getAttribute('data-title'));
+    
+    document.getElementById('player-title').innerText = title;
+    const iframe = document.getElementById('video-frame');
+    const tvControls = document.getElementById('tv-controls');
+    
+    document.getElementById('player-modal').classList.add('active');
 
+    if (type === 'movie') {
+      tvControls.style.display = 'none';
+      // Rota do Vidsrc para Filmes (passando pelo Discord Proxy /player)
+      iframe.src = \`/player/embed/movie?tmdb=\${id}\`;
+    } else {
+      // É UMA SÉRIE! Mostrar controles Nativos!
+      tvControls.style.display = 'flex';
+      currentTvId = id;
+      iframe.src = ''; // Limpa até selecionar
+
+      // Puxa as temporadas no TMDB pelo nosso bot
+      const res = await fetch(\`/api/bryanflix/tv/\${id}\`);
+      const data = await res.json();
+      const seasons = (data.seasons || []).filter(s => s.season_number > 0);
+
+      const seasonSelect = document.getElementById('season-select');
+      seasonSelect.innerHTML = seasons.map(s => \`<option value="\${s.season_number}">Temporada \${s.season_number}</option>\`).join('');
+      
+      // Carrega os episódios da 1ª temporada automaticamente
+      await loadEpisodes();
+    }
+  }
+
+  // Puxa a lista de episódios da temporada selecionada
+  async function loadEpisodes() {
+    const season = document.getElementById('season-select').value;
+    const res = await fetch(\`/api/bryanflix/tv/\${currentTvId}/season/\${season}\`);
+    const data = await res.json();
+
+    const episodeSelect = document.getElementById('episode-select');
+    episodeSelect.innerHTML = (data.episodes || []).map(e => \`<option value="\${e.episode_number}">Ep. \${e.episode_number} - \${e.name}</option>\`).join('');
+
+    changeEpisode(); // Toca o episódio
+  }
+
+  // Toca o episódio exato selecionado!
+  function changeEpisode() {
+    const season = document.getElementById('season-select').value;
+    const episode = document.getElementById('episode-select').value;
+    const iframe = document.getElementById('video-frame');
+    // Rota do Vidsrc para Séries 
+    iframe.src = \`/player/embed/tv?tmdb=\${currentTvId}&season=\${season}&episode=\${episode}\`;
+  }
+
+  // Event Listeners dos Seletores
+  document.getElementById('season-select').addEventListener('change', loadEpisodes);
+  document.getElementById('episode-select').addEventListener('change', changeEpisode);
+
+  function bindMovieClicks() {
+    document.querySelectorAll('.clickable-movie').forEach(el => {
+      el.removeEventListener('click', handleMovieClick);
+      el.addEventListener('click', handleMovieClick);
+    });
+  }
+
+  document.getElementById('btn-hero-play').addEventListener('click', handleMovieClick);
+  
   document.getElementById('btn-close-player').addEventListener('click', () => {
     document.getElementById('video-frame').src = '';
     document.getElementById('player-modal').classList.remove('active');
@@ -307,8 +335,20 @@ export function startDashboard() {
     : 'https://discord.com';
 
   // =====================================================================
-  // 🛡️ API DO BRYANFLIX (Busca, Tendências e Imagens)
+  // 🛡️ API DO BRYANFLIX (Busca, Tendências, Imagens E SÉRIES)
   // =====================================================================
+  app.get('/api/bryanflix/trending', async (req, res) => {
+    try {
+      const [moviesRes, tvRes] = await Promise.all([
+        axios.get(`https://api.themoviedb.org/3/trending/movie/week?api_key=${TMDB_KEY}&language=pt-BR`),
+        axios.get(`https://api.themoviedb.org/3/trending/tv/week?api_key=${TMDB_KEY}&language=pt-BR`)
+      ]);
+      res.json({ movies: moviesRes.data.results, tv: tvRes.data.results });
+    } catch (err: any) {
+      res.json({ movies: [], tv: [] });
+    }
+  });
+
   app.get('/api/bryanflix/search', async (req, res) => {
     try {
       const query = req.query.q;
@@ -340,6 +380,24 @@ export function startDashboard() {
     }
   });
 
+  // Rotas Nativas para buscar temporadas e episódios das séries (Bypass)
+  app.get('/api/bryanflix/tv/:id', async (req, res) => {
+    try {
+      const response = await axios.get(`https://api.themoviedb.org/3/tv/${req.params.id}?api_key=${TMDB_KEY}&language=pt-BR`);
+      res.json(response.data);
+    } catch (e) {
+      res.status(500).json({ error: 'Failed' });
+    }
+  });
+
+  app.get('/api/bryanflix/tv/:id/season/:season', async (req, res) => {
+    try {
+      const response = await axios.get(`https://api.themoviedb.org/3/tv/${req.params.id}/season/${req.params.season}?api_key=${TMDB_KEY}&language=pt-BR`);
+      res.json(response.data);
+    } catch (e) {
+      res.status(500).json({ error: 'Failed' });
+    }
+  });
 
   // =====================================================================
   // 🧭 ROTEAMENTO INTELIGENTE DE DOMÍNIOS
@@ -411,7 +469,7 @@ export function startDashboard() {
     <a href="/" class="brand"><img src="/skylineicon.jpg" alt="Bryan"> Bryan Bot</a>
     <div class="nav-links">
       <a href="${botInviteUrl}">Adicionar ao Servidor</a>
-      <a href="/login" class="btn-login">Acessar Painel</a>
+      <a href="/painel" class="btn-login">Acessar Painel</a>
     </div>
   </nav>
   
@@ -421,7 +479,7 @@ export function startDashboard() {
     <p>Traga o <b>Bryan</b> para o seu servidor e conecte-se à maior rede interdimensional. Inteligência Artificial por voz, Feed Social, RPG imersivo e moderação absoluta.</p>
     <div class="btn-group">
       <a href="${botInviteUrl}" class="btn btn-primary">Adicionar ao Discord</a>
-      <a href="/login" class="btn btn-secondary">Configurar Bot</a>
+      <a href="/painel" class="btn btn-secondary">Configurar Bot</a>
     </div>
   </header>
   

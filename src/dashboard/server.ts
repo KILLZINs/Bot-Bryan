@@ -44,14 +44,13 @@ async function validateGuildAccess(userId: string, guildId: string): Promise<boo
 }
 
 // =====================================================================
-// 🍿 RENDERIZADOR DO BRYANFLIX (SSR INJETADO NO HTML)
+// 🍿 RENDERIZADOR DO BRYANFLIX (A Netflix)
 // =====================================================================
 async function renderBryanflix(res: express.Response) {
   let trendingMovies: any[] = [];
   let trendingTv: any[] = [];
   
   try {
-    // O SERVIDOR baixa os filmes ANTES de entregar a página pro Discord
     const [moviesRes, tvRes] = await Promise.all([
       axios.get(`https://api.themoviedb.org/3/trending/movie/week?api_key=${TMDB_KEY}&language=pt-BR`),
       axios.get(`https://api.themoviedb.org/3/trending/tv/week?api_key=${TMDB_KEY}&language=pt-BR`)
@@ -134,12 +133,16 @@ async function renderBryanflix(res: express.Response) {
 
 <div class="section">
   <h2>🔥 Filmes em Alta</h2>
-  <div class="movie-row" id="trending-movies"></div>
+  <div class="movie-row" id="trending-movies">
+    <p style="color:#9CA3AF; padding:20px; font-weight:600;">⏳ Carregando os melhores filmes...</p>
+  </div>
 </div>
 
 <div class="section">
   <h2>📺 Séries Populares</h2>
-  <div class="movie-row" id="trending-tv"></div>
+  <div class="movie-row" id="trending-tv">
+    <p style="color:#9CA3AF; padding:20px; font-weight:600;">⏳ Carregando as melhores séries...</p>
+  </div>
 </div>
 
 <div id="player-modal">
@@ -151,7 +154,6 @@ async function renderBryanflix(res: express.Response) {
 </div>
 
 <script>
-  // AQUI É A MÁGICA: Os filmes já vêm prontos no HTML enviados pelo servidor!
   const initialMovies = ${JSON.stringify(trendingMovies).replace(/</g, '\\u003c')};
   const initialTv = ${JSON.stringify(trendingTv).replace(/</g, '\\u003c')};
 
@@ -173,11 +175,11 @@ async function renderBryanflix(res: express.Response) {
     const moviesGrid = document.getElementById('trending-movies');
     const tvGrid = document.getElementById('trending-tv');
 
-    if(initialMovies && initialMovies.length > 0) {
+    if(initialMovies.length > 0) {
       moviesGrid.innerHTML = initialMovies.map(m => createCard(m, 'movie')).join('');
       tvGrid.innerHTML = initialTv.map(s => createCard(s, 'tv')).join('');
     } else {
-      moviesGrid.innerHTML = '<p style="color:#EF4444; padding:20px;">Catálogo indisponível no momento.</p>';
+      moviesGrid.innerHTML = '<p style="color:#EF4444; padding:20px;">Falha ao carregar o catálogo.</p>';
       tvGrid.innerHTML = '';
     }
   }
@@ -219,8 +221,6 @@ async function renderBryanflix(res: express.Response) {
     const iframe = document.getElementById('video-frame');
     
     let rota = type === 'movie' ? \`/embed/movie/\${id}\` : \`/embed/tv/\${id}/1/1\`;
-    
-    // Dispara a requisição para o Prefixo do Discord Portal (/player)
     iframe.src = \`/player\${rota}\`;
     
     document.getElementById('player-modal').classList.add('active');
@@ -231,7 +231,6 @@ async function renderBryanflix(res: express.Response) {
     document.getElementById('player-modal').classList.remove('active');
   }
 
-  // Já renderiza os filmes injetados sem fazer fetch!
   loadHome();
 </script>
 </body>
@@ -241,7 +240,6 @@ async function renderBryanflix(res: express.Response) {
 export function startDashboard() {
   const app = express();
   
-  // CORS Bypass Global
   app.use((req, res, next) => {
     res.header('Access-Control-Allow-Origin', '*');
     res.header('Access-Control-Allow-Methods', 'GET, POST');
@@ -262,7 +260,7 @@ export function startDashboard() {
     : 'https://discord.com';
 
   // =====================================================================
-  // 🛡️ API DO BRYANFLIX (Busca, Imagens)
+  // 🛡️ API DO BRYANFLIX (Busca e Imagens)
   // =====================================================================
   app.get('/api/bryanflix/search', async (req, res) => {
     try {
@@ -296,10 +294,15 @@ export function startDashboard() {
   });
 
   // =====================================================================
-  // 🌐 A RAIZ (TELA INICIAL) DO SITE
+  // 🧭 ROTEAMENTO INTELIGENTE DE DOMÍNIOS (A MÁGICA)
   // =====================================================================
   app.get('/', async (req, res) => {
-    // Restaurando a sua TELA INICIAL padrão e linda!
+    // 1. O DOMÍNIO DA ATIVIDADE: Se for bryanflix, abre a Netflix!
+    if (req.hostname.includes('bryanflix') || req.query.frame_id || req.query.instance_id) {
+      return renderBryanflix(res);
+    }
+    
+    // 2. O DOMÍNIO DO BOT: Se for bryanbot, abre a Landing Page Oficial (Sua tela inicial volta!)
     res.send(`<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
@@ -391,15 +394,13 @@ export function startDashboard() {
 </html>`);
   });
 
-  // =====================================================================
-  // 🍿 ROTA ISOLADA PARA O BRYANFLIX (A Netflix em si)
-  // =====================================================================
+  // Rota isolada caso o usuário queria acessar o bryanflix pelo link antigo
   app.get('/bryanflix', (req, res) => {
     return renderBryanflix(res);
   });
 
   // =====================================================================
-  // ROTAS DO PAINEL DE CONTROLE (Dashboard)
+  // ROTAS DO PAINEL DE CONTROLE (Painel Logado)
   // =====================================================================
   app.get('/api/discord-data', async (req, res) => {
     const { guildId } = req.query;

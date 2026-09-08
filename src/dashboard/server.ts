@@ -5,8 +5,7 @@ import path from 'path';
 import { prisma } from '../database/client';
 
 const BOT_OWNER_ID = '1195254699943796791';
-const TMDB_KEY = '3fd2be6f0c70a2a598f084ddfb75487c'; 
-const RAILWAY_URL = 'https://bryanbot.up.railway.app'; // Força a rota segura
+const TMDB_KEY = '15d2ea6d0dc1d476efbcaa3bf51fd921'; 
 
 const SERVER_CATEGORIES = [
   { category: "🤖 Inteligência Artificial", desc: "Sistemas de voz e conversação avançada", features: [{ id: 'featVoiceAi', name: 'Callia (IA de Voz)', desc: 'Permite que os membros chamem o Bryan ou a IA Local.', icon: '🎙️' }] },
@@ -77,7 +76,7 @@ async function renderBryanflix(res: express.Response) {
   ::-webkit-scrollbar-track { background: var(--bg); }
   ::-webkit-scrollbar-thumb { background: #2A2E45; border-radius: 4px; }
 
-  nav { display: flex; justify-content: space-between; align-items: center; padding: 15px 4%; background: linear-gradient(to bottom, rgba(5,5,10,0.9) 0%, transparent 100%); position: fixed; top: 0; width: 100%; z-index: 100; }
+  nav { display: flex; justify-content: space-between; align-items: center; padding: 15px 4%; background: linear-gradient(to bottom, rgba(5,5,10,0.95) 0%, transparent 100%); position: fixed; top: 0; width: 100%; z-index: 100; }
   .brand { display: flex; align-items: center; gap: 10px; font-weight: 800; font-size: 1.5rem; color: var(--primary); text-transform: uppercase; letter-spacing: 1px; }
   
   .search-box { background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 30px; padding: 8px 15px; display: flex; gap: 10px; width: 300px; transition: 0.2s; }
@@ -85,23 +84,24 @@ async function renderBryanflix(res: express.Response) {
   .search-box input { background: transparent; border: none; outline: none; color: white; width: 100%; font-size: 0.9rem; }
   
   .hero { height: 60vh; display: flex; flex-direction: column; justify-content: flex-end; padding: 5% 4%; background: linear-gradient(to top, var(--bg) 0%, transparent 80%), radial-gradient(circle at center, rgba(139, 92, 246, 0.15) 0%, #05050A 100%); }
-  .hero h1 { font-size: 3rem; font-weight: 800; margin-bottom: 10px; text-shadow: 2px 2px 10px rgba(0,0,0,0.8); }
-  .hero p { font-size: 1.1rem; max-width: 600px; color: #ddd; margin-bottom: 20px; text-shadow: 1px 1px 5px rgba(0,0,0,0.8); }
+  .hero h1 { font-size: 3.5rem; font-weight: 800; margin-bottom: 10px; text-shadow: 2px 2px 10px rgba(0,0,0,0.8); }
+  .hero p { font-size: 1.1rem; max-width: 600px; color: #ddd; margin-bottom: 25px; text-shadow: 1px 1px 5px rgba(0,0,0,0.8); }
   .hero .btn-play { background: var(--primary); color: white; padding: 12px 30px; border-radius: 6px; font-weight: 800; font-size: 1.1rem; border: none; cursor: pointer; display: inline-flex; gap: 10px; align-items: center; transition: 0.2s; box-shadow: 0 4px 15px rgba(139, 92, 246, 0.4); }
   .hero .btn-play:hover { transform: scale(1.05); background: #7C3AED; }
 
   .section { padding: 20px 4%; }
   .section h2 { font-size: 1.3rem; margin-bottom: 15px; font-weight: 600; display: flex; align-items: center; gap: 10px; border-left: 4px solid var(--primary); padding-left: 10px; }
   
-  .movie-row { display: flex; gap: 15px; overflow-x: auto; padding-bottom: 15px; scroll-behavior: smooth; }
+  .movie-row { display: flex; gap: 15px; overflow-x: auto; padding-bottom: 20px; scroll-behavior: smooth; }
   .movie-row::-webkit-scrollbar { height: 6px; }
-  .movie-card { min-width: 160px; width: 160px; cursor: pointer; transition: 0.3s; position: relative; border-radius: 8px; overflow: hidden; background: #131521; }
+  .movie-card { min-width: 160px; width: 160px; cursor: pointer; transition: 0.3s; position: relative; border-radius: 8px; overflow: hidden; background: #131521; box-shadow: 0 4px 10px rgba(0,0,0,0.3); }
   .movie-card img { width: 100%; height: 240px; object-fit: cover; border-radius: 8px; transition: 0.3s; }
   .movie-card:hover { transform: scale(1.05); z-index: 10; box-shadow: 0 10px 20px rgba(139, 92, 246, 0.3); }
-  .movie-card:hover img { filter: brightness(0.7); }
-  .movie-info { position: absolute; bottom: 0; padding: 10px; background: linear-gradient(to top, rgba(0,0,0,0.9), transparent); width: 100%; opacity: 0; transition: 0.3s; }
-  .movie-card:hover .movie-info { opacity: 1; }
-  .movie-info h4 { font-size: 0.85rem; margin-bottom: 5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  
+  /* Gradiente e texto sempre visíveis, dando cara de Netflix real */
+  .movie-info { position: absolute; bottom: 0; padding: 20px 10px 10px 10px; background: linear-gradient(to top, rgba(0,0,0,0.95) 0%, rgba(0,0,0,0.7) 50%, transparent 100%); width: 100%; transition: 0.3s; }
+  .movie-card:hover .movie-info { background: linear-gradient(to top, rgba(139, 92, 246, 0.9) 0%, rgba(0,0,0,0.7) 60%, transparent 100%); }
+  .movie-info h4 { font-size: 0.9rem; margin-bottom: 5px; color: white; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; text-shadow: 1px 1px 3px black; }
 
   #player-modal { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: black; z-index: 9999; display: none; flex-direction: column; }
   #player-modal.active { display: flex; }
@@ -124,8 +124,7 @@ async function renderBryanflix(res: express.Response) {
 <header class="hero">
   <h1>Lançamentos da Aliança</h1>
   <p>Assista aos melhores filmes e séries com os seus amigos direto nas calls de voz do servidor, sem sair do Discord. Sem anúncios, sem interrupções.</p>
-  <!-- O Botão Assistir Agora foi protegido contra aspas simples! -->
-  <div><button class="btn-play" onclick="openPlayer('movie', '550', 'Clube da Luta')">▶ Assistir Agora</button></div>
+  <div><button class="btn-play" data-type="movie" data-id="550" data-title="Clube da Luta" onclick="openPlayerFromEvent(this)">▶ Assistir Agora</button></div>
 </header>
 
 <div class="section" id="search-section" style="display: none;">
@@ -152,9 +151,6 @@ async function renderBryanflix(res: express.Response) {
 </div>
 
 <script>
-  // Constante absoluta que impede o Discord de quebrar as URLs das imagens e da pesquisa!
-  const RAILWAY_URL = '${RAILWAY_URL}';
-
   const initialMovies = ${JSON.stringify(trendingMovies).replace(/</g, '\\u003c')};
   const initialTv = ${JSON.stringify(trendingTv).replace(/</g, '\\u003c')};
 
@@ -162,15 +158,13 @@ async function renderBryanflix(res: express.Response) {
     if (!item.poster_path) return '';
     const title = item.title || item.name || 'Sem Título';
     
-    // O pulo do gato: Escapa aspas simples e duplas para que o JavaScript não crashe o HTML
-    const safeTitle = encodeURIComponent(title).replace(/'/g, "%27");
-    
+    // As aspas não quebram mais nada! Passamos tudo como atributo HTML Data
     return \`
-      <div class="movie-card" onclick="openPlayer('\${type}', '\${item.id}', '\${safeTitle}')">
-        <img src="\${RAILWAY_URL}/api/bryanflix/image?path=\${item.poster_path}" alt="Capa" onerror="this.src='https://via.placeholder.com/160x240?text=Capa'">
+      <div class="movie-card" data-type="\${type}" data-id="\${item.id}" data-title="\${title.replace(/"/g, '&quot;')}" onclick="openPlayerFromEvent(this)">
+        <img src="/api/bryanflix/image?path=\${item.poster_path}" alt="Capa">
         <div class="movie-info">
           <h4>\${title}</h4>
-          <span style="color:var(--primary); font-weight:bold; font-size:0.8rem;">⭐ \${item.vote_average ? item.vote_average.toFixed(1) : 'N/A'}</span>
+          <span style="color:var(--primary); font-weight:bold; font-size:0.85rem;">⭐ \${item.vote_average ? item.vote_average.toFixed(1) : 'N/A'}</span>
         </div>
       </div>
     \`;
@@ -184,8 +178,8 @@ async function renderBryanflix(res: express.Response) {
       moviesGrid.innerHTML = initialMovies.map(m => createCard(m, 'movie')).join('');
       tvGrid.innerHTML = initialTv.map(s => createCard(s, 'tv')).join('');
     } else {
-      moviesGrid.innerHTML = '<p style="color:#EF4444; padding:20px;">Erro ao carregar o catálogo de filmes. Recarregue a página.</p>';
-      tvGrid.innerHTML = '<p style="color:#EF4444; padding:20px;">Erro ao carregar o catálogo de séries.</p>';
+      moviesGrid.innerHTML = '<p style="color:#EF4444; padding:20px;">Erro ao carregar catálogo. Verifique a chave da API.</p>';
+      tvGrid.innerHTML = '';
     }
   }
 
@@ -203,8 +197,7 @@ async function renderBryanflix(res: express.Response) {
 
     searchTimeout = setTimeout(async () => {
       try {
-        // Usa a URL fixa do Railway para burlar a trava de Proxy do Discord
-        const res = await fetch(\`\${RAILWAY_URL}/api/bryanflix/search?q=\${encodeURIComponent(query)}\`);
+        const res = await fetch(\`/api/bryanflix/search?q=\${encodeURIComponent(query)}\`);
         const data = await res.json();
         const validResults = data.results.filter(r => r.media_type === 'movie' || r.media_type === 'tv');
         
@@ -218,15 +211,20 @@ async function renderBryanflix(res: express.Response) {
     }, 600);
   }
 
-  // Função Consertada!
-  function openPlayer(type, id, encodedTitle) {
-    const title = decodeURIComponent(encodedTitle); // Desfaz a codificação das aspas e espaços
-    document.getElementById('player-title').innerText = title;
+  // =======================================================
+  // 💡 NÚCLEO DO PLAYER (100% Protegido contra Erros)
+  // =======================================================
+  function openPlayerFromEvent(element) {
+    const type = element.getAttribute('data-type');
+    const id = element.getAttribute('data-id');
+    const title = element.getAttribute('data-title');
     
+    document.getElementById('player-title').innerText = title;
     const iframe = document.getElementById('video-frame');
+    
     let rota = type === 'movie' ? \`/embed/movie/\${id}\` : \`/embed/tv/\${id}/1/1\`;
     
-    // Dispara a requisição pelo túnel do Discord (para o Pipocacine)
+    // Envia a requisição direto pro prefixo mascarado no Discord
     iframe.src = \`/players-source\${rota}\`;
     
     document.getElementById('player-modal').classList.add('active');
@@ -246,17 +244,6 @@ async function renderBryanflix(res: express.Response) {
 export function startDashboard() {
   const app = express();
   
-  // =====================================================================
-  // 🛡️ CORS GLOBAL: Permite que o Discord puxe os filmes do Railway
-  // =====================================================================
-  app.use((req, res, next) => {
-    res.header('Access-Control-Allow-Origin', '*');
-    res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-    res.header('Access-Control-Allow-Headers', 'Content-Type');
-    if (req.method === 'OPTIONS') return res.sendStatus(200);
-    next();
-  });
-
   app.use(cookieParser());
   app.use(express.json());
   app.use(express.static(path.join(process.cwd(), 'public')));
@@ -271,7 +258,7 @@ export function startDashboard() {
     : 'https://discord.com';
 
   // =====================================================================
-  // 🛡️ API DO BRYANFLIX (Busca e Imagens Seguras)
+  // 🛡️ API DO BRYANFLIX (Busca)
   // =====================================================================
   app.get('/api/bryanflix/search', async (req, res) => {
     try {
@@ -284,14 +271,28 @@ export function startDashboard() {
     }
   });
 
+  // =====================================================================
+  // 📸 PROXY DE IMAGENS CORRIGIDO (Com .PIPE)
+  // O Express agora passa as imagens como "Download Contínuo" (Stream).
+  // Nunca mais teremos imagens invisíveis ou tela preta!
+  // =====================================================================
   app.get('/api/bryanflix/image', async (req, res) => {
     try {
-      const imgPath = req.query.path;
+      let imgPath = req.query.path as string;
       if (!imgPath) return res.status(404).end();
-      const imgRes = await axios.get(`https://image.tmdb.org/t/p/w342${imgPath}`, { responseType: 'arraybuffer' });
+      if (!imgPath.startsWith('/')) imgPath = '/' + imgPath;
+      
+      const response = await axios({
+        method: 'GET',
+        url: `https://image.tmdb.org/t/p/w342${imgPath}`,
+        responseType: 'stream' // MÁGICA AQUI: Stream impede o arquivo de quebrar!
+      });
+      
       res.set('Content-Type', 'image/jpeg');
-      res.send(imgRes.data);
-    } catch (e) {
+      res.set('Cache-Control', 'public, max-age=31536000'); // Fica ultra rápido
+      response.data.pipe(res); // Entrega o fluxo de dados para a tela
+    } catch (e: any) {
+      console.error('[Bryanflix] Erro de imagem:', e.message);
       res.status(404).end();
     }
   });
@@ -300,12 +301,11 @@ export function startDashboard() {
   // 🎭 ROTEADOR INTELIGENTE (Detecta se é Foguetinho ou Navegador)
   // =====================================================================
   app.get('/', async (req, res) => {
-    // Se o Discord enviar o frame_id, ele está abrindo como Atividade (Foguetinho)
     if (req.query.frame_id || req.query.instance_id) {
       return renderBryanflix(res);
     }
     
-    // Se não, é alguém abrindo o link do bot pelo Chrome (Abre a Landing Page)
+    // Landing Page Normal (Chrome)
     res.send(`<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
@@ -397,7 +397,7 @@ export function startDashboard() {
 </html>`);
   });
 
-  // Mantido caso o usuário queira testar a rota diretamente
+  // Também mantemos a rota caso alguém queira testar direto
   app.get('/bryanflix', (req, res) => {
     return renderBryanflix(res);
   });

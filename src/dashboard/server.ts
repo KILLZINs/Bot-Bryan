@@ -5,6 +5,7 @@ import path from 'path';
 import { prisma } from '../database/client';
 
 const BOT_OWNER_ID = '1195254699943796791';
+const TMDB_KEY = '3fd2be6f0c70a2a598f084ddfb75487c'; 
 
 const SERVER_CATEGORIES = [
   { category: "🤖 Inteligência Artificial", desc: "Sistemas de voz e conversação avançada", features: [{ id: 'featVoiceAi', name: 'Callia (IA de Voz)', desc: 'Permite que os membros chamem o Bryan ou a IA Local.', icon: '🎙️' }] },
@@ -42,6 +43,199 @@ async function validateGuildAccess(userId: string, guildId: string): Promise<boo
   return !access;
 }
 
+// =====================================================================
+// 🍿 RENDERIZADOR DO BRYANFLIX (O Core da Netflix)
+// =====================================================================
+async function renderBryanflix(res: express.Response) {
+  let trendingMovies: any[] = [];
+  let trendingTv: any[] = [];
+  
+  try {
+    const [moviesRes, tvRes] = await Promise.all([
+      axios.get(`https://api.themoviedb.org/3/trending/movie/week?api_key=${TMDB_KEY}&language=pt-BR`),
+      axios.get(`https://api.themoviedb.org/3/trending/tv/week?api_key=${TMDB_KEY}&language=pt-BR`)
+    ]);
+    trendingMovies = moviesRes.data.results || [];
+    trendingTv = tvRes.data.results || [];
+  } catch (err: any) {
+    console.error('[Bryanflix] Erro no TMDB Trending SSR:', err.message);
+  }
+
+  res.send(`<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Bryanflix</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+<style>
+  :root { --bg: #05050A; --primary: #8B5CF6; --card: #131521; --text: #F2F3F5; --text-muted: #9CA3AF; }
+  * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Inter', sans-serif; }
+  body { background: var(--bg); color: var(--text); overflow-x: hidden; }
+  ::-webkit-scrollbar { width: 8px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2A2E45; border-radius: 4px; }
+
+  nav { display: flex; justify-content: space-between; align-items: center; padding: 15px 4%; background: linear-gradient(to bottom, rgba(5,5,10,0.9) 0%, transparent 100%); position: fixed; top: 0; width: 100%; z-index: 100; }
+  .brand { display: flex; align-items: center; gap: 10px; font-weight: 800; font-size: 1.5rem; color: var(--primary); text-transform: uppercase; letter-spacing: 1px; }
+  
+  .search-box { background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 30px; padding: 8px 15px; display: flex; gap: 10px; width: 300px; transition: 0.2s; }
+  .search-box:focus-within { border-color: var(--primary); box-shadow: 0 0 10px rgba(139, 92, 246, 0.3); }
+  .search-box input { background: transparent; border: none; outline: none; color: white; width: 100%; font-size: 0.9rem; }
+  
+  .hero { height: 60vh; display: flex; flex-direction: column; justify-content: flex-end; padding: 5% 4%; background: linear-gradient(to top, var(--bg) 0%, transparent 80%), radial-gradient(circle at center, rgba(139, 92, 246, 0.15) 0%, #05050A 100%); }
+  .hero h1 { font-size: 3rem; font-weight: 800; margin-bottom: 10px; text-shadow: 2px 2px 10px rgba(0,0,0,0.8); }
+  .hero p { font-size: 1.1rem; max-width: 600px; color: #ddd; margin-bottom: 20px; text-shadow: 1px 1px 5px rgba(0,0,0,0.8); }
+  .hero .btn-play { background: var(--primary); color: white; padding: 12px 30px; border-radius: 6px; font-weight: 800; font-size: 1.1rem; border: none; cursor: pointer; display: inline-flex; gap: 10px; align-items: center; transition: 0.2s; box-shadow: 0 4px 15px rgba(139, 92, 246, 0.4); }
+  .hero .btn-play:hover { transform: scale(1.05); background: #7C3AED; }
+
+  .section { padding: 20px 4%; }
+  .section h2 { font-size: 1.3rem; margin-bottom: 15px; font-weight: 600; display: flex; align-items: center; gap: 10px; border-left: 4px solid var(--primary); padding-left: 10px; }
+  
+  .movie-row { display: flex; gap: 15px; overflow-x: auto; padding-bottom: 15px; scroll-behavior: smooth; }
+  .movie-row::-webkit-scrollbar { height: 6px; }
+  .movie-card { min-width: 160px; width: 160px; cursor: pointer; transition: 0.3s; position: relative; border-radius: 8px; overflow: hidden; background: #131521; }
+  .movie-card img { width: 100%; height: 240px; object-fit: cover; border-radius: 8px; transition: 0.3s; }
+  .movie-card:hover { transform: scale(1.05); z-index: 10; box-shadow: 0 10px 20px rgba(139, 92, 246, 0.3); }
+  .movie-card:hover img { filter: brightness(0.7); }
+  .movie-info { position: absolute; bottom: 0; padding: 10px; background: linear-gradient(to top, rgba(0,0,0,0.9), transparent); width: 100%; opacity: 0; transition: 0.3s; }
+  .movie-card:hover .movie-info { opacity: 1; }
+  .movie-info h4 { font-size: 0.85rem; margin-bottom: 5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+  #player-modal { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: black; z-index: 9999; display: none; flex-direction: column; }
+  #player-modal.active { display: flex; }
+  .player-header { padding: 15px; display: flex; justify-content: space-between; align-items: center; background: linear-gradient(to bottom, rgba(0,0,0,0.8), transparent); position: absolute; top: 0; width: 100%; z-index: 10; }
+  .btn-close { background: rgba(255,0,0,0.7); color: white; border: none; padding: 8px 15px; border-radius: 4px; font-weight: bold; cursor: pointer; transition: 0.2s; }
+  .btn-close:hover { background: red; }
+  iframe { flex: 1; width: 100%; height: 100%; border: none; }
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="brand">🍿 BRYANFLIX</div>
+  <div class="search-box">
+    <span>🔍</span>
+    <input type="text" id="searchInput" placeholder="Buscar filmes ou séries..." oninput="searchMovies()">
+  </div>
+</nav>
+
+<header class="hero">
+  <h1>Lançamentos da Aliança</h1>
+  <p>Assista aos melhores filmes e séries com os seus amigos direto nas calls de voz do servidor, sem sair do Discord. Sem anúncios, sem interrupções.</p>
+  <div><button class="btn-play" onclick="openPlayer('movie', '550', 'Clube da Luta')">▶ Assistir Agora</button></div>
+</header>
+
+<div class="section" id="search-section" style="display: none;">
+  <h2>🔍 Resultados da Busca</h2>
+  <div class="movie-row" id="search-grid" style="flex-wrap: wrap;"></div>
+</div>
+
+<div class="section">
+  <h2>🔥 Filmes em Alta</h2>
+  <div class="movie-row" id="trending-movies"></div>
+</div>
+
+<div class="section">
+  <h2>📺 Séries Populares</h2>
+  <div class="movie-row" id="trending-tv"></div>
+</div>
+
+<div id="player-modal">
+  <div class="player-header">
+    <h3 style="color:white; text-shadow: 1px 1px 3px black;" id="player-title">Carregando Filme...</h3>
+    <button class="btn-close" onclick="closePlayer()">X FECHAR</button>
+  </div>
+  <iframe id="video-frame" allowfullscreen></iframe>
+</div>
+
+<script>
+  const initialMovies = ${JSON.stringify(trendingMovies).replace(/</g, '\\u003c')};
+  const initialTv = ${JSON.stringify(trendingTv).replace(/</g, '\\u003c')};
+
+  function createCard(item, type) {
+    if (!item.poster_path) return '';
+    const title = item.title || item.name || '';
+    const safeTitle = encodeURIComponent(title);
+    
+    return \`
+      <div class="movie-card" onclick="openPlayer('\${type}', '\${item.id}', decodeURIComponent('\${safeTitle}'))">
+        <img src="/api/bryanflix/image?path=\${item.poster_path}" alt="Capa">
+        <div class="movie-info">
+          <h4>\${title}</h4>
+          <span style="color:var(--primary); font-weight:bold; font-size:0.8rem;">⭐ \${item.vote_average ? item.vote_average.toFixed(1) : 'N/A'}</span>
+        </div>
+      </div>
+    \`;
+  }
+
+  function loadHome() {
+    const moviesGrid = document.getElementById('trending-movies');
+    const tvGrid = document.getElementById('trending-tv');
+
+    if(initialMovies.length > 0) {
+      moviesGrid.innerHTML = initialMovies.map(m => createCard(m, 'movie')).join('');
+      tvGrid.innerHTML = initialTv.map(s => createCard(s, 'tv')).join('');
+    } else {
+      moviesGrid.innerHTML = '<p style="color:#EF4444; padding:20px;">Erro ao carregar o catálogo de filmes. Verifique o servidor.</p>';
+      tvGrid.innerHTML = '<p style="color:#EF4444; padding:20px;">Erro ao carregar o catálogo de séries.</p>';
+    }
+  }
+
+  let searchTimeout;
+  function searchMovies() {
+    clearTimeout(searchTimeout);
+    const query = document.getElementById('searchInput').value.trim();
+    const searchSection = document.getElementById('search-section');
+    const searchGrid = document.getElementById('search-grid');
+
+    if (query.length < 3) {
+      searchSection.style.display = 'none';
+      return;
+    }
+
+    searchTimeout = setTimeout(async () => {
+      try {
+        const res = await fetch(\`/api/bryanflix/search?q=\${encodeURIComponent(query)}\`);
+        const data = await res.json();
+        const validResults = data.results.filter(r => r.media_type === 'movie' || r.media_type === 'tv');
+        
+        if(validResults.length > 0) {
+          searchGrid.innerHTML = validResults.map(r => createCard(r, r.media_type)).join('');
+        } else {
+          searchGrid.innerHTML = '<p style="color:#9CA3AF; padding:20px;">Nenhum resultado encontrado para "' + query + '".</p>';
+        }
+        searchSection.style.display = 'block';
+      } catch (e) {}
+    }, 600);
+  }
+
+  // =======================================================
+  // 💡 CONEXÃO COM PIPOCACINE
+  // =======================================================
+  function openPlayer(type, id, title = 'Reproduzindo') {
+    document.getElementById('player-title').innerText = title;
+    const iframe = document.getElementById('video-frame');
+    
+    let rota = type === 'movie' ? \`/embed/movie/\${id}\` : \`/embed/tv/\${id}/1/1\`;
+    
+    // O Iframe aponta para o Prefixo /player
+    iframe.src = \`/player\${rota}\`;
+    
+    document.getElementById('player-modal').classList.add('active');
+  }
+
+  function closePlayer() {
+    document.getElementById('video-frame').src = '';
+    document.getElementById('player-modal').classList.remove('active');
+  }
+
+  loadHome();
+</script>
+</body>
+</html>`);
+}
+
 export function startDashboard() {
   const app = express();
   app.use(cookieParser());
@@ -52,14 +246,13 @@ export function startDashboard() {
   const dashboardUrl = process.env.DASHBOARD_URL || 'https://bryanbot.up.railway.app';
   const clientId = process.env.CLIENT_ID;
   const clientSecret = process.env.CLIENT_SECRET;
-  const TMDB_KEY = '15d2ea6d0dc1d476efbcaa3bf51fd921'; 
 
   const botInviteUrl = clientId
     ? `https://discord.com/oauth2/authorize?client_id=${clientId}&permissions=8&scope=bot%20applications.commands`
     : 'https://discord.com';
 
   // =====================================================================
-  // 🛡️ API DO BRYANFLIX (Bypass seguro SSR)
+  // 🛡️ API DO BRYANFLIX (Busca e Imagens Seguras)
   // =====================================================================
   app.get('/api/bryanflix/search', async (req, res) => {
     try {
@@ -68,7 +261,6 @@ export function startDashboard() {
       const searchRes = await axios.get(`https://api.themoviedb.org/3/search/multi?api_key=${TMDB_KEY}&language=pt-BR&query=${encodeURIComponent(query as string)}`);
       res.json({ results: searchRes.data.results });
     } catch (err: any) {
-      console.error('[Bryanflix] Erro no TMDB Search:', err.message);
       res.json({ results: [] });
     }
   });
@@ -86,245 +278,15 @@ export function startDashboard() {
   });
 
   // =====================================================================
-  // 🚫 AVISO DO PLAYER (Bypass de Proteção do PipocaCine)
+  // 🎭 ROTEADOR INTELIGENTE (Detecta se é Foguetinho ou Navegador)
   // =====================================================================
-  app.get('/players-source/*', (req, res) => {
-    res.send(`
-      <body style="background:#05050A; color:white; font-family:sans-serif; display:flex; justify-content:center; align-items:center; height:100vh; text-align:center;">
-        <div>
-          <h1 style="color:#EF4444; font-size:2.5rem; margin-bottom:10px;">⚠️ Acesso Bloqueado</h1>
-          <p style="color:#9CA3AF; max-width: 400px; margin: 0 auto; line-height: 1.6; font-size:1.1rem;">
-            O player de vídeo utiliza um túnel seguro do Discord e não funciona em navegadores normais.<br><br>
-            Volte para o Discord, entre em um canal de voz e abra o <b>Bryanflix pelo Foguetinho 🚀</b> para assistir!
-          </p>
-        </div>
-      </body>
-    `);
-  });
-
-  // =====================================================================
-  // 🍿 FRONTEND DO BRYANFLIX (A Tela Oficial)
-  // =====================================================================
-  app.get('/bryanflix', async (req, res) => {
-    let trendingMovies: any[] = [];
-    let trendingTv: any[] = [];
+  app.get('/', async (req, res) => {
+    // Se o Discord enviar o frame_id, significa que abriram pela Atividade (Foguetinho)
+    if (req.query.frame_id || req.query.instance_id) {
+      return renderBryanflix(res);
+    }
     
-    try {
-      const [moviesRes, tvRes] = await Promise.all([
-        axios.get(`https://api.themoviedb.org/3/trending/movie/week?api_key=${TMDB_KEY}&language=pt-BR`),
-        axios.get(`https://api.themoviedb.org/3/trending/tv/week?api_key=${TMDB_KEY}&language=pt-BR`)
-      ]);
-      trendingMovies = moviesRes.data.results || [];
-      trendingTv = tvRes.data.results || [];
-    } catch (err: any) {
-      console.error('[Bryanflix] Erro no TMDB Trending SSR:', err.message);
-    }
-
-    res.send(`<!DOCTYPE html>
-<html lang="pt-BR">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Bryanflix</title>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
-  <style>
-    :root { --bg: #05050A; --primary: #8B5CF6; --card: #131521; --text: #F2F3F5; --text-muted: #9CA3AF; }
-    * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Inter', sans-serif; }
-    body { background: var(--bg); color: var(--text); overflow-x: hidden; }
-    ::-webkit-scrollbar { width: 8px; }
-    ::-webkit-scrollbar-track { background: var(--bg); }
-    ::-webkit-scrollbar-thumb { background: #2A2E45; border-radius: 4px; }
-
-    nav { display: flex; justify-content: space-between; align-items: center; padding: 15px 4%; background: linear-gradient(to bottom, rgba(5,5,10,0.9) 0%, transparent 100%); position: fixed; top: 0; width: 100%; z-index: 100; }
-    .brand { display: flex; align-items: center; gap: 10px; font-weight: 800; font-size: 1.5rem; color: var(--primary); text-transform: uppercase; letter-spacing: 1px; }
-    
-    .search-box { background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 30px; padding: 8px 15px; display: flex; gap: 10px; width: 300px; transition: 0.2s; }
-    .search-box:focus-within { border-color: var(--primary); box-shadow: 0 0 10px rgba(139, 92, 246, 0.3); }
-    .search-box input { background: transparent; border: none; outline: none; color: white; width: 100%; font-size: 0.9rem; }
-    
-    .hero { height: 60vh; display: flex; flex-direction: column; justify-content: flex-end; padding: 5% 4%; background: linear-gradient(to top, var(--bg) 0%, transparent 80%), radial-gradient(circle at center, rgba(139, 92, 246, 0.15) 0%, #05050A 100%); }
-    .hero h1 { font-size: 3rem; font-weight: 800; margin-bottom: 10px; text-shadow: 2px 2px 10px rgba(0,0,0,0.8); }
-    .hero p { font-size: 1.1rem; max-width: 600px; color: #ddd; margin-bottom: 20px; text-shadow: 1px 1px 5px rgba(0,0,0,0.8); }
-    .hero .btn-play { background: var(--primary); color: white; padding: 12px 30px; border-radius: 6px; font-weight: 800; font-size: 1.1rem; border: none; cursor: pointer; display: inline-flex; gap: 10px; align-items: center; transition: 0.2s; box-shadow: 0 4px 15px rgba(139, 92, 246, 0.4); }
-    .hero .btn-play:hover { transform: scale(1.05); background: #7C3AED; }
-
-    .section { padding: 20px 4%; }
-    .section h2 { font-size: 1.3rem; margin-bottom: 15px; font-weight: 600; display: flex; align-items: center; gap: 10px; border-left: 4px solid var(--primary); padding-left: 10px; }
-    
-    .movie-row { display: flex; gap: 15px; overflow-x: auto; padding-bottom: 15px; scroll-behavior: smooth; }
-    .movie-row::-webkit-scrollbar { height: 6px; }
-    .movie-card { min-width: 160px; width: 160px; cursor: pointer; transition: 0.3s; position: relative; border-radius: 8px; overflow: hidden; background: #131521; }
-    .movie-card img { width: 100%; height: 240px; object-fit: cover; border-radius: 8px; transition: 0.3s; }
-    .movie-card:hover { transform: scale(1.05); z-index: 10; box-shadow: 0 10px 20px rgba(139, 92, 246, 0.3); }
-    .movie-card:hover img { filter: brightness(0.7); }
-    .movie-info { position: absolute; bottom: 0; padding: 10px; background: linear-gradient(to top, rgba(0,0,0,0.9), transparent); width: 100%; opacity: 0; transition: 0.3s; }
-    .movie-card:hover .movie-info { opacity: 1; }
-    .movie-info h4 { font-size: 0.85rem; margin-bottom: 5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-
-    #player-modal { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: black; z-index: 9999; display: none; flex-direction: column; }
-    #player-modal.active { display: flex; }
-    .player-header { padding: 15px; display: flex; justify-content: space-between; align-items: center; background: linear-gradient(to bottom, rgba(0,0,0,0.8), transparent); position: absolute; top: 0; width: 100%; z-index: 10; }
-    .btn-close { background: rgba(255,0,0,0.7); color: white; border: none; padding: 8px 15px; border-radius: 4px; font-weight: bold; cursor: pointer; transition: 0.2s; }
-    .btn-close:hover { background: red; }
-    iframe { flex: 1; width: 100%; height: 100%; border: none; }
-  </style>
-</head>
-<body>
-
-  <nav>
-    <div class="brand">🍿 BRYANFLIX</div>
-    <div class="search-box">
-      <span>🔍</span>
-      <input type="text" id="searchInput" placeholder="Buscar filmes ou séries..." oninput="searchMovies()">
-    </div>
-  </nav>
-
-  <header class="hero">
-    <h1>Lançamentos da Aliança</h1>
-    <p>Assista aos melhores filmes e séries com os seus amigos direto nas calls de voz do servidor, sem sair do Discord. Sem anúncios, sem interrupções.</p>
-    <div><button class="btn-play" onclick="openPlayer('movie', '550', 'Clube da Luta')">▶ Assistir Agora</button></div>
-  </header>
-
-  <div class="section" id="search-section" style="display: none;">
-    <h2>🔍 Resultados da Busca</h2>
-    <div class="movie-row" id="search-grid" style="flex-wrap: wrap;"></div>
-  </div>
-
-  <div class="section">
-    <h2>🔥 Filmes em Alta</h2>
-    <div class="movie-row" id="trending-movies"></div>
-  </div>
-
-  <div class="section">
-    <h2>📺 Séries Populares</h2>
-    <div class="movie-row" id="trending-tv"></div>
-  </div>
-
-  <div id="player-modal">
-    <div class="player-header">
-      <h3 style="color:white; text-shadow: 1px 1px 3px black;" id="player-title">Carregando Filme...</h3>
-      <button class="btn-close" onclick="closePlayer()">X FECHAR</button>
-    </div>
-    <iframe id="video-frame" allowfullscreen></iframe>
-  </div>
-
-  <script>
-    const initialMovies = ${JSON.stringify(trendingMovies).replace(/</g, '\\u003c')};
-    const initialTv = ${JSON.stringify(trendingTv).replace(/</g, '\\u003c')};
-    
-    const basePath = window.location.pathname.endsWith('/bryanflix') 
-      ? window.location.pathname.slice(0, -10) 
-      : '';
-
-    function createCard(item, type) {
-      if (!item.poster_path) return '';
-      const title = item.title || item.name || '';
-      const safeTitle = encodeURIComponent(title);
-      
-      return \`
-        <div class="movie-card" onclick="openPlayer('\${type}', '\${item.id}', decodeURIComponent('\${safeTitle}'))">
-          <img src="\${basePath}/api/bryanflix/image?path=\${item.poster_path}" alt="Capa">
-          <div class="movie-info">
-            <h4>\${title}</h4>
-            <span style="color:var(--primary); font-weight:bold; font-size:0.8rem;">⭐ \${item.vote_average ? item.vote_average.toFixed(1) : 'N/A'}</span>
-          </div>
-        </div>
-      \`;
-    }
-
-    function loadHome() {
-      const moviesGrid = document.getElementById('trending-movies');
-      const tvGrid = document.getElementById('trending-tv');
-
-      if(initialMovies.length > 0) {
-        moviesGrid.innerHTML = initialMovies.map(m => createCard(m, 'movie')).join('');
-        tvGrid.innerHTML = initialTv.map(s => createCard(s, 'tv')).join('');
-      } else {
-        moviesGrid.innerHTML = '<p style="color:#EF4444; padding:20px;">Erro ao carregar o catálogo de filmes. Verifique o servidor.</p>';
-        tvGrid.innerHTML = '<p style="color:#EF4444; padding:20px;">Erro ao carregar o catálogo de séries.</p>';
-      }
-    }
-
-    let searchTimeout;
-    function searchMovies() {
-      clearTimeout(searchTimeout);
-      const query = document.getElementById('searchInput').value.trim();
-      const searchSection = document.getElementById('search-section');
-      const searchGrid = document.getElementById('search-grid');
-
-      if (query.length < 3) {
-        searchSection.style.display = 'none';
-        return;
-      }
-
-      searchTimeout = setTimeout(async () => {
-        try {
-          const res = await fetch(\`\${basePath}/api/bryanflix/search?q=\${encodeURIComponent(query)}\`);
-          const data = await res.json();
-          const validResults = data.results.filter(r => r.media_type === 'movie' || r.media_type === 'tv');
-          
-          if(validResults.length > 0) {
-            searchGrid.innerHTML = validResults.map(r => createCard(r, r.media_type)).join('');
-          } else {
-            searchGrid.innerHTML = '<p style="color:#9CA3AF; padding:20px;">Nenhum resultado encontrado para "' + query + '".</p>';
-          }
-          searchSection.style.display = 'block';
-        } catch (e) {}
-      }, 600);
-    }
-
-    // =======================================================
-    // 💡 A MÁGICA DA INTEGRAÇÃO COM PIPOCACINE
-    // =======================================================
-    function openPlayer(type, id, title = 'Reproduzindo') {
-      document.getElementById('player-title').innerText = title;
-      const iframe = document.getElementById('video-frame');
-      
-      // O PipocaCine usa o formato /embed/movie/ID e /embed/tv/ID/SEASON/EPISODE
-      let rota = type === 'movie' ? \`/embed/movie/\${id}\` : \`/embed/tv/\${id}/1/1\`;
-      
-      // O Iframe aponta para o Prefixo que você registrou no Discord Portal!
-      // O Discord vai capturar isso e jogar pro pipocacine.lat
-      iframe.src = \`/players-source\${rota}\`;
-      
-      document.getElementById('player-modal').classList.add('active');
-    }
-
-    function closePlayer() {
-      document.getElementById('video-frame').src = '';
-      document.getElementById('player-modal').classList.remove('active');
-    }
-
-    loadHome();
-  </script>
-</body>
-</html>`);
-  });
-
-  // =====================================================================
-  // ROTAS ANTIGAS DO PAINEL DE CONTROLE (Dashboard)
-  // =====================================================================
-  app.get('/api/discord-data', async (req, res) => {
-    const { guildId } = req.query;
-    const token = process.env.DISCORD_TOKEN;
-    if (!guildId || !token) return res.json({ channels: [], roles: [] });
-
-    try {
-      const [channelsRes, rolesRes] = await Promise.all([
-        axios.get(`https://discord.com/api/v10/guilds/${guildId}/channels`, { headers: { Authorization: `Bot ${token}` } }).catch(() => ({ data: [] })),
-        axios.get(`https://discord.com/api/v10/guilds/${guildId}/roles`, { headers: { Authorization: `Bot ${token}` } }).catch(() => ({ data: [] }))
-      ]);
-
-      const channels = channelsRes.data.map((c: any) => ({ id: c.id, name: c.name, type: c.type }));
-      const roles = rolesRes.data.map((r: any) => ({ id: r.id, name: r.name }));
-
-      res.json({ channels, roles });
-    } catch (error) {
-      res.json({ channels: [], roles: [] });
-    }
-  });
-
-  app.get('/', (req, res) => {
+    // Se for um usuário normal no Chrome, carrega o Site de Controle (Dashboard)
     res.send(`<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
@@ -414,6 +376,34 @@ export function startDashboard() {
   <footer><p>© 2026 Bryan Bot • Sistema Oficial da Aliança Skyline</p></footer>
 </body>
 </html>`);
+  });
+
+  // Também mantemos a rota caso alguém queira testar direto
+  app.get('/bryanflix', (req, res) => {
+    return renderBryanflix(res);
+  });
+
+  // =====================================================================
+  // ROTAS ANTIGAS DO PAINEL DE CONTROLE (Dashboard)
+  // =====================================================================
+  app.get('/api/discord-data', async (req, res) => {
+    const { guildId } = req.query;
+    const token = process.env.DISCORD_TOKEN;
+    if (!guildId || !token) return res.json({ channels: [], roles: [] });
+
+    try {
+      const [channelsRes, rolesRes] = await Promise.all([
+        axios.get(`https://discord.com/api/v10/guilds/${guildId}/channels`, { headers: { Authorization: `Bot ${token}` } }).catch(() => ({ data: [] })),
+        axios.get(`https://discord.com/api/v10/guilds/${guildId}/roles`, { headers: { Authorization: `Bot ${token}` } }).catch(() => ({ data: [] }))
+      ]);
+
+      const channels = channelsRes.data.map((c: any) => ({ id: c.id, name: c.name, type: c.type }));
+      const roles = rolesRes.data.map((r: any) => ({ id: r.id, name: r.name }));
+
+      res.json({ channels, roles });
+    } catch (error) {
+      res.json({ channels: [], roles: [] });
+    }
   });
 
   app.get('/login', (req, res) => {

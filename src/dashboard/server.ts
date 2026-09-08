@@ -44,7 +44,7 @@ async function validateGuildAccess(userId: string, guildId: string): Promise<boo
 }
 
 // =====================================================================
-// 🍿 RENDERIZADOR DO BRYANFLIX (A Netflix 100% Nativa Discord)
+// 🍿 RENDERIZADOR DO BRYANFLIX
 // =====================================================================
 async function renderBryanflix(res: express.Response) {
   let trendingMovies: any[] = [];
@@ -104,9 +104,13 @@ async function renderBryanflix(res: express.Response) {
 
   #player-modal { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: black; z-index: 9999; display: none; flex-direction: column; }
   #player-modal.active { display: flex !important; }
-  .player-header { padding: 15px; display: flex; justify-content: space-between; align-items: center; background: linear-gradient(to bottom, rgba(0,0,0,0.8), transparent); position: absolute; top: 0; width: 100%; z-index: 10; }
-  .btn-close { background: rgba(255,0,0,0.7); color: white; border: none; padding: 8px 15px; border-radius: 4px; font-weight: bold; cursor: pointer; transition: 0.2s; }
-  .btn-close:hover { background: red; }
+  .player-header { padding: 15px 20px; display: flex; justify-content: space-between; align-items: center; background: linear-gradient(to bottom, rgba(0,0,0,0.9), transparent); position: absolute; top: 0; width: 100%; z-index: 10; }
+  
+  .btn-external { background: rgba(139, 92, 246, 0.2); color: #C4B5FD; text-decoration: none; padding: 8px 15px; border-radius: 6px; font-weight: bold; border: 1px solid var(--primary); transition: 0.2s; margin-right: 15px; display: inline-block; font-size: 0.85rem; }
+  .btn-external:hover { background: var(--primary); color: white; }
+  .btn-close { background: rgba(239, 68, 68, 0.2); color: #EF4444; border: 1px solid #EF4444; padding: 8px 15px; border-radius: 6px; font-weight: bold; cursor: pointer; transition: 0.2s; }
+  .btn-close:hover { background: #EF4444; color: white; }
+  
   iframe { flex: 1; width: 100%; height: 100%; border: none; background: #000; }
 </style>
 </head>
@@ -145,23 +149,26 @@ async function renderBryanflix(res: express.Response) {
   </div>
 </div>
 
+<!-- Modal do Player Seguro -->
 <div id="player-modal">
   <div class="player-header">
-    <h3 style="color:white; text-shadow: 1px 1px 3px black;" id="player-title">Carregando Filme...</h3>
-    <button id="btn-close-player" class="btn-close">X FECHAR</button>
+    <h3 style="color:white; text-shadow: 1px 1px 3px black; font-size:1.1rem;" id="player-title">Carregando...</h3>
+    <div>
+      <!-- Botão de Escape caso o Iframe fique preto -->
+      <a id="btn-external-link" href="#" target="_blank" class="btn-external">Abrir no Navegador (Garantido)</a>
+      <button id="btn-close-player" class="btn-close">X FECHAR</button>
+    </div>
   </div>
   <iframe id="video-frame" allowfullscreen></iframe>
 </div>
 
 <script>
-  // O servidor injetou os dados originais aqui de forma segura:
   const initialMovies = ${JSON.stringify(trendingMovies).replace(/</g, '\\u003c')};
   const initialTv = ${JSON.stringify(trendingTv).replace(/</g, '\\u003c')};
 
   function createCard(item, type) {
     if (!item.poster_path) return '';
     const title = item.title || item.name || 'Sem Título';
-    // Removemos os onClick. Tudo será via AddEventListener para evitar bloqueios de CSP do Discord.
     return \`
       <div class="movie-card clickable-movie" data-type="\${type}" data-id="\${item.id}" data-title="\${encodeURIComponent(title).replace(/'/g, "%27")}">
         <img src="/api/bryanflix/image?path=\${item.poster_path}" alt="Capa" onerror="this.src='https://via.placeholder.com/160x240?text=Capa'">
@@ -173,7 +180,6 @@ async function renderBryanflix(res: express.Response) {
     \`;
   }
 
-  // O Coração do Player (Escuta os cliques nativamente)
   function handleMovieClick(e) {
     const element = e.currentTarget;
     const type = element.getAttribute('data-type');
@@ -181,17 +187,19 @@ async function renderBryanflix(res: express.Response) {
     const title = decodeURIComponent(element.getAttribute('data-title'));
     
     document.getElementById('player-title').innerText = title;
+    
+    // Atualiza o link do Botão de Escape para a SuperflixAPI (A melhor do BR)
+    const externalUrl = type === 'movie' ? \`https://superflixapi.dev/filme/\${id}\` : \`https://superflixapi.dev/serie/\${id}\`;
+    document.getElementById('btn-external-link').href = externalUrl;
+
+    // Tenta carregar o iframe via túnel do Discord (embed.su)
     const iframe = document.getElementById('video-frame');
-    
     let rota = type === 'movie' ? \`/embed/movie/\${id}\` : \`/embed/tv/\${id}/1/1\`;
-    
-    // Dispara a requisição para o Prefixo do Discord Portal (/player)
     iframe.src = \`/player\${rota}\`;
     
     document.getElementById('player-modal').classList.add('active');
   }
 
-  // Atribui funcionalidade a todos os filmes carregados
   function bindMovieClicks() {
     document.querySelectorAll('.clickable-movie').forEach(el => {
       el.removeEventListener('click', handleMovieClick);
@@ -214,7 +222,7 @@ async function renderBryanflix(res: express.Response) {
   }
 
   let searchTimeout;
-  function searchMovies() {
+  document.getElementById('searchInput').addEventListener('input', () => {
     clearTimeout(searchTimeout);
     const query = document.getElementById('searchInput').value.trim();
     const searchSection = document.getElementById('search-section');
@@ -240,9 +248,8 @@ async function renderBryanflix(res: express.Response) {
         searchSection.style.display = 'block';
       } catch (e) {}
     }, 600);
-  }
+  });
 
-  // Registra os botões estáticos sem usar onclick no HTML
   document.getElementById('btn-hero-play').addEventListener('click', handleMovieClick);
   
   document.getElementById('btn-close-player').addEventListener('click', () => {
@@ -250,9 +257,6 @@ async function renderBryanflix(res: express.Response) {
     document.getElementById('player-modal').classList.remove('active');
   });
 
-  document.getElementById('searchInput').addEventListener('input', searchMovies);
-
-  // Inicia tudo
   loadHome();
 </script>
 </body>
@@ -328,33 +332,15 @@ export function startDashboard() {
   });
 
   // =====================================================================
-  // 🎭 AVISO DO PLAYER SE ABERTO NO CHROME (Acesso Externo de Túnel)
-  // =====================================================================
-  app.get('/player/*', (req, res) => {
-    res.send(`
-      <body style="background:#05050A; color:white; font-family:sans-serif; display:flex; justify-content:center; align-items:center; height:100vh; text-align:center;">
-        <div>
-          <h1 style="color:#EF4444; font-size:2.5rem; margin-bottom:10px;">⚠️ Acesso Bloqueado</h1>
-          <p style="color:#9CA3AF; max-width: 400px; margin: 0 auto; line-height: 1.6; font-size:1.1rem;">
-            O player de vídeo utiliza um túnel seguro do Discord e não funciona em navegadores normais.<br><br>
-            Volte para o Discord, entre em um canal de voz e abra o <b>Bryanflix pelo Foguetinho 🚀</b> para assistir!
-          </p>
-        </div>
-      </body>
-    `);
-  });
-
-  // =====================================================================
   // 🧭 ROTEAMENTO INTELIGENTE DE DOMÍNIOS
   // =====================================================================
   app.get('/', async (req, res) => {
-    // 1. O DOMÍNIO DA ATIVIDADE: Se for bryanflix, abre a Netflix!
     if (req.hostname.includes('bryanflix') || req.query.frame_id || req.query.instance_id) {
       await renderBryanflix(res);
       return;
     }
     
-    // 2. O DOMÍNIO DO BOT: Se for bryanbot, abre a Landing Page Oficial
+    // TELA INICIAL (Dashboard)
     res.send(`<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
@@ -446,13 +432,12 @@ export function startDashboard() {
 </html>`);
   });
 
-  // Rota isolada caso o usuário queria acessar o bryanflix pelo link antigo
   app.get('/bryanflix', async (req, res) => {
     await renderBryanflix(res);
   });
 
   // =====================================================================
-  // ROTAS DO PAINEL DE CONTROLE (Painel Logado)
+  // ROTAS DO PAINEL DE CONTROLE LOGADO
   // =====================================================================
   app.get('/api/discord-data', async (req, res) => {
     const { guildId } = req.query;

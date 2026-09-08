@@ -52,17 +52,17 @@ export function startDashboard() {
   const dashboardUrl = process.env.DASHBOARD_URL || 'https://bryanbot.up.railway.app';
   const clientId = process.env.CLIENT_ID;
   const clientSecret = process.env.CLIENT_SECRET;
-  const TMDB_KEY = '3fd2be6f0c70a2a598f084ddfb75487c'; // Chave Oficial para o Catálogo
+  
+  // A CHAVE CORRETA E OFICIAL DO TMDB:
+  const TMDB_KEY = '15d2ea6d0dc1d476efbcaa3bf51fd921'; 
 
   const botInviteUrl = clientId
     ? `https://discord.com/oauth2/authorize?client_id=${clientId}&permissions=8&scope=bot%20applications.commands`
     : 'https://discord.com';
 
   // =====================================================================
-  // 🛡️ PROXY DA API DO BRYANFLIX (Ignora o bloqueio do Discord)
+  // 🛡️ PROXY DA API DO BRYANFLIX (Bypass seguro)
   // =====================================================================
-  
-  // Puxar Filmes em Alta
   app.get('/api/bryanflix/trending', async (req, res) => {
     try {
       const [moviesRes, tvRes] = await Promise.all([
@@ -70,26 +70,24 @@ export function startDashboard() {
         axios.get(`https://api.themoviedb.org/3/trending/tv/week?api_key=${TMDB_KEY}&language=pt-BR`)
       ]);
       res.json({ movies: moviesRes.data.results, tv: tvRes.data.results });
-    } catch (err) {
-      console.error('[Bryanflix] Erro no TMDB Trending');
+    } catch (err: any) {
+      console.error('[Bryanflix] Erro no TMDB Trending:', err.message);
       res.json({ movies: [], tv: [] });
     }
   });
 
-  // Pesquisar Filmes
   app.get('/api/bryanflix/search', async (req, res) => {
     try {
       const query = req.query.q;
       if (!query) return res.json({ results: [] });
       const searchRes = await axios.get(`https://api.themoviedb.org/3/search/multi?api_key=${TMDB_KEY}&language=pt-BR&query=${encodeURIComponent(query as string)}`);
       res.json({ results: searchRes.data.results });
-    } catch (err) {
-      console.error('[Bryanflix] Erro no TMDB Search');
+    } catch (err: any) {
+      console.error('[Bryanflix] Erro no TMDB Search:', err.message);
       res.json({ results: [] });
     }
   });
 
-  // Puxar Imagens com Bypass de Segurança
   app.get('/api/bryanflix/image', async (req, res) => {
     try {
       const imgPath = req.query.path;
@@ -100,6 +98,23 @@ export function startDashboard() {
     } catch (e) {
       res.status(404).end();
     }
+  });
+
+  // =====================================================================
+  // 🚫 AVISO DO PLAYER (Caso o usuário clique fora do Discord)
+  // =====================================================================
+  app.get('/player/*', (req, res) => {
+    res.send(`
+      <body style="background:#05050A; color:white; font-family:sans-serif; display:flex; justify-content:center; align-items:center; height:100vh; text-align:center;">
+        <div>
+          <h1 style="color:#EF4444; font-size:2.5rem; margin-bottom:10px;">⚠️ Acesso Bloqueado</h1>
+          <p style="color:#9CA3AF; max-width: 400px; margin: 0 auto; line-height: 1.6; font-size:1.1rem;">
+            O player de vídeo utiliza um túnel seguro do Discord e não funciona em navegadores normais.<br><br>
+            Volte para o Discord, entre em um canal de voz e abra o <b>Bryanflix pelo Foguetinho 🚀</b> para assistir!
+          </p>
+        </div>
+      </body>
+    `);
   });
 
   // =====================================================================
@@ -121,7 +136,6 @@ export function startDashboard() {
     ::-webkit-scrollbar-track { background: var(--bg); }
     ::-webkit-scrollbar-thumb { background: #2A2E45; border-radius: 4px; }
 
-    /* Nav */
     nav { display: flex; justify-content: space-between; align-items: center; padding: 15px 4%; background: linear-gradient(to bottom, rgba(5,5,10,0.9) 0%, transparent 100%); position: fixed; top: 0; width: 100%; z-index: 100; }
     .brand { display: flex; align-items: center; gap: 10px; font-weight: 800; font-size: 1.5rem; color: var(--primary); text-transform: uppercase; letter-spacing: 1px; }
     
@@ -129,14 +143,12 @@ export function startDashboard() {
     .search-box:focus-within { border-color: var(--primary); box-shadow: 0 0 10px rgba(139, 92, 246, 0.3); }
     .search-box input { background: transparent; border: none; outline: none; color: white; width: 100%; font-size: 0.9rem; }
     
-    /* Hero */
     .hero { height: 60vh; display: flex; flex-direction: column; justify-content: flex-end; padding: 5% 4%; background: linear-gradient(to top, var(--bg) 0%, transparent 80%), radial-gradient(circle at center, rgba(139, 92, 246, 0.15) 0%, #05050A 100%); }
     .hero h1 { font-size: 3rem; font-weight: 800; margin-bottom: 10px; text-shadow: 2px 2px 10px rgba(0,0,0,0.8); }
     .hero p { font-size: 1.1rem; max-width: 600px; color: #ddd; margin-bottom: 20px; text-shadow: 1px 1px 5px rgba(0,0,0,0.8); }
     .hero .btn-play { background: var(--primary); color: white; padding: 12px 30px; border-radius: 6px; font-weight: 800; font-size: 1.1rem; border: none; cursor: pointer; display: inline-flex; gap: 10px; align-items: center; transition: 0.2s; box-shadow: 0 4px 15px rgba(139, 92, 246, 0.4); }
     .hero .btn-play:hover { transform: scale(1.05); background: #7C3AED; }
 
-    /* Sections */
     .section { padding: 20px 4%; }
     .section h2 { font-size: 1.3rem; margin-bottom: 15px; font-weight: 600; display: flex; align-items: center; gap: 10px; border-left: 4px solid var(--primary); padding-left: 10px; }
     
@@ -150,7 +162,6 @@ export function startDashboard() {
     .movie-card:hover .movie-info { opacity: 1; }
     .movie-info h4 { font-size: 0.85rem; margin-bottom: 5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
-    /* Fullscreen Player Modal */
     #player-modal { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: black; z-index: 9999; display: none; flex-direction: column; }
     #player-modal.active { display: flex; }
     .player-header { padding: 15px; display: flex; justify-content: space-between; align-items: center; background: linear-gradient(to bottom, rgba(0,0,0,0.8), transparent); position: absolute; top: 0; width: 100%; z-index: 10; }
@@ -182,21 +193,19 @@ export function startDashboard() {
 
   <div class="section">
     <h2>🔥 Filmes em Alta</h2>
-    <div class="movie-row" id="trending-movies"><p style="color:#9CA3AF">Carregando catálogo...</p></div>
+    <div class="movie-row" id="trending-movies"><p style="color:#9CA3AF; padding:20px;">Carregando catálogo de filmes...</p></div>
   </div>
 
   <div class="section">
     <h2>📺 Séries Populares</h2>
-    <div class="movie-row" id="trending-tv"><p style="color:#9CA3AF">Carregando catálogo...</p></div>
+    <div class="movie-row" id="trending-tv"><p style="color:#9CA3AF; padding:20px;">Carregando catálogo de séries...</p></div>
   </div>
 
-  <!-- Reprodutor de Vídeo -->
   <div id="player-modal">
     <div class="player-header">
       <h3 style="color:white; text-shadow: 1px 1px 3px black;" id="player-title">Carregando Filme...</h3>
       <button class="btn-close" onclick="closePlayer()">X FECHAR</button>
     </div>
-    <!-- O SRC é interceptado pelo Discord Developer Portal no prefixo /player -->
     <iframe id="video-frame" allowfullscreen></iframe>
   </div>
 
@@ -204,7 +213,6 @@ export function startDashboard() {
     function createCard(item, type) {
       if (!item.poster_path) return '';
       const title = item.title || item.name;
-      // Puxa a imagem passando pelo nosso Proxy Seguro do Bot!
       return \`
         <div class="movie-card" onclick="openPlayer('\${type}', '\${item.id}', '\${title.replace(/'/g, "\\'")}')">
           <img src="/api/bryanflix/image?path=\${item.poster_path}" alt="\${title}">
@@ -220,8 +228,14 @@ export function startDashboard() {
       try {
         const res = await fetch('/api/bryanflix/trending');
         const data = await res.json();
-        document.getElementById('trending-movies').innerHTML = data.movies.map(m => createCard(m, 'movie')).join('');
-        document.getElementById('trending-tv').innerHTML = data.tv.map(s => createCard(s, 'tv')).join('');
+        
+        if(data.movies.length > 0) {
+          document.getElementById('trending-movies').innerHTML = data.movies.map(m => createCard(m, 'movie')).join('');
+          document.getElementById('trending-tv').innerHTML = data.tv.map(s => createCard(s, 'tv')).join('');
+        } else {
+          document.getElementById('trending-movies').innerHTML = '<p style="color:#EF4444">Erro ao conectar com a API de Filmes.</p>';
+          document.getElementById('trending-tv').innerHTML = '<p style="color:#EF4444">Erro ao conectar com a API de Séries.</p>';
+        }
       } catch (e) {
         console.error('Falha ao carregar catálogo', e);
       }
@@ -247,19 +261,18 @@ export function startDashboard() {
           
           if(validResults.length > 0) {
             searchGrid.innerHTML = validResults.map(r => createCard(r, r.media_type)).join('');
-            searchSection.style.display = 'block';
+          } else {
+            searchGrid.innerHTML = '<p style="color:#9CA3AF; padding:20px;">Nenhum resultado encontrado para "' + query + '".</p>';
           }
+          searchSection.style.display = 'block';
         } catch (e) {}
-      }, 500);
+      }, 600);
     }
 
     function openPlayer(type, id, title = 'Reproduzindo') {
       document.getElementById('player-title').innerText = title;
       const iframe = document.getElementById('video-frame');
-      
-      // O Discord vai capturar essa URL "/player" e enviar pro "embed.su" via Proxy
       iframe.src = \`/player/embed/\${type}/\${id}\`;
-      
       document.getElementById('player-modal').classList.add('active');
     }
 
@@ -275,7 +288,7 @@ export function startDashboard() {
   });
 
   // =====================================================================
-  // ROTAS ANTIGAS DO PAINEL DE CONTROLE (Painel do Bryan)
+  // ROTAS ANTIGAS DO PAINEL DE CONTROLE
   // =====================================================================
   app.get('/api/discord-data', async (req, res) => {
     const { guildId } = req.query;

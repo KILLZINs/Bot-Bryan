@@ -5,7 +5,9 @@ import path from 'path';
 import { prisma } from '../database/client';
 
 const BOT_OWNER_ID = '1195254699943796791';
-const TMDB_KEY = '15d2ea6d0dc1d476efbcaa3bf51fd921'; 
+
+// SUA CHAVE ORIGINAL E 100% FUNCIONAL RESTAURADA!
+const TMDB_KEY = '3fd2be6f0c70a2a598f084ddfb75487c'; 
 
 const SERVER_CATEGORIES = [
   { category: "🤖 Inteligência Artificial", desc: "Sistemas de voz e conversação avançada", features: [{ id: 'featVoiceAi', name: 'Callia (IA de Voz)', desc: 'Permite que os membros chamem o Bryan ou a IA Local.', icon: '🎙️' }] },
@@ -44,7 +46,7 @@ async function validateGuildAccess(userId: string, guildId: string): Promise<boo
 }
 
 // =====================================================================
-// 🍿 RENDERIZADOR DO BRYANFLIX (A Netflix)
+// 🍿 RENDERIZADOR DO BRYANFLIX (A Netflix Definitiva)
 // =====================================================================
 async function renderBryanflix(res: express.Response) {
   let trendingMovies: any[] = [];
@@ -102,12 +104,18 @@ async function renderBryanflix(res: express.Response) {
   .movie-card:hover .movie-info { background: linear-gradient(to top, rgba(139, 92, 246, 0.9) 0%, rgba(0,0,0,0.7) 60%, transparent 100%); }
   .movie-info h4 { font-size: 0.9rem; margin-bottom: 5px; color: white; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; text-shadow: 1px 1px 3px black; }
 
-  #player-modal { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: black; z-index: 9999; display: none; flex-direction: column; }
-  #player-modal.active { display: flex; }
-  .player-header { padding: 15px; display: flex; justify-content: space-between; align-items: center; background: linear-gradient(to bottom, rgba(0,0,0,0.8), transparent); position: absolute; top: 0; width: 100%; z-index: 10; pointer-events: none; }
-  .btn-close { pointer-events: auto; background: rgba(255,0,0,0.7); color: white; border: none; padding: 8px 15px; border-radius: 4px; font-weight: bold; cursor: pointer; transition: 0.2s; }
-  .btn-close:hover { background: red; }
-  iframe { flex: 1; width: 100%; height: 100%; border: none; }
+  /* Modal do Player Fixo e à prova de quebras */
+  #player-modal { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: #05050A; z-index: 999999; display: none; flex-direction: column; }
+  #player-modal.active { display: flex !important; }
+  .player-header { padding: 15px 25px; display: flex; justify-content: space-between; align-items: center; background: #131521; border-bottom: 1px solid var(--border); }
+  .btn-close { background: rgba(239, 68, 68, 0.2); color: #EF4444; border: 1px solid #EF4444; padding: 8px 20px; border-radius: 6px; font-weight: bold; cursor: pointer; transition: 0.2s; }
+  .btn-close:hover { background: #EF4444; color: white; }
+  
+  /* Botão Extra para abrir fora do Discord se falhar */
+  .btn-external { background: rgba(139, 92, 246, 0.2); color: #8B5CF6; border: 1px solid #8B5CF6; text-decoration: none; padding: 8px 20px; border-radius: 6px; font-weight: bold; transition: 0.2s; display: inline-block; margin-right: 15px; }
+  .btn-external:hover { background: #8B5CF6; color: white; }
+  
+  iframe { flex: 1; width: 100%; height: 100%; border: none; background: black; }
 </style>
 </head>
 <body>
@@ -147,8 +155,11 @@ async function renderBryanflix(res: express.Response) {
 
 <div id="player-modal">
   <div class="player-header">
-    <h3 style="color:white; text-shadow: 1px 1px 3px black;" id="player-title">Carregando Filme...</h3>
-    <button class="btn-close" onclick="closePlayer()">X FECHAR</button>
+    <h3 style="color:white;" id="player-title">Carregando Filme...</h3>
+    <div>
+      <a id="external-link" href="#" target="_blank" class="btn-external">Abrir no Navegador</a>
+      <button class="btn-close" onclick="closePlayer()">X FECHAR</button>
+    </div>
   </div>
   <iframe id="video-frame" allowfullscreen></iframe>
 </div>
@@ -171,15 +182,31 @@ async function renderBryanflix(res: express.Response) {
     \`;
   }
 
-  function loadHome() {
+  async function loadHome() {
     const moviesGrid = document.getElementById('trending-movies');
     const tvGrid = document.getElementById('trending-tv');
 
-    if(initialMovies.length > 0) {
+    // Tentativa 1: Usar dados do Servidor (Rápido)
+    if(initialMovies && initialMovies.length > 0) {
       moviesGrid.innerHTML = initialMovies.map(m => createCard(m, 'movie')).join('');
       tvGrid.innerHTML = initialTv.map(s => createCard(s, 'tv')).join('');
-    } else {
-      moviesGrid.innerHTML = '<p style="color:#EF4444; padding:20px;">Falha ao carregar o catálogo.</p>';
+      return;
+    }
+
+    // Tentativa 2: Busca da API pela internet se o servidor dormiu
+    try {
+      const res = await fetch('/api/bryanflix/trending');
+      const data = await res.json();
+
+      if(data.movies && data.movies.length > 0) {
+        moviesGrid.innerHTML = data.movies.map(m => createCard(m, 'movie')).join('');
+        tvGrid.innerHTML = data.tv.map(s => createCard(s, 'tv')).join('');
+      } else {
+        moviesGrid.innerHTML = '<p style="color:#EF4444; padding:20px;">A chave da API do TMDB parece ter sido bloqueada ou está inválida.</p>';
+        tvGrid.innerHTML = '';
+      }
+    } catch (e) {
+      moviesGrid.innerHTML = '<p style="color:#EF4444; padding:20px;">Erro de conexão com o servidor.</p>';
       tvGrid.innerHTML = '';
     }
   }
@@ -219,9 +246,15 @@ async function renderBryanflix(res: express.Response) {
     
     document.getElementById('player-title').innerText = title;
     const iframe = document.getElementById('video-frame');
+    const externalLink = document.getElementById('external-link');
     
     let rota = type === 'movie' ? \`/embed/movie/\${id}\` : \`/embed/tv/\${id}/1/1\`;
+    
+    // Tenta abrir o iframe pelo Túnel do Discord
     iframe.src = \`/player\${rota}\`;
+    
+    // Deixa o link externo pronto usando o embed.su (Garantido de funcionar fora do iframe)
+    externalLink.href = \`https://embed.su\${rota}\`;
     
     document.getElementById('player-modal').classList.add('active');
   }
@@ -260,8 +293,21 @@ export function startDashboard() {
     : 'https://discord.com';
 
   // =====================================================================
-  // 🛡️ API DO BRYANFLIX (Busca e Imagens)
+  // 🛡️ API DO BRYANFLIX (Busca, Tendências e Imagens)
   // =====================================================================
+  app.get('/api/bryanflix/trending', async (req, res) => {
+    try {
+      const [moviesRes, tvRes] = await Promise.all([
+        axios.get(`https://api.themoviedb.org/3/trending/movie/week?api_key=${TMDB_KEY}&language=pt-BR`),
+        axios.get(`https://api.themoviedb.org/3/trending/tv/week?api_key=${TMDB_KEY}&language=pt-BR`)
+      ]);
+      res.json({ movies: moviesRes.data.results, tv: tvRes.data.results });
+    } catch (err: any) {
+      console.error('[Bryanflix] Erro Backend Trending:', err.message);
+      res.json({ movies: [], tv: [] });
+    }
+  });
+
   app.get('/api/bryanflix/search', async (req, res) => {
     try {
       const query = req.query.q;
@@ -294,12 +340,30 @@ export function startDashboard() {
   });
 
   // =====================================================================
-  // 🧭 ROTEAMENTO INTELIGENTE DE DOMÍNIOS (A MÁGICA)
+  // 🎭 AVISO DO PLAYER SE ABERTO NO CHROME (Acesso Externo de Túnel)
+  // =====================================================================
+  app.get('/player/*', (req, res) => {
+    res.send(`
+      <body style="background:#05050A; color:white; font-family:sans-serif; display:flex; justify-content:center; align-items:center; height:100vh; text-align:center;">
+        <div>
+          <h1 style="color:#EF4444; font-size:2.5rem; margin-bottom:10px;">⚠️ Acesso Bloqueado</h1>
+          <p style="color:#9CA3AF; max-width: 400px; margin: 0 auto; line-height: 1.6; font-size:1.1rem;">
+            O player de vídeo utiliza um túnel seguro do Discord e não funciona em navegadores normais.<br><br>
+            Volte para o Discord, entre em um canal de voz e abra o <b>Bryanflix pelo Foguetinho 🚀</b> para assistir!
+          </p>
+        </div>
+      </body>
+    `);
+  });
+
+  // =====================================================================
+  // 🧭 ROTEAMENTO INTELIGENTE DE DOMÍNIOS (A MÁGICA CONTINUA)
   // =====================================================================
   app.get('/', async (req, res) => {
     // 1. O DOMÍNIO DA ATIVIDADE: Se for bryanflix, abre a Netflix!
     if (req.hostname.includes('bryanflix') || req.query.frame_id || req.query.instance_id) {
-      return renderBryanflix(res);
+      await renderBryanflix(res);
+      return;
     }
     
     // 2. O DOMÍNIO DO BOT: Se for bryanbot, abre a Landing Page Oficial (Sua tela inicial volta!)
@@ -395,8 +459,8 @@ export function startDashboard() {
   });
 
   // Rota isolada caso o usuário queria acessar o bryanflix pelo link antigo
-  app.get('/bryanflix', (req, res) => {
-    return renderBryanflix(res);
+  app.get('/bryanflix', async (req, res) => {
+    await renderBryanflix(res);
   });
 
   // =====================================================================

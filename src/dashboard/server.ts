@@ -5,8 +5,6 @@ import path from 'path';
 import { prisma } from '../database/client';
 
 const BOT_OWNER_ID = '1195254699943796791';
-
-// A CHAVE CORRETA E FUNCIONAL FOI RESTAURADA AQUI!
 const TMDB_KEY = '15d2ea6d0dc1d476efbcaa3bf51fd921'; 
 
 const SERVER_CATEGORIES = [
@@ -25,7 +23,7 @@ const GLOBAL_SETTINGS = [
 async function validateGuildAccess(userId: string, guildId: string): Promise<boolean> {
   if (userId === BOT_OWNER_ID) return true;
   const access = await prisma.allianceServerMember.findFirst({ where: { userId, guildId } });
-  return !access;
+  return access !== null; 
 }
 
 // =====================================================================
@@ -210,9 +208,6 @@ async function renderBryanflix(res: express.Response) {
     }, 600);
   });
 
-  // =======================================================
-  // 💡 NÚCLEO DO PLAYER NATIVO (Bypass do Discord e embed.su)
-  // =======================================================
   document.addEventListener('click', function(e) {
     const card = e.target.closest('.clickable-movie');
     if (card) {

@@ -5,9 +5,7 @@ import path from 'path';
 import { prisma } from '../database/client';
 
 const BOT_OWNER_ID = '1195254699943796791';
-
-// A CHAVE RESTAURADA: Essa era a sua chave original que funciona 100%!
-const TMDB_KEY = '3fd2be6f0c70a2a598f084ddfb75487c'; 
+const TMDB_KEY = '15d2ea6d0dc1d476efbcaa3bf51fd921'; 
 
 const SERVER_CATEGORIES = [
   { category: "🤖 Inteligência Artificial", desc: "Sistemas de voz e conversação avançada", features: [{ id: 'featVoiceAi', name: 'Callia (IA de Voz)', desc: 'Permite que os membros chamem o Bryan ou a IA Local.', icon: '🎙️' }] },
@@ -46,9 +44,9 @@ async function validateGuildAccess(userId: string, guildId: string): Promise<boo
 }
 
 // =====================================================================
-// 🍿 RENDERIZADOR DO BRYANFLIX (Página base HTML)
+// 🍿 RENDERIZADOR DO BRYANFLIX (A Netflix)
 // =====================================================================
-function renderBryanflix(res: express.Response) {
+async function renderBryanflix(res: express.Response) {
   res.send(`<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
@@ -122,7 +120,6 @@ function renderBryanflix(res: express.Response) {
 <div class="section">
   <h2>🔥 Filmes em Alta</h2>
   <div class="movie-row" id="trending-movies">
-    <!-- Feedback visual super legal! -->
     <p style="color:#9CA3AF; padding:20px; font-weight:600;">⏳ Carregando os melhores filmes...</p>
   </div>
 </div>
@@ -146,8 +143,6 @@ function renderBryanflix(res: express.Response) {
   function createCard(item, type) {
     if (!item.poster_path) return '';
     const title = item.title || item.name || 'Sem Título';
-    
-    // Dataset limpo impede quebras de HTML!
     return \`
       <div class="movie-card" data-type="\${type}" data-id="\${item.id}" data-title="\${title.replace(/"/g, '&quot;')}" onclick="openPlayerFromEvent(this)">
         <img src="/api/bryanflix/image?path=\${item.poster_path}" alt="Capa" onerror="this.src='https://via.placeholder.com/160x240?text=Capa'">
@@ -159,12 +154,12 @@ function renderBryanflix(res: express.Response) {
     \`;
   }
 
-  // Carrega dinamicamente a página direto do servidor!
   async function loadHome() {
     const moviesGrid = document.getElementById('trending-movies');
     const tvGrid = document.getElementById('trending-tv');
 
     try {
+      // Usa rota absoluta no JS pra evitar quebras pelo túnel do Discord!
       const res = await fetch('/api/bryanflix/trending');
       const data = await res.json();
 
@@ -172,11 +167,11 @@ function renderBryanflix(res: express.Response) {
         moviesGrid.innerHTML = data.movies.map(m => createCard(m, 'movie')).join('');
         tvGrid.innerHTML = data.tv.map(s => createCard(s, 'tv')).join('');
       } else {
-        moviesGrid.innerHTML = '<p style="color:#EF4444; padding:20px;">Falha ao obter catálogo. A API retornou uma lista vazia.</p>';
+        moviesGrid.innerHTML = '<p style="color:#EF4444; padding:20px;">Falha ao obter catálogo da API.</p>';
         tvGrid.innerHTML = '';
       }
     } catch (e) {
-      moviesGrid.innerHTML = '<p style="color:#EF4444; padding:20px;">Erro de conexão com o servidor do Bryanflix.</p>';
+      moviesGrid.innerHTML = '<p style="color:#EF4444; padding:20px;">Erro de conexão com o servidor.</p>';
       tvGrid.innerHTML = '';
     }
   }
@@ -210,7 +205,7 @@ function renderBryanflix(res: express.Response) {
   }
 
   // =======================================================
-  // 💡 O NÚCLEO DO PLAYER (Bypass de Segurança do Discord)
+  // 💡 O NÚCLEO DO PLAYER (Bypass do Discord)
   // =======================================================
   function openPlayerFromEvent(element) {
     const type = element.getAttribute('data-type');
@@ -220,10 +215,10 @@ function renderBryanflix(res: express.Response) {
     document.getElementById('player-title').innerText = title;
     const iframe = document.getElementById('video-frame');
     
-    // Rotas do Pipocacine formatadas para a busca correta
+    // Rotas do Pipocacine formatadas
     let rota = type === 'movie' ? \`/embed/movie/\${id}\` : \`/embed/tv/\${id}/1/1\`;
     
-    // Dispara a requisição para o Prefixo do Discord
+    // Dispara a requisição para o Prefixo do Discord Portal (/player)
     iframe.src = \`/player\${rota}\`;
     
     document.getElementById('player-modal').classList.add('active');
@@ -234,7 +229,6 @@ function renderBryanflix(res: express.Response) {
     document.getElementById('player-modal').classList.remove('active');
   }
 
-  // Inicia o catálogo quando a página abre!
   loadHome();
 </script>
 </body>
@@ -329,13 +323,15 @@ export function startDashboard() {
   });
 
   // =====================================================================
-  // 🧭 ROTEADOR (Se for Foguetinho = Bryanflix | Se for Chrome = Dashboard)
+  // 🧭 ROTEADOR RAIZ: AGORA O BRYANFLIX É O SISTEMA PRINCIPAL!
   // =====================================================================
   app.get('/', async (req, res) => {
-    if (req.query.frame_id || req.query.instance_id) {
-      return renderBryanflix(res);
-    }
-    
+    // Agora o Bryanflix abre SEMPRE, seja no Discord ou na Raiz!
+    return renderBryanflix(res);
+  });
+
+  // A Rota "Antiga" da Raiz agora é o dashboard, acessado via /dashboard
+  app.get('/dashboard', async (req, res) => {
     res.send(`<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
@@ -427,13 +423,8 @@ export function startDashboard() {
 </html>`);
   });
 
-  // Também mantemos a rota caso alguém queira testar direto no navegador
-  app.get('/bryanflix', (req, res) => {
-    return renderBryanflix(res);
-  });
-
   // =====================================================================
-  // ROTAS ANTIGAS DO PAINEL DE CONTROLE (Dashboard)
+  // ROTAS ANTIGAS DO PAINEL DE CONTROLE (Painel Logado)
   // =====================================================================
   app.get('/api/discord-data', async (req, res) => {
     const { guildId } = req.query;
@@ -559,7 +550,7 @@ export function startDashboard() {
   });
 
   app.get('/painel', async (req, res) => {
-    if (req.cookies?.skyline_auth !== 'permitido') return res.redirect('/');
+    if (req.cookies?.skyline_auth !== 'permitido') return res.redirect('/dashboard');
     const userId = req.cookies?.skyline_userid;
     const userName = req.cookies?.skyline_username || 'Administrador';
     const avatarHash = req.cookies?.skyline_avatar;

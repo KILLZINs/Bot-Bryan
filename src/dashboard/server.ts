@@ -59,7 +59,7 @@ export function startDashboard() {
     : 'https://discord.com';
 
   // =====================================================================
-  // 🛡️ API DO BRYANFLIX (Busca e Imagens)
+  // 🛡️ API DO BRYANFLIX (Bypass seguro SSR)
   // =====================================================================
   app.get('/api/bryanflix/search', async (req, res) => {
     try {
@@ -86,9 +86,9 @@ export function startDashboard() {
   });
 
   // =====================================================================
-  // 🚫 AVISO DO PLAYER (Caso o usuário clique fora do Discord)
+  // 🚫 AVISO DO PLAYER (Bypass de Proteção do PipocaCine)
   // =====================================================================
-  app.get('/player/*', (req, res) => {
+  app.get('/players-source/*', (req, res) => {
     res.send(`
       <body style="background:#05050A; color:white; font-family:sans-serif; display:flex; justify-content:center; align-items:center; height:100vh; text-align:center;">
         <div>
@@ -103,13 +103,12 @@ export function startDashboard() {
   });
 
   // =====================================================================
-  // 🍿 FRONTEND DO BRYANFLIX (Interface com SSR Ativado)
+  // 🍿 FRONTEND DO BRYANFLIX (A Tela Oficial)
   // =====================================================================
   app.get('/bryanflix', async (req, res) => {
     let trendingMovies: any[] = [];
     let trendingTv: any[] = [];
     
-    // SSR: O bot baixa os filmes ANTES de entregar a página, evitando o erro de proxy do Discord!
     try {
       const [moviesRes, tvRes] = await Promise.all([
         axios.get(`https://api.themoviedb.org/3/trending/movie/week?api_key=${TMDB_KEY}&language=pt-BR`),
@@ -210,11 +209,9 @@ export function startDashboard() {
   </div>
 
   <script>
-    // Recupera os filmes que o servidor do Bryan injetou!
     const initialMovies = ${JSON.stringify(trendingMovies).replace(/</g, '\\u003c')};
     const initialTv = ${JSON.stringify(trendingTv).replace(/</g, '\\u003c')};
     
-    // Caminho dinâmico para burlar o proxy do Discord
     const basePath = window.location.pathname.endsWith('/bryanflix') 
       ? window.location.pathname.slice(0, -10) 
       : '';
@@ -276,10 +273,20 @@ export function startDashboard() {
       }, 600);
     }
 
+    // =======================================================
+    // 💡 A MÁGICA DA INTEGRAÇÃO COM PIPOCACINE
+    // =======================================================
     function openPlayer(type, id, title = 'Reproduzindo') {
       document.getElementById('player-title').innerText = title;
       const iframe = document.getElementById('video-frame');
-      iframe.src = \`/player/embed/\${type}/\${id}\`;
+      
+      // O PipocaCine usa o formato /embed/movie/ID e /embed/tv/ID/SEASON/EPISODE
+      let rota = type === 'movie' ? \`/embed/movie/\${id}\` : \`/embed/tv/\${id}/1/1\`;
+      
+      // O Iframe aponta para o Prefixo que você registrou no Discord Portal!
+      // O Discord vai capturar isso e jogar pro pipocacine.lat
+      iframe.src = \`/players-source\${rota}\`;
+      
       document.getElementById('player-modal').classList.add('active');
     }
 
@@ -288,7 +295,6 @@ export function startDashboard() {
       document.getElementById('player-modal').classList.remove('active');
     }
 
-    // Inicia a renderização
     loadHome();
   </script>
 </body>

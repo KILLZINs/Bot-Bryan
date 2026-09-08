@@ -44,7 +44,7 @@ async function validateGuildAccess(userId: string, guildId: string): Promise<boo
 }
 
 // =====================================================================
-// 🍿 RENDERIZADOR DO BRYANFLIX (A Netflix 100% Nativa Discord)
+// 🍿 RENDERIZADOR DO BRYANFLIX (A Netflix)
 // =====================================================================
 async function renderBryanflix(res: express.Response) {
   let trendingMovies: any[] = [];
@@ -83,9 +83,9 @@ async function renderBryanflix(res: express.Response) {
   .search-box:focus-within { border-color: var(--primary); box-shadow: 0 0 10px rgba(139, 92, 246, 0.3); }
   .search-box input { background: transparent; border: none; outline: none; color: white; width: 100%; font-size: 0.9rem; }
   
-  .hero { height: 60vh; display: flex; flex-direction: column; justify-content: flex-end; padding: 5% 4%; background: linear-gradient(to top, var(--bg) 0%, transparent 80%), radial-gradient(circle at center, rgba(139, 92, 246, 0.15) 0%, #05050A 100%); }
+  .hero { height: 60vh; display: flex; flex-direction: column; justify-content: flex-end; padding: 5% 4%; background: linear-gradient(to top, var(--bg) 0%, transparent 80%), radial-gradient(circle at center, rgba(139, 92, 246, 0.15) 0%, #05050A 100%); transition: background 0.5s ease; background-size: cover; background-position: center; }
   .hero h1 { font-size: 3.5rem; font-weight: 800; margin-bottom: 10px; text-shadow: 2px 2px 10px rgba(0,0,0,0.8); }
-  .hero p { font-size: 1.1rem; max-width: 600px; color: #ddd; margin-bottom: 25px; text-shadow: 1px 1px 5px rgba(0,0,0,0.8); }
+  .hero p { font-size: 1.1rem; max-width: 600px; color: #ddd; margin-bottom: 25px; text-shadow: 1px 1px 5px rgba(0,0,0,0.8); display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;}
   .hero .btn-play { background: var(--primary); color: white; padding: 12px 30px; border-radius: 6px; font-weight: 800; font-size: 1.1rem; border: none; cursor: pointer; display: inline-flex; gap: 10px; align-items: center; transition: 0.2s; box-shadow: 0 4px 15px rgba(139, 92, 246, 0.4); }
   .hero .btn-play:hover { transform: scale(1.05); background: #7C3AED; }
 
@@ -102,12 +102,17 @@ async function renderBryanflix(res: express.Response) {
   .movie-card:hover .movie-info { background: linear-gradient(to top, rgba(139, 92, 246, 0.9) 0%, rgba(0,0,0,0.7) 60%, transparent 100%); }
   .movie-info h4 { font-size: 0.9rem; margin-bottom: 5px; color: white; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; text-shadow: 1px 1px 3px black; }
 
-  /* Modal do Player Fixo */
-  #player-modal { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: black; z-index: 9999; display: none; flex-direction: column; }
+  /* Modal do Player Fixo e à prova de quebras */
+  #player-modal { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: #05050A; z-index: 999999; display: none; flex-direction: column; }
   #player-modal.active { display: flex !important; }
   .player-header { padding: 15px 25px; display: flex; justify-content: space-between; align-items: center; background: #131521; border-bottom: 1px solid var(--border); }
   .btn-close { background: rgba(239, 68, 68, 0.2); color: #EF4444; border: 1px solid #EF4444; padding: 8px 20px; border-radius: 6px; font-weight: bold; cursor: pointer; transition: 0.2s; }
   .btn-close:hover { background: #EF4444; color: white; }
+  
+  /* Botão Extra para abrir fora do Discord se falhar */
+  .btn-external { background: rgba(139, 92, 246, 0.2); color: #8B5CF6; border: 1px solid #8B5CF6; text-decoration: none; padding: 8px 20px; border-radius: 6px; font-weight: bold; transition: 0.2s; display: inline-block; margin-right: 15px; }
+  .btn-external:hover { background: #8B5CF6; color: white; }
+  
   iframe { flex: 1; width: 100%; height: 100%; border: none; background: black; }
 </style>
 </head>
@@ -121,12 +126,10 @@ async function renderBryanflix(res: express.Response) {
   </div>
 </nav>
 
-<header class="hero">
-  <h1>Lançamentos da Aliança</h1>
-  <p>Assista aos melhores filmes e séries com os seus amigos direto nas calls de voz do servidor, sem sair do Discord. Sem anúncios, sem interrupções.</p>
-  <div>
-    <button id="btn-hero-play" class="btn-play clickable-movie" data-type="movie" data-id="550" data-title="Clube da Luta">▶ Assistir Agora</button>
-  </div>
+<header class="hero" id="hero-header">
+  <h1 id="hero-title">Lançamentos da Aliança</h1>
+  <p id="hero-desc">Assista aos melhores filmes e séries com os seus amigos direto nas calls de voz do servidor, sem sair do Discord. Sem anúncios, sem interrupções.</p>
+  <div><button id="btn-hero-play" class="btn-play clickable-movie" data-type="movie" data-id="" data-title="">▶ Assistir Agora</button></div>
 </header>
 
 <div class="section" id="search-section" style="display: none;">
@@ -148,10 +151,14 @@ async function renderBryanflix(res: express.Response) {
   </div>
 </div>
 
+<!-- Modal do Player -->
 <div id="player-modal">
   <div class="player-header">
     <h3 style="color:white;" id="player-title">Carregando Filme...</h3>
-    <button id="btn-close-player" class="btn-close">X FECHAR</button>
+    <div>
+      <a id="btn-external-link" href="#" target="_blank" class="btn-external">Abrir no Navegador (Se não carregar)</a>
+      <button id="btn-close-player" class="btn-close">X FECHAR</button>
+    </div>
   </div>
   <iframe id="video-frame" allowfullscreen></iframe>
 </div>
@@ -165,7 +172,7 @@ async function renderBryanflix(res: express.Response) {
     if (!item.poster_path) return '';
     const title = item.title || item.name || 'Sem Título';
     
-    // Dataset limpo impede quebras de HTML. Não usamos onclick direto para burlar o CSP do Discord.
+    // As aspas não quebram mais nada!
     return \`
       <div class="movie-card clickable-movie" data-type="\${type}" data-id="\${item.id}" data-title="\${encodeURIComponent(title).replace(/'/g, "%27")}">
         <img src="/api/bryanflix/image?path=\${item.poster_path}" alt="Capa" onerror="this.src='https://via.placeholder.com/160x240?text=Capa'">
@@ -177,6 +184,25 @@ async function renderBryanflix(res: express.Response) {
     \`;
   }
 
+  function setupHero() {
+    if (initialMovies && initialMovies.length > 0) {
+      const topMovie = initialMovies[0]; // Pega o filme Top 1
+      const title = topMovie.title || topMovie.name;
+      
+      document.getElementById('hero-title').innerText = title;
+      document.getElementById('hero-desc').innerText = (topMovie.overview || '').substring(0, 150) + '...';
+      
+      // Atualiza o botão para tocar o filme em alta
+      const heroBtn = document.getElementById('btn-hero-play');
+      heroBtn.setAttribute('data-id', topMovie.id);
+      heroBtn.setAttribute('data-title', encodeURIComponent(title).replace(/'/g, "%27"));
+      
+      if(topMovie.backdrop_path) {
+         document.getElementById('hero-header').style.backgroundImage = \`linear-gradient(to top, var(--bg) 0%, transparent 80%), radial-gradient(circle at center, rgba(139, 92, 246, 0.15) 0%, #05050A 100%), url('/api/bryanflix/image?path=\${topMovie.backdrop_path}')\`;
+      }
+    }
+  }
+
   function loadHome() {
     const moviesGrid = document.getElementById('trending-movies');
     const tvGrid = document.getElementById('trending-tv');
@@ -184,8 +210,9 @@ async function renderBryanflix(res: express.Response) {
     if(initialMovies && initialMovies.length > 0) {
       moviesGrid.innerHTML = initialMovies.map(m => createCard(m, 'movie')).join('');
       tvGrid.innerHTML = initialTv.map(s => createCard(s, 'tv')).join('');
+      setupHero();
     } else {
-      moviesGrid.innerHTML = '<p style="color:#EF4444; padding:20px;">Falha ao carregar catálogo. A API não retornou dados.</p>';
+      moviesGrid.innerHTML = '<p style="color:#EF4444; padding:20px;">Falha ao obter catálogo da API.</p>';
       tvGrid.innerHTML = '';
     }
   }
@@ -219,7 +246,7 @@ async function renderBryanflix(res: express.Response) {
   });
 
   // =======================================================
-  // 💡 NÚCLEO DO PLAYER (Delegação de Eventos Inquebrável)
+  // 💡 NÚCLEO DO PLAYER (Bypass do Discord e embed.su)
   // =======================================================
   document.addEventListener('click', function(e) {
     const card = e.target.closest('.clickable-movie');
@@ -230,15 +257,17 @@ async function renderBryanflix(res: express.Response) {
       
       document.getElementById('player-title').innerText = title;
       const iframe = document.getElementById('video-frame');
+      const externalLink = document.getElementById('btn-external-link');
       
-      // Rota do embed.su
+      // O embed.su usa esse formato oficial
       let rota = type === 'movie' ? \`/embed/movie/\${id}\` : \`/embed/tv/\${id}/1/1\`;
       
-      // Roteamento Automático Inteligente (Túnel no Discord vs Link direto no Chrome)
+      // Se for discord, vai pelo proxy /player. 
+      // Se for navegador, vai direto pro player externo no link do botão
       const isDiscordActivity = window.location.search.includes('frame_id') || window.location.search.includes('instance_id');
       
-      // Se for discord, aciona o Prefixo /player. Se for navegador normal, usa link direto pra não bugar.
       iframe.src = isDiscordActivity ? \`/player\${rota}\` : \`https://embed.su\${rota}\`;
+      externalLink.href = \`https://embed.su\${rota}\`;
       
       document.getElementById('player-modal').classList.add('active');
     }
@@ -249,7 +278,6 @@ async function renderBryanflix(res: express.Response) {
     document.getElementById('player-modal').classList.remove('active');
   });
 
-  // Renderiza no início
   loadHome();
 </script>
 </body>
@@ -281,18 +309,6 @@ export function startDashboard() {
   // =====================================================================
   // 🛡️ API DO BRYANFLIX (Busca, Tendências e Imagens)
   // =====================================================================
-  app.get('/api/bryanflix/trending', async (req, res) => {
-    try {
-      const [moviesRes, tvRes] = await Promise.all([
-        axios.get(`https://api.themoviedb.org/3/trending/movie/week?api_key=${TMDB_KEY}&language=pt-BR`),
-        axios.get(`https://api.themoviedb.org/3/trending/tv/week?api_key=${TMDB_KEY}&language=pt-BR`)
-      ]);
-      res.json({ movies: moviesRes.data.results, tv: tvRes.data.results });
-    } catch (err: any) {
-      res.json({ movies: [], tv: [] });
-    }
-  });
-
   app.get('/api/bryanflix/search', async (req, res) => {
     try {
       const query = req.query.q;
@@ -395,7 +411,7 @@ export function startDashboard() {
     <a href="/" class="brand"><img src="/skylineicon.jpg" alt="Bryan"> Bryan Bot</a>
     <div class="nav-links">
       <a href="${botInviteUrl}">Adicionar ao Servidor</a>
-      <a href="/painel" class="btn-login">Acessar Painel</a>
+      <a href="/login" class="btn-login">Acessar Painel</a>
     </div>
   </nav>
   
@@ -405,7 +421,7 @@ export function startDashboard() {
     <p>Traga o <b>Bryan</b> para o seu servidor e conecte-se à maior rede interdimensional. Inteligência Artificial por voz, Feed Social, RPG imersivo e moderação absoluta.</p>
     <div class="btn-group">
       <a href="${botInviteUrl}" class="btn btn-primary">Adicionar ao Discord</a>
-      <a href="/painel" class="btn btn-secondary">Configurar Bot</a>
+      <a href="/login" class="btn btn-secondary">Configurar Bot</a>
     </div>
   </header>
   

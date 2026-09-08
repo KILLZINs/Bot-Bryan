@@ -98,15 +98,14 @@ async function renderBryanflix(res: express.Response) {
   .movie-card img { width: 100%; height: 240px; object-fit: cover; border-radius: 8px; transition: 0.3s; }
   .movie-card:hover { transform: scale(1.05); z-index: 10; box-shadow: 0 10px 20px rgba(139, 92, 246, 0.3); }
   
-  /* Gradiente e texto sempre visíveis, dando cara de Netflix real */
   .movie-info { position: absolute; bottom: 0; padding: 20px 10px 10px 10px; background: linear-gradient(to top, rgba(0,0,0,0.95) 0%, rgba(0,0,0,0.7) 50%, transparent 100%); width: 100%; transition: 0.3s; }
   .movie-card:hover .movie-info { background: linear-gradient(to top, rgba(139, 92, 246, 0.9) 0%, rgba(0,0,0,0.7) 60%, transparent 100%); }
   .movie-info h4 { font-size: 0.9rem; margin-bottom: 5px; color: white; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; text-shadow: 1px 1px 3px black; }
 
   #player-modal { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: black; z-index: 9999; display: none; flex-direction: column; }
   #player-modal.active { display: flex; }
-  .player-header { padding: 15px; display: flex; justify-content: space-between; align-items: center; background: linear-gradient(to bottom, rgba(0,0,0,0.8), transparent); position: absolute; top: 0; width: 100%; z-index: 10; }
-  .btn-close { background: rgba(255,0,0,0.7); color: white; border: none; padding: 8px 15px; border-radius: 4px; font-weight: bold; cursor: pointer; transition: 0.2s; }
+  .player-header { padding: 15px; display: flex; justify-content: space-between; align-items: center; background: linear-gradient(to bottom, rgba(0,0,0,0.8), transparent); position: absolute; top: 0; width: 100%; z-index: 10; pointer-events: none; }
+  .btn-close { pointer-events: auto; background: rgba(255,0,0,0.7); color: white; border: none; padding: 8px 15px; border-radius: 4px; font-weight: bold; cursor: pointer; transition: 0.2s; }
   .btn-close:hover { background: red; }
   iframe { flex: 1; width: 100%; height: 100%; border: none; }
 </style>
@@ -158,10 +157,10 @@ async function renderBryanflix(res: express.Response) {
     if (!item.poster_path) return '';
     const title = item.title || item.name || 'Sem Título';
     
-    // As aspas não quebram mais nada! Passamos tudo como atributo HTML Data
+    // O pulo do gato: Dados limpos no dataset impedem o HTML de quebrar com aspas
     return \`
       <div class="movie-card" data-type="\${type}" data-id="\${item.id}" data-title="\${title.replace(/"/g, '&quot;')}" onclick="openPlayerFromEvent(this)">
-        <img src="/api/bryanflix/image?path=\${item.poster_path}" alt="Capa">
+        <img src="/api/bryanflix/image?path=\${item.poster_path}" alt="Capa" onerror="this.src='https://via.placeholder.com/160x240?text=Capa'">
         <div class="movie-info">
           <h4>\${title}</h4>
           <span style="color:var(--primary); font-weight:bold; font-size:0.85rem;">⭐ \${item.vote_average ? item.vote_average.toFixed(1) : 'N/A'}</span>
@@ -212,7 +211,7 @@ async function renderBryanflix(res: express.Response) {
   }
 
   // =======================================================
-  // 💡 NÚCLEO DO PLAYER (100% Protegido contra Erros)
+  // 💡 NÚCLEO DO PLAYER (Conexão direta com pipocacine pelo túnel)
   // =======================================================
   function openPlayerFromEvent(element) {
     const type = element.getAttribute('data-type');
@@ -222,9 +221,10 @@ async function renderBryanflix(res: express.Response) {
     document.getElementById('player-title').innerText = title;
     const iframe = document.getElementById('video-frame');
     
+    // Formato de rotas padrão do Pipocacine (embeds)
     let rota = type === 'movie' ? \`/embed/movie/\${id}\` : \`/embed/tv/\${id}/1/1\`;
     
-    // Envia a requisição direto pro prefixo mascarado no Discord
+    // Dispara a requisição para o Prefixo do Discord
     iframe.src = \`/players-source\${rota}\`;
     
     document.getElementById('player-modal').classList.add('active');
@@ -244,6 +244,12 @@ async function renderBryanflix(res: express.Response) {
 export function startDashboard() {
   const app = express();
   
+  // Habilita o bypass no express para imagens carregarem rápido
+  app.use((req, res, next) => {
+    res.header('Access-Control-Allow-Origin', '*');
+    next();
+  });
+
   app.use(cookieParser());
   app.use(express.json());
   app.use(express.static(path.join(process.cwd(), 'public')));
@@ -272,9 +278,7 @@ export function startDashboard() {
   });
 
   // =====================================================================
-  // 📸 PROXY DE IMAGENS CORRIGIDO (Com .PIPE)
-  // O Express agora passa as imagens como "Download Contínuo" (Stream).
-  // Nunca mais teremos imagens invisíveis ou tela preta!
+  // 📸 PROXY DE IMAGENS CORRIGIDO (.PIPE)
   // =====================================================================
   app.get('/api/bryanflix/image', async (req, res) => {
     try {
@@ -285,14 +289,13 @@ export function startDashboard() {
       const response = await axios({
         method: 'GET',
         url: `https://image.tmdb.org/t/p/w342${imgPath}`,
-        responseType: 'stream' // MÁGICA AQUI: Stream impede o arquivo de quebrar!
+        responseType: 'stream' 
       });
       
       res.set('Content-Type', 'image/jpeg');
-      res.set('Cache-Control', 'public, max-age=31536000'); // Fica ultra rápido
-      response.data.pipe(res); // Entrega o fluxo de dados para a tela
+      res.set('Cache-Control', 'public, max-age=31536000'); 
+      response.data.pipe(res); 
     } catch (e: any) {
-      console.error('[Bryanflix] Erro de imagem:', e.message);
       res.status(404).end();
     }
   });

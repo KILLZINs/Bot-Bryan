@@ -5,7 +5,7 @@ import path from 'path';
 import { prisma } from '../database/client';
 
 const BOT_OWNER_ID = '1195254699943796791';
-const TMDB_KEY = '15d2ea6d0dc1d476efbcaa3bf51fd921'; 
+const TMDB_KEY = '15d2ea6d0dc1d476efbcaa3bf51fd921';
 
 const SERVER_CATEGORIES = [
   { category: "🤖 Inteligência Artificial", desc: "Sistemas de voz e conversação avançada", features: [{ id: 'featVoiceAi', name: 'Callia (IA de Voz)', desc: 'Permite que os membros chamem o Bryan ou a IA Local.', icon: '🎙️' }] },
@@ -40,16 +40,17 @@ const GLOBAL_SETTINGS = [
 async function validateGuildAccess(userId: string, guildId: string): Promise<boolean> {
   if (userId === BOT_OWNER_ID) return true;
   const access = await prisma.allianceServerMember.findFirst({ where: { userId, guildId } });
-  return !access;
+  return access !== null;
 }
 
 // =====================================================================
-// 🍿 RENDERIZADOR DO BRYANFLIX (A Netflix 100% Nativa)
+// 🍿 RENDERIZADOR DO BRYANFLIX (A Netflix)
 // =====================================================================
 async function renderBryanflix(res: express.Response) {
   let trendingMovies: any[] = [];
   let trendingTv: any[] = [];
-
+  let tmdbError = '';
+  
   try {
     const [moviesRes, tvRes] = await Promise.all([
       axios.get(`https://api.themoviedb.org/3/trending/movie/week?api_key=${TMDB_KEY}&language=pt-BR`),
@@ -58,6 +59,7 @@ async function renderBryanflix(res: express.Response) {
     trendingMovies = moviesRes.data.results || [];
     trendingTv = tvRes.data.results || [];
   } catch (err: any) {
+    tmdbError = err.message;
     console.error('[Bryanflix] Erro no TMDB Trending SSR:', err.message);
   }
 
@@ -102,17 +104,12 @@ async function renderBryanflix(res: express.Response) {
   .movie-card:hover .movie-info { background: linear-gradient(to top, rgba(139, 92, 246, 0.9) 0%, rgba(0,0,0,0.7) 60%, transparent 100%); }
   .movie-info h4 { font-size: 0.9rem; margin-bottom: 5px; color: white; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; text-shadow: 1px 1px 3px black; }
 
-
   #player-modal { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: #05050A; z-index: 999999; display: none; flex-direction: column; }
   #player-modal.active { display: flex !important; }
   .player-header { padding: 15px 25px; display: flex; justify-content: space-between; align-items: center; background: #131521; border-bottom: 1px solid var(--border); }
   .btn-close { background: rgba(239, 68, 68, 0.2); color: #EF4444; border: 1px solid #EF4444; padding: 8px 20px; border-radius: 6px; font-weight: bold; cursor: pointer; transition: 0.2s; }
   .btn-close:hover { background: #EF4444; color: white; }
   iframe { flex: 1; width: 100%; height: 100%; border: none; background: #000; }
-
-
-
-
 </style>
 </head>
 <body>
@@ -150,17 +147,9 @@ async function renderBryanflix(res: express.Response) {
   </div>
 </div>
 
-
 <div id="player-modal">
   <div class="player-header">
     <h3 style="color:white; text-shadow: 1px 1px 3px black; font-size:1.1rem;" id="player-title">Carregando Filme...</h3>
-
-
-
-
-
-
-
     <button id="btn-close-player" class="btn-close">X FECHAR</button>
   </div>
   <iframe id="video-frame" allowfullscreen></iframe>
@@ -169,12 +158,11 @@ async function renderBryanflix(res: express.Response) {
 <script>
   const initialMovies = ${JSON.stringify(trendingMovies).replace(/</g, '\\u003c')};
   const initialTv = ${JSON.stringify(trendingTv).replace(/</g, '\\u003c')};
-
+  const ssrError = "${tmdbError}";
 
   function createCard(item, type) {
     if (!item.poster_path) return '';
     const title = item.title || item.name || 'Sem Título';
-
     return \`
       <div class="movie-card clickable-movie" data-type="\${type}" data-id="\${item.id}" data-title="\${encodeURIComponent(title).replace(/'/g, "%27")}">
         <img src="/api/bryanflix/image?path=\${item.poster_path}" alt="Capa" onerror="this.src='https://via.placeholder.com/160x240?text=Capa'">
@@ -186,17 +174,31 @@ async function renderBryanflix(res: express.Response) {
     \`;
   }
 
-  function loadHome() {
+  async function loadHome() {
     const moviesGrid = document.getElementById('trending-movies');
     const tvGrid = document.getElementById('trending-tv');
 
-    if(initialMovies && initialMovies.length > 0) {
-      moviesGrid.innerHTML = initialMovies.map(m => createCard(m, 'movie')).join('');
-      tvGrid.innerHTML = initialTv.map(s => createCard(s, 'tv')).join('');
+    let movies = initialMovies;
+    let tv = initialTv;
+
+    // Se o SSR falhar na inicialização, tenta pelo client-side
+    if (!movies || movies.length === 0) {
+      try {
+        const res = await fetch('/api/bryanflix/trending');
+        const data = await res.json();
+        movies = data.movies || [];
+        tv = data.tv || [];
+      } catch (e) {
+        console.error("Fallback de API falhou:", e);
+      }
+    }
+
+    if(movies && movies.length > 0) {
+      moviesGrid.innerHTML = movies.map(m => createCard(m, 'movie')).join('');
+      tvGrid.innerHTML = tv.map(s => createCard(s, 'tv')).join('');
       
-      // O Botão Assistir Agora puxa o melhor filme do dia!
-      const topMovie = initialMovies[0];
-      document.getElementById('hero-title').innerText = topMovie.title || topMovie.name;
+      const topMovie = movies[0];
+      document.getElementById('hero-title').innerText = topMovie.title || topMovie.name || 'Lançamentos';
       document.getElementById('hero-desc').innerText = (topMovie.overview || '').substring(0, 150) + '...';
       
       const heroBtn = document.getElementById('btn-hero-play');
@@ -207,20 +209,8 @@ async function renderBryanflix(res: express.Response) {
       if(topMovie.backdrop_path) {
          document.getElementById('hero-header').style.backgroundImage = \`linear-gradient(to top, var(--bg) 0%, transparent 80%), radial-gradient(circle at center, rgba(139, 92, 246, 0.15) 0%, #05050A 100%), url('/api/bryanflix/image?path=\${topMovie.backdrop_path}')\`;
       }
-
-
-
-
-
-
-
-
-
-
-
-
     } else {
-      moviesGrid.innerHTML = '<p style="color:#EF4444; padding:20px;">Falha ao carregar catálogo. Verifique a chave da API.</p>';
+      moviesGrid.innerHTML = \`<p style="color:#EF4444; padding:20px;">Falha ao carregar catálogo. TMDB bloqueado ou offline. \${ssrError}</p>\`;
       tvGrid.innerHTML = '';
     }
   }
@@ -245,9 +235,8 @@ async function renderBryanflix(res: express.Response) {
         
         if(validResults.length > 0) {
           searchGrid.innerHTML = validResults.map(r => createCard(r, r.media_type)).join('');
-
         } else {
-          searchGrid.innerHTML = '<p style="color:#9CA3AF; padding:20px;">Nenhum resultado encontrado para "' + query + '".</p>';
+          searchGrid.innerHTML = '<p style="color:#9CA3AF; padding:20px;">Nenhum resultado encontrado.</p>';
         }
         searchSection.style.display = 'block';
       } catch (e) {}
@@ -255,7 +244,7 @@ async function renderBryanflix(res: express.Response) {
   });
 
   // =======================================================
-  // 💡 NÚCLEO DO PLAYER (Delegação e embed.su)
+  // 💡 NÚCLEO DO PLAYER NATIVO (Delegação e embed.su)
   // =======================================================
   document.addEventListener('click', function(e) {
     const card = e.target.closest('.clickable-movie');
@@ -271,21 +260,6 @@ async function renderBryanflix(res: express.Response) {
       let rota = type === 'movie' ? \`/embed/movie/\${id}\` : \`/embed/tv/\${id}/1/1\`;
       
       const isDiscordActivity = window.location.search.includes('frame_id') || window.location.search.includes('instance_id');
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
       
       // Se for discord, usa o túnel /player. Se for navegador web normal, usa direto pra não falhar.
       iframe.src = isDiscordActivity ? \`/player\${rota}\` : \`https://embed.su\${rota}\`;
@@ -293,40 +267,6 @@ async function renderBryanflix(res: express.Response) {
       document.getElementById('player-modal').classList.add('active');
     }
   });
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
   document.getElementById('btn-close-player').addEventListener('click', () => {
     document.getElementById('video-frame').src = '';
@@ -341,7 +281,7 @@ async function renderBryanflix(res: express.Response) {
 
 export function startDashboard() {
   const app = express();
-
+  
   app.use((req, res, next) => {
     res.header('Access-Control-Allow-Origin', '*');
     res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
@@ -362,9 +302,6 @@ export function startDashboard() {
     ? `https://discord.com/oauth2/authorize?client_id=${clientId}&permissions=8&scope=bot%20applications.commands`
     : 'https://discord.com';
 
-  // =====================================================================
-  // 🛡️ API DO BRYANFLIX (Busca, Tendências e Imagens)
-  // =====================================================================
   app.get('/api/bryanflix/trending', async (req, res) => {
     try {
       const [moviesRes, tvRes] = await Promise.all([
@@ -393,13 +330,13 @@ export function startDashboard() {
       let imgPath = req.query.path as string;
       if (!imgPath) return res.status(404).end();
       if (!imgPath.startsWith('/')) imgPath = '/' + imgPath;
-
+      
       const response = await axios({
         method: 'GET',
         url: `https://image.tmdb.org/t/p/w342${imgPath}`,
         responseType: 'stream' 
       });
-
+      
       res.set('Content-Type', 'image/jpeg');
       res.set('Cache-Control', 'public, max-age=31536000'); 
       response.data.pipe(res); 
@@ -408,35 +345,12 @@ export function startDashboard() {
     }
   });
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-  // =====================================================================
-  // 🧭 ROTEAMENTO INTELIGENTE DE DOMÍNIOS
-  // =====================================================================
   app.get('/', async (req, res) => {
     if (req.hostname.includes('bryanflix') || req.query.frame_id || req.query.instance_id) {
       await renderBryanflix(res);
       return;
     }
-
-    // TELA INICIAL (Dashboard)
+    
     res.send(`<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
@@ -497,7 +411,7 @@ export function startDashboard() {
     <a href="/" class="brand"><img src="/skylineicon.jpg" alt="Bryan"> Bryan Bot</a>
     <div class="nav-links">
       <a href="${botInviteUrl}">Adicionar ao Servidor</a>
-      <a href="/painel" class="btn-login">Acessar Painel</a>
+      <a href="/login" class="btn-login">Acessar Painel</a>
     </div>
   </nav>
   
@@ -507,7 +421,7 @@ export function startDashboard() {
     <p>Traga o <b>Bryan</b> para o seu servidor e conecte-se à maior rede interdimensional. Inteligência Artificial por voz, Feed Social, RPG imersivo e moderação absoluta.</p>
     <div class="btn-group">
       <a href="${botInviteUrl}" class="btn btn-primary">Adicionar ao Discord</a>
-      <a href="/painel" class="btn btn-secondary">Configurar Bot</a>
+      <a href="/login" class="btn btn-secondary">Configurar Bot</a>
     </div>
   </header>
   
@@ -532,9 +446,6 @@ export function startDashboard() {
     await renderBryanflix(res);
   });
 
-  // =====================================================================
-  // ROTAS DO PAINEL DE CONTROLE LOGADO
-  // =====================================================================
   app.get('/api/discord-data', async (req, res) => {
     const { guildId } = req.query;
     const token = process.env.DISCORD_TOKEN;
@@ -570,7 +481,7 @@ export function startDashboard() {
 
       const userRes = await axios.get('https://discord.com/api/users/@me', { headers: { Authorization: `Bearer ${tokenRes.data.access_token}` } });
       const { id: userId, username, avatar } = userRes.data;
-
+      
       const isBotOwner = userId === BOT_OWNER_ID;
       const userRoles = await prisma.allianceServerMember.findMany({ where: { userId } });
 
@@ -663,7 +574,7 @@ export function startDashboard() {
     const userId = req.cookies?.skyline_userid;
     const userName = req.cookies?.skyline_username || 'Administrador';
     const avatarHash = req.cookies?.skyline_avatar;
-
+    
     const avatarUrl = avatarHash 
       ? `https://cdn.discordapp.com/avatars/${userId}/${avatarHash}.png?size=256`
       : '/skylineicon.jpg';

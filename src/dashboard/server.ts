@@ -15,23 +15,6 @@ const SERVER_CATEGORIES = [
   { category: "🎫 Atendimento & Utilidades", desc: "Suporte aos membros e streaming", features: [{ id: 'featTickets', name: 'Tickets de Suporte', desc: 'Salas privadas de atendimento.', icon: '🎫' }, { id: 'featSelfRole', name: 'Registro de Auto-Cargos', desc: 'Menus de seleção para cargos.', icon: '🎭' }, { id: 'featMusic', name: 'Player de Música', desc: 'Streaming de áudio em canais de voz.', icon: '🎵' }, { id: 'featAnnouncements', name: 'Anúncios & Eventos', desc: 'Transmissão de comunicados.', icon: '📢' }] }
 ];
 
-const GLOBAL_CATEGORIES = [
-  { category: "⚙️ Sistemas Centrais Globais", features: [{ id: 'featAfk', name: 'Sistema AFK Global', desc: 'Comando /afk na rede.' }, { id: 'featWelcomeDm', name: 'DM de Boas-vindas', desc: 'Mensagem privada a novos membros.' }] },
-  { category: "🌍 Master Switches (Trava Absoluta)", features: [{ id: 'featSocial', name: 'Feed Social (Insta)', desc: 'Desativa o Feed globalmente.' }, { id: 'featVoiceAi', name: 'IA de Voz (Callia)', desc: 'Proíbe a Callia em todos os servers.' }, { id: 'featRpg', name: 'Sistema RPG', desc: 'Desliga o RPG globalmente.' }, { id: 'featEconomy', name: 'Economia & Lojas', desc: 'Congela todas as lojas.' }, { id: 'featTickets', name: 'Sistema de Tickets', desc: 'Bloqueia novos atendimentos.' }, { id: 'featMusic', name: 'Player de Música', desc: 'Desliga o bot de música.' }, { id: 'antiSpam', name: 'Defesa Anti-Spam', desc: 'Desativa o bloqueador em massa.' }, { id: 'featGiveaways', name: 'Sorteios', desc: 'Trava todos os sorteios.' }, { id: 'featLeveling', name: 'Sistema de XP', desc: 'Congela ganho de XP global.' }, { id: 'featReviveChat', name: 'Reviver Chat (IA)', desc: 'Desliga o monitor de inatividade.' }] }
-];
-
-const SERVER_SETTINGS = [
-  { category: "💬 Boas-Vindas", desc: "Crie um embed rico para receber os novos membros no servidor.", items: [{ id: 'welcomeMessage', name: 'Construtor de Embed', type: 'embed_builder', placeholder: '' }] },
-  { category: "🤖 IA Customizada", desc: "Configure a personalidade da IA caso este servidor não possua a Suki.", items: [{ id: 'aiCustomName', name: 'Nome da IA Local', type: 'text', placeholder: 'Ex: Jarvis, Cortana...' }, { id: 'aiCustomVoice', name: 'Voz da IA (M/F)', type: 'text', placeholder: 'Masculina ou Feminina' }, { id: 'aiCustomAvatar', name: 'Avatar da IA (URL)', type: 'text', placeholder: 'Link de uma imagem png/jpg' }, { id: 'aiSystemPrompt', name: 'Prompt de Comportamento Base', type: 'textarea', placeholder: 'Descreva a personalidade da IA para este servidor...' }] },
-  { category: "🧟 Reviver Chat", desc: "O bot enviará uma pergunta gerada por IA para reanimar o chat inativo.", items: [{ id: 'reviveChannelId', name: 'Canal Alvo', type: 'channel', placeholder: 'Selecione o canal' }, { id: 'reviveRoleId', name: 'Cargo para Mencionar', type: 'role', placeholder: 'Selecione o cargo' }, { id: 'reviveTimeout', name: 'Tempo de Inatividade', type: 'number', placeholder: 'Tempo em minutos (Ex: 120 para 2 horas)' }, { id: 'revivePrompt', name: 'Prompt da IA', type: 'textarea', placeholder: 'Ex: Faça uma pergunta polêmica e divertida sobre animes ou jogos.' }] },
-  { category: "💎 Sistema VIP", desc: "Configuração do ecossistema de apoiadores e benefícios", items: [{ id: 'vipRoleId', name: 'Cargo VIP Base', type: 'role', placeholder: 'Selecione o cargo' }, { id: 'vipTicketCategoryId', name: 'Cat. de Gradiente', type: 'channel', placeholder: 'Selecione a categoria' }] },
-  { category: "📸 Feed Social", desc: "Personalize a aparência dos posts e canais de fotos", items: [{ id: 'feedChannelId', name: 'Canal do Feed', type: 'channel', placeholder: 'Selecione o canal' }, { id: 'feedEmbedColor', name: 'Cor do Card (HEX)', type: 'color', placeholder: '#8B5CF6' }, { id: 'feedLikeEmoji', name: 'Emoji de Curtir', type: 'text', placeholder: '❤️' }, { id: 'feedFollowEmoji', name: 'Emoji de Seguir', type: 'text', placeholder: '🔔' }, { id: 'feedCommentEmoji', name: 'Emoji de Comentar', type: 'text', placeholder: '💬' }, { id: 'feedFooterText', name: 'Rodapé das Postagens', type: 'text', placeholder: '📸 Instagram Skyline' }] },
-  { category: "🌌 Rede Aliança", desc: "Integração oficial do servidor na rede global", items: [{ id: 'allianceChannelId', name: 'Canal da Aliança', type: 'channel', placeholder: 'Selecione o canal' }] },
-  { category: "📁 Canais de Logs", desc: "Direcione onde cada sistema do bot enviará avisos", items: [{ id: 'welcomeChannelId', name: 'Canal de Boas-Vindas', type: 'channel', placeholder: 'Selecione o canal' }, { id: 'announcementChannelId', name: 'Canal de Anúncios', type: 'channel', placeholder: 'Selecione o canal' }, { id: 'logChannelId', name: 'Canal de Logs Gerais', type: 'channel', placeholder: 'Selecione o canal' }, { id: 'levelUpChannelId', name: 'Canal de Level Up', type: 'channel', placeholder: 'Selecione o canal' }, { id: 'suggestionChannelId', name: 'Canal de Sugestões', type: 'channel', placeholder: 'Selecione o canal' }, { id: 'feedbackChannelId', name: 'Canal de Feedback', type: 'channel', placeholder: 'Selecione o canal' }] },
-  { category: "🎫 Tickets", desc: "Configuração de atendimento e histórico", items: [{ id: 'ticketCategoryId', name: 'Categoria dos Tickets', type: 'channel', placeholder: 'Selecione a categoria' }, { id: 'ticketLogChannelId', name: 'Canal de Transcrições', type: 'channel', placeholder: 'Selecione o canal' }] },
-  { category: "🛡️ Cargos", desc: "Definição de hierarquia e cargos automáticos", items: [{ id: 'adminRoleId', name: 'Cargo de Administrador', type: 'role', placeholder: 'Selecione o cargo' }, { id: 'modRoleId', name: 'Cargo de Moderador', type: 'role', placeholder: 'Selecione o cargo' }, { id: 'autoRoleId', name: 'Cargo Automático', type: 'role', placeholder: 'Selecione o cargo' }, { id: 'memberRoleId', name: 'Membro Registrado', type: 'role', placeholder: 'Selecione o cargo' }, { id: 'mutedRoleId', name: 'Silenciado (Muted)', type: 'role', placeholder: 'Selecione o cargo' }] }
-];
-
 const GLOBAL_SETTINGS = [
   { category: "🤖 Perfil do Bryan", desc: "Altere a aparência, bio e status dinâmicos do Bryan diretamente no Discord.", items: [{ id: 'botAvatarUrl', name: 'Foto de Perfil (URL)', type: 'text', placeholder: 'Link da imagem (terminada em .png ou .jpg)' }, { id: 'botBannerUrl', name: 'Banner do Perfil (URL)', type: 'text', placeholder: 'Link do banner' }, { id: 'botPronouns', name: 'Pronomes', type: 'text', placeholder: 'Ex: Ele/Dele' }, { id: 'botBio', name: 'Biografia do Perfil', type: 'textarea', placeholder: 'Escreva a bio que aparecerá no perfil do bot' }, { id: 'botStatusRotation', name: 'Status Rotativo (1 por linha)', type: 'textarea', placeholder: 'Ex:\nJogando Roblox\nAssistindo Netflix\nOuvindo Spotify' }] },
   { category: "🎨 Visual Global", desc: "Personalização de rodapés e cores em todos os servidores", items: [{ id: 'footerText', name: 'Texto de Rodapé Padrão', type: 'text', placeholder: 'Aparece nos embeds gerais' }, { id: 'rpFooterText', name: 'Rodapé Roleplay', type: 'text', placeholder: 'Aparece nos comandos de /rp' }, { id: 'botIconUrl', name: 'URL do Ícone do Bot', type: 'text', placeholder: 'Link direto da imagem do ícone para Embeds' }, { id: 'primaryColor', name: 'Cor Primária dos Embeds', type: 'color', placeholder: '#8B5CF6' }] }
@@ -44,7 +27,7 @@ async function validateGuildAccess(userId: string, guildId: string): Promise<boo
 }
 
 // =====================================================================
-// 🍿 RENDERIZADOR DO BRYANFLIX
+// 🍿 RENDERIZADOR DO BRYANFLIX (Netflix Nativa com Seletor)
 // =====================================================================
 async function renderBryanflix(res: express.Response) {
   let trendingMovies: any[] = [];
@@ -60,7 +43,6 @@ async function renderBryanflix(res: express.Response) {
     trendingTv = tvRes.data.results || [];
   } catch (err: any) {
     tmdbError = err.message;
-    console.error('[Bryanflix] Erro no TMDB Trending SSR:', err.message);
   }
 
   res.send(`<!DOCTYPE html>
@@ -104,10 +86,19 @@ async function renderBryanflix(res: express.Response) {
   .movie-card:hover .movie-info { background: linear-gradient(to top, rgba(139, 92, 246, 0.9) 0%, rgba(0,0,0,0.7) 60%, transparent 100%); }
   .movie-info h4 { font-size: 0.9rem; margin-bottom: 5px; color: white; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; text-shadow: 1px 1px 3px black; }
 
+  /* Modal do Player com Controles de Episódios Injetados */
   #player-modal { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: #05050A; z-index: 999999; display: none; flex-direction: column; }
   #player-modal.active { display: flex !important; }
-  .player-header { padding: 15px 25px; display: flex; justify-content: space-between; align-items: center; background: #131521; border-bottom: 1px solid var(--border); }
-  .btn-close { background: rgba(239, 68, 68, 0.2); color: #EF4444; border: 1px solid #EF4444; padding: 8px 20px; border-radius: 6px; font-weight: bold; cursor: pointer; transition: 0.2s; }
+  .player-header { padding: 10px 20px; display: flex; justify-content: space-between; align-items: center; background: #131521; border-bottom: 1px solid var(--border); flex-wrap: wrap; gap: 10px;}
+  .player-title-box { display: flex; align-items: center; gap: 15px; flex: 1; min-width: 300px; }
+  #player-title { color: white; font-size: 1.1rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 300px; }
+  
+  /* Seletor Nativo de Séries */
+  #tv-controls { display: none; gap: 10px; }
+  #tv-controls select { background: #1A1D2D; color: white; border: 1px solid var(--primary); padding: 8px 12px; border-radius: 6px; outline: none; font-weight: 600; cursor: pointer; max-width: 250px; font-size: 0.9rem; }
+  #tv-controls select:focus { box-shadow: 0 0 5px rgba(139, 92, 246, 0.5); }
+
+  .btn-close { background: rgba(239, 68, 68, 0.2); color: #EF4444; border: 1px solid #EF4444; padding: 8px 20px; border-radius: 6px; font-weight: bold; cursor: pointer; transition: 0.2s; white-space: nowrap; }
   .btn-close:hover { background: #EF4444; color: white; }
   iframe { flex: 1; width: 100%; height: 100%; border: none; background: #000; }
 </style>
@@ -149,7 +140,14 @@ async function renderBryanflix(res: express.Response) {
 
 <div id="player-modal">
   <div class="player-header">
-    <h3 style="color:white; text-shadow: 1px 1px 3px black; font-size:1.1rem;" id="player-title">Carregando Filme...</h3>
+    <div class="player-title-box">
+      <h3 id="player-title">Carregando...</h3>
+      <!-- Nossos Seletores Nativos -->
+      <div id="tv-controls">
+        <select id="season-select"><option value="1">Temporada 1</option></select>
+        <select id="episode-select"><option value="1">Carregando episódios...</option></select>
+      </div>
+    </div>
     <button id="btn-close-player" class="btn-close">X FECHAR</button>
   </div>
   <iframe id="video-frame" allowfullscreen></iframe>
@@ -158,7 +156,7 @@ async function renderBryanflix(res: express.Response) {
 <script>
   const initialMovies = ${JSON.stringify(trendingMovies).replace(/</g, '\\u003c')};
   const initialTv = ${JSON.stringify(trendingTv).replace(/</g, '\\u003c')};
-  const ssrError = "${tmdbError}";
+  let currentTvId = null;
 
   function createCard(item, type) {
     if (!item.poster_path) return '';
@@ -188,7 +186,7 @@ async function renderBryanflix(res: express.Response) {
         movies = data.movies || [];
         tv = data.tv || [];
       } catch (e) {
-        console.error("Fallback de API falhou:", e);
+        console.error("Fallback falhou");
       }
     }
 
@@ -209,7 +207,7 @@ async function renderBryanflix(res: express.Response) {
          document.getElementById('hero-header').style.backgroundImage = \`linear-gradient(to top, var(--bg) 0%, transparent 80%), radial-gradient(circle at center, rgba(139, 92, 246, 0.15) 0%, #05050A 100%), url('/api/bryanflix/image?path=\${topMovie.backdrop_path}')\`;
       }
     } else {
-      moviesGrid.innerHTML = \`<p style="color:#EF4444; padding:20px;">Falha ao carregar catálogo. TMDB bloqueado ou offline. \${ssrError}</p>\`;
+      moviesGrid.innerHTML = \`<p style="color:#EF4444; padding:20px;">Falha ao carregar catálogo. A chave TMDB pode estar bloqueada.</p>\`;
       tvGrid.innerHTML = '';
     }
   }
@@ -235,7 +233,7 @@ async function renderBryanflix(res: express.Response) {
         if(validResults.length > 0) {
           searchGrid.innerHTML = validResults.map(r => createCard(r, r.media_type)).join('');
         } else {
-          searchGrid.innerHTML = '<p style="color:#9CA3AF; padding:20px;">Nenhum resultado encontrado para "' + query + '".</p>';
+          searchGrid.innerHTML = '<p style="color:#9CA3AF; padding:20px;">Nenhum resultado encontrado.</p>';
         }
         searchSection.style.display = 'block';
       } catch (e) {}
@@ -243,9 +241,47 @@ async function renderBryanflix(res: express.Response) {
   });
 
   // =======================================================
-  // 💡 NÚCLEO DO PLAYER (Delegação Total - Clicks Inquebráveis)
+  // 💡 LÓGICA DE SÉRIES NATIVAS NO PAINEL
   // =======================================================
-  document.addEventListener('click', function(e) {
+  async function carregarEpisodios() {
+    const season = document.getElementById('season-select').value;
+    const iframe = document.getElementById('video-frame');
+    
+    // Mostra feedback pro usuário não achar que travou
+    const episodeSelect = document.getElementById('episode-select');
+    episodeSelect.innerHTML = '<option>Buscando episódios...</option>';
+    
+    try {
+      const res = await fetch(\`/api/bryanflix/tv/\${currentTvId}/season/\${season}\`);
+      const data = await res.json();
+      
+      const eps = data.episodes || [];
+      episodeSelect.innerHTML = eps.map(e => \`<option value="\${e.episode_number}">Ep. \${e.episode_number} - \${e.name}</option>\`).join('');
+      
+      // Força a troca para o episódio 1 da temporada selecionada
+      trocarEpisodio();
+    } catch(e) {
+      episodeSelect.innerHTML = '<option>Erro ao carregar</option>';
+    }
+  }
+
+  function trocarEpisodio() {
+    const season = document.getElementById('season-select').value;
+    const episode = document.getElementById('episode-select').value;
+    const iframe = document.getElementById('video-frame');
+    
+    const isDiscordActivity = window.location.search.includes('frame_id') || window.location.search.includes('instance_id');
+    const path = \`/embed/tv/\${currentTvId}/\${season}/\${episode}\`;
+    
+    // Atualiza o iframe com a temporada e episódio escolhidos
+    iframe.src = isDiscordActivity ? \`/player\${path}\` : \`https://vidsrc.xyz\${path}\`;
+  }
+
+  // Ouvintes dos menus suspensos
+  document.getElementById('season-select').addEventListener('change', carregarEpisodios);
+  document.getElementById('episode-select').addEventListener('change', trocarEpisodio);
+
+  document.addEventListener('click', async function(e) {
     const card = e.target.closest('.clickable-movie');
     if (card) {
       const type = card.getAttribute('data-type');
@@ -254,14 +290,31 @@ async function renderBryanflix(res: express.Response) {
       
       document.getElementById('player-title').innerText = title;
       const iframe = document.getElementById('video-frame');
-      
-      let rota = type === 'movie' ? \`/embed/movie/\${id}\` : \`/embed/tv/\${id}/1/1\`;
-      
-      const isDiscordActivity = window.location.search.includes('frame_id') || window.location.search.includes('instance_id');
-      
-      iframe.src = isDiscordActivity ? \`/player\${rota}\` : \`https://embed.su\${rota}\`;
+      const tvControls = document.getElementById('tv-controls');
       
       document.getElementById('player-modal').classList.add('active');
+      iframe.src = ''; // Limpa player antigo
+
+      if (type === 'movie') {
+        tvControls.style.display = 'none';
+        const path = \`/embed/movie/\${id}\`;
+        const isDiscordActivity = window.location.search.includes('frame_id') || window.location.search.includes('instance_id');
+        iframe.src = isDiscordActivity ? \`/player\${path}\` : \`https://vidsrc.xyz\${path}\`;
+      } else {
+        // MODO SÉRIE: Puxa detalhes, monta temporadas e libera os botões!
+        tvControls.style.display = 'flex';
+        currentTvId = id;
+        
+        try {
+          const res = await fetch(\`/api/bryanflix/tv/\${id}\`);
+          const data = await res.json();
+          const seasons = (data.seasons || []).filter(s => s.season_number > 0);
+          
+          document.getElementById('season-select').innerHTML = seasons.map(s => \`<option value="\${s.season_number}">Temporada \${s.season_number}</option>\`).join('');
+          
+          await carregarEpisodios();
+        } catch(e) {}
+      }
     }
   });
 
@@ -299,6 +352,9 @@ export function startDashboard() {
     ? `https://discord.com/oauth2/authorize?client_id=${clientId}&permissions=8&scope=bot%20applications.commands`
     : 'https://discord.com';
 
+  // =====================================================================
+  // 🛡️ API DO BRYANFLIX (TMDB Proxy)
+  // =====================================================================
   app.get('/api/bryanflix/trending', async (req, res) => {
     try {
       const [moviesRes, tvRes] = await Promise.all([
@@ -327,13 +383,7 @@ export function startDashboard() {
       let imgPath = req.query.path as string;
       if (!imgPath) return res.status(404).end();
       if (!imgPath.startsWith('/')) imgPath = '/' + imgPath;
-      
-      const response = await axios({
-        method: 'GET',
-        url: `https://image.tmdb.org/t/p/w342${imgPath}`,
-        responseType: 'stream' 
-      });
-      
+      const response = await axios({ method: 'GET', url: `https://image.tmdb.org/t/p/w342${imgPath}`, responseType: 'stream' });
       res.set('Content-Type', 'image/jpeg');
       res.set('Cache-Control', 'public, max-age=31536000'); 
       response.data.pipe(res); 
@@ -342,12 +392,33 @@ export function startDashboard() {
     }
   });
 
+  // Rotas de Bypass pro painel puxar episódios do TMDB sem quebrar
+  app.get('/api/bryanflix/tv/:id', async (req, res) => {
+    try {
+      const response = await axios.get(`https://api.themoviedb.org/3/tv/${req.params.id}?api_key=${TMDB_KEY}&language=pt-BR`);
+      res.json(response.data);
+    } catch (e) {
+      res.status(500).json({ error: 'Failed' });
+    }
+  });
+
+  app.get('/api/bryanflix/tv/:id/season/:season', async (req, res) => {
+    try {
+      const response = await axios.get(`https://api.themoviedb.org/3/tv/${req.params.id}/season/${req.params.season}?api_key=${TMDB_KEY}&language=pt-BR`);
+      res.json(response.data);
+    } catch (e) {
+      res.status(500).json({ error: 'Failed' });
+    }
+  });
+
+  // =====================================================================
+  // 🧭 ROTEAMENTO INTELIGENTE DE DOMÍNIOS
+  // =====================================================================
   app.get('/', async (req, res) => {
     if (req.hostname.includes('bryanflix') || req.query.frame_id || req.query.instance_id) {
       await renderBryanflix(res);
       return;
     }
-    
     res.send(`<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
@@ -443,6 +514,9 @@ export function startDashboard() {
     await renderBryanflix(res);
   });
 
+  // =====================================================================
+  // ROTAS DO PAINEL DE CONTROLE LOGADO
+  // =====================================================================
   app.get('/api/discord-data', async (req, res) => {
     const { guildId } = req.query;
     const token = process.env.DISCORD_TOKEN;

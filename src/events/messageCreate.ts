@@ -120,34 +120,43 @@ async function getOrCreateWebhook(channel: TextChannel, name: string, avatarUrl:
 // ============================================================
 
 async function askLocalAI(message: string, userName: string, memory: any[], systemPrompt: string): Promise<string> {
-  const MISTRAL_API_KEY = process.env.MISTRAL_API_KEY;
-  if (!MISTRAL_API_KEY) return 'Opa, o dono do bot esqueceu de colocar a chave da API!';
+  const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+  const GEMINI_MODEL = 'gemini-flash-latest';
+  if (!GEMINI_API_KEY) return 'Opa, o dono do bot esqueceu de colocar a chave da API!';
 
   const finalPrompt = systemPrompt || 'Você é um assistente virtual amigável em um servidor do Discord. Responda de forma natural e casual.';
 
-  const messages = [
-    { role: 'system', content: finalPrompt },
-    ...memory,
-    { role: 'user', content: `[${userName}]: ${message}` }
+  // "memory" aqui chega no formato {role: 'user'|'assistant', content}; a Gemini
+  // usa 'user'/'model' e o formato "contents/parts" em vez de "messages".
+  const contents = [
+    ...(Array.isArray(memory) ? memory : []).map((m: any) => ({
+      role: m.role === 'assistant' ? 'model' : 'user',
+      parts: [{ text: m.content }],
+    })),
+    { role: 'user', parts: [{ text: `[${userName}]: ${message}` }] },
   ];
 
   try {
-    const res = await fetch('https://api.mistral.ai/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${MISTRAL_API_KEY.trim()}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'mistral-small-latest',
-        messages: messages,
-        max_tokens: 300,
-        temperature: 0.7,
-      }),
-    });
+    const res = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`,
+      {
+        method: 'POST',
+        headers: {
+          'x-goog-api-key': GEMINI_API_KEY.trim(),
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          system_instruction: { parts: [{ text: finalPrompt }] },
+          contents,
+          generationConfig: { temperature: 0.7, maxOutputTokens: 300 },
+        }),
+      }
+    );
 
     const data = (await res.json()) as any;
-    return data?.choices?.[0]?.message?.content?.trim() || 'Deu um branco aqui, desculpa!';
+    const parts = data?.candidates?.[0]?.content?.parts;
+    const content = Array.isArray(parts) ? parts.map((p: any) => p?.text || '').join('').trim() : '';
+    return content || 'Deu um branco aqui, desculpa!';
   } catch (error) {
     return 'Tô meio tonto agora, a conexão falhou...';
   }

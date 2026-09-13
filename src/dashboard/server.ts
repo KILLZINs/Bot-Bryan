@@ -3,10 +3,15 @@ import axios from 'axios';
 import cookieParser from 'cookie-parser';
 import path from 'path';
 import { prisma } from '../database/client';
+import { askBryan } from '../ai/bryan';
+import { getCharacter, computeStats, type FullCharacter } from '../rpg/services/character';
+import { getEnemiesForLocation, getEnemy } from '../rpg/constants/enemies';
+import { getLocation } from '../rpg/constants/locations';
+import { getClass } from '../rpg/constants/classes';
+import { startInteractiveCombat, takeCombatAction, CombatBlockedError, type CombatAction } from '../rpg/services/combat';
 
 const BOT_OWNER_ID = '1195254699943796791';
 const TMDB_KEY = '3fd2be6f0c70a2a598f084ddfb75487c'; 
-const MISTRAL_API_KEY = process.env.MISTRAL_API_KEY;
 
 // =====================================================================
 // 🕹️ CATÁLOGO DE ATIVIDADES DO BRYAN
@@ -16,7 +21,7 @@ const ACTIVITIES = [
     id: 'rpg',
     name: 'RPG Skyline',
     icon: '⚔️',
-    tagline: 'Veja sua ficha, inventário e progresso em tempo real.',
+    tagline: 'Batalhe, veja sua ficha e inventário em tempo real.',
     status: 'live',
     href: '/atividades/rpg'
   },
@@ -46,28 +51,8 @@ const ACTIVITIES = [
   }
 ];
 
-async function callBryanAI(systemPrompt: string, userMessage: string, memory: { role: 'user' | 'assistant'; content: string }[] = []): Promise<string> {
-  if (!MISTRAL_API_KEY) return '🔑 A IA não está configurada no momento. Peça para o dono do bot definir a MISTRAL_API_KEY.';
-
-  const messages = [
-    { role: 'system' as const, content: systemPrompt },
-    ...memory.slice(-12).map((m) => ({ role: m.role, content: m.content })),
-    { role: 'user' as const, content: userMessage }
-  ];
-
-  try {
-    const res = await fetch('https://api.mistral.ai/v1/chat/completions', {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${MISTRAL_API_KEY.trim()}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model: 'mistral-small-latest', messages, max_tokens: 400, temperature: 0.6 })
-    });
-    const data: any = await res.json().catch(() => null);
-    if (!res.ok) return `❌ Erro ${res.status} ao contactar a IA.`;
-    const content = data?.choices?.[0]?.message?.content;
-    return typeof content === 'string' && content.trim() ? content.trim() : 'Ué... fiquei sem resposta KKKK';
-  } catch {
-    return '❌ Erro de conexão com a IA. Tenta novamente.';
-  }
+function isCombatBlockedMessage(msg: string) {
+  return { blocked: true, message: msg };
 }
 
 const SERVER_CATEGORIES = [
@@ -690,12 +675,21 @@ export function startDashboard() {
     const { message, history } = req.body || {};
     if (!message || typeof message !== 'string') return res.status(400).json({ error: 'Mensagem inválida' });
 
-    const systemPrompt = 'Você é Bryan, o assistente oficial e simpático do servidor de Discord Skyline. Responda em português do Brasil, de forma curta, descontraída e prestativa.';
-    const reply = await callBryanAI(systemPrompt, message.slice(0, 1000), Array.isArray(history) ? history : []);
+    const username = (req.cookies?.skyline_username as string) || 'Visitante do Site';
+    const memory = Array.isArray(history) ? history.slice(-12) : [];
+
+    // 🔁 Retry simples com backoff: a Mistral (free tier) as vezes devolve 429
+    // por limite de requisições/s — o mesmo texto e voz (Callia) usam a mesma chave.
+    let reply = await askBryan(message.slice(0, 1000), username, memory);
+    if (reply.includes('limitou as requisições')) {
+      await new Promise((r) => setTimeout(r, 1500));
+      reply = await askBryan(message.slice(0, 1000), username, memory);
+    }
+
     res.json({ reply });
   });
 
-  // ----- Ficha de RPG (leitura) -----
+  // ----- RPG: Ficha + Batalha (engine real do jogo) -----
   app.get('/atividades/rpg', (req, res) => {
     res.send(`<!DOCTYPE html>
 <html lang="pt-BR">
@@ -705,36 +699,83 @@ export function startDashboard() {
 <title>RPG Skyline</title>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
 <style>
-  :root { --bg: #05050A; --primary: #8B5CF6; --card: #12131F; --border: #262A40; --text: #F2F3F5; --text-muted: #9CA3AF; --green:#10B981; --red:#EF4444; }
+  :root { --bg: #05050A; --primary: #8B5CF6; --primary2: #C084FC; --card: #12131F; --card2: #191B2B; --border: #262A40; --text: #F2F3F5; --text-muted: #9CA3AF; --green:#10B981; --red:#EF4444; --gold:#F5C242; }
   * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Inter', sans-serif; }
-  body { background: var(--bg); color: var(--text); min-height: 100vh; }
+  body { background: radial-gradient(circle at 10% 0%, rgba(139,92,246,0.15), transparent 40%), var(--bg); color: var(--text); min-height: 100vh; }
   nav { display: flex; justify-content: space-between; align-items: center; padding: 16px 5%; border-bottom: 1px solid var(--border); }
   nav a { color: var(--text-muted); text-decoration: none; font-weight: 600; font-size: 0.9rem; }
   .brand { font-weight: 800; color: white; }
-  #wrap { max-width: 900px; margin: 0 auto; padding: 30px 20px 80px; }
-  .id-bar { display: flex; gap: 10px; margin-bottom: 30px; }
+  #wrap { max-width: 980px; margin: 0 auto; padding: 30px 20px 80px; }
+
+  .id-bar { display: flex; gap: 10px; margin-bottom: 26px; }
   .id-bar input { flex: 1; background: var(--card); border: 1px solid var(--border); color: white; padding: 12px 16px; border-radius: 10px; outline: none; }
   .id-bar button { background: var(--primary); color: white; border: none; padding: 0 22px; border-radius: 10px; font-weight: 700; cursor: pointer; }
-  .sheet { display: none; }
-  .sheet.show { display: block; }
+  .id-bar button:hover { background: #7C3AED; }
+
+  .empty, .error { color: var(--text-muted); padding: 30px 0; text-align: center; }
+  .error { color: var(--red); }
+
   .profile-header { display: flex; align-items: center; gap: 20px; background: var(--card); border: 1px solid var(--border); border-radius: 16px; padding: 24px; margin-bottom: 20px; }
-  .avatar-ring { width: 64px; height: 64px; border-radius: 50%; background: linear-gradient(135deg, var(--primary), #C084FC); display: flex; align-items: center; justify-content: center; font-size: 1.6rem; font-weight: 800; flex-shrink: 0; }
+  .avatar-ring { width: 68px; height: 68px; border-radius: 50%; background: linear-gradient(135deg, var(--primary), var(--primary2)); display: flex; align-items: center; justify-content: center; font-size: 2rem; flex-shrink: 0; box-shadow: 0 0 24px rgba(139,92,246,0.4); }
   .profile-header h2 { font-size: 1.4rem; font-weight: 800; }
   .profile-header .sub { color: var(--text-muted); font-size: 0.9rem; margin-top: 4px; }
   .bars { margin-top: 12px; display: flex; flex-direction: column; gap: 6px; }
   .bar-row { display: flex; align-items: center; gap: 8px; font-size: 0.78rem; color: var(--text-muted); }
   .bar-track { flex: 1; height: 8px; background: #1A1D2D; border-radius: 4px; overflow: hidden; }
-  .bar-fill { height: 100%; border-radius: 4px; }
-  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 20px; }
-  .stat-card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 18px; }
-  .stat-card .label { color: var(--text-muted); font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; }
-  .stat-card .value { font-size: 1.4rem; font-weight: 800; }
-  .section-title { font-size: 1.05rem; font-weight: 700; margin: 30px 0 14px; }
+  .bar-fill { height: 100%; border-radius: 4px; transition: width 0.35s ease; }
+
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 14px; margin-bottom: 20px; }
+  .stat-card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 16px; }
+  .stat-card .label { color: var(--text-muted); font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; }
+  .stat-card .value { font-size: 1.25rem; font-weight: 800; }
+
+  .section-title { font-size: 1.05rem; font-weight: 700; margin: 30px 0 14px; display:flex; align-items:center; gap:8px; }
   .item-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 12px; }
   .item-card { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 14px; font-size: 0.85rem; }
   .item-card .qty { color: var(--primary); font-weight: 700; }
-  .empty, .error { color: var(--text-muted); padding: 40px 0; text-align: center; }
-  .error { color: var(--red); }
+
+  /* ===== Arena de Batalha (Task Bar / JRPG style) ===== */
+  .battle-setup { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 18px; margin-bottom: 20px; }
+  .battle-setup select { flex: 1; min-width: 200px; background: #0B0C14; border: 1px solid var(--border); color: white; padding: 12px 14px; border-radius: 10px; outline: none; }
+  .btn-fight { background: linear-gradient(120deg, var(--primary), var(--primary2)); color: white; border: none; padding: 12px 22px; border-radius: 10px; font-weight: 700; cursor: pointer; white-space: nowrap; }
+  .btn-fight:hover { filter: brightness(1.1); }
+  .btn-random { background: var(--card2); border: 1px solid var(--border); color: white; padding: 12px 22px; border-radius: 10px; font-weight: 700; cursor: pointer; white-space: nowrap; }
+
+  .arena { display: none; background: radial-gradient(circle at 50% 0%, rgba(139,92,246,0.12), transparent 60%), var(--card); border: 1px solid var(--border); border-radius: 18px; padding: 30px 24px; margin-bottom: 20px; }
+  .arena.show { display: block; }
+  .arena-stage { display: flex; justify-content: space-between; align-items: flex-end; gap: 20px; padding: 20px 10px 40px; position: relative; }
+  .arena-stage::after { content: ''; position: absolute; bottom: 18px; left: 5%; right: 5%; height: 2px; background: linear-gradient(to right, transparent, var(--border), transparent); }
+  .combatant { display: flex; flex-direction: column; align-items: center; width: 42%; }
+  .combatant.enemy { align-items: center; }
+  .sprite { font-size: 4.2rem; line-height: 1; margin-bottom: 14px; filter: drop-shadow(0 8px 16px rgba(0,0,0,0.5)); animation: floatY 3s ease-in-out infinite; }
+  .combatant.enemy .sprite { animation-delay: 0.4s; }
+  @keyframes floatY { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-8px); } }
+  .sprite.hit { animation: hitShake 0.35s ease; }
+  @keyframes hitShake { 0%,100% { transform: translateX(0); } 25% { transform: translateX(-8px); } 75% { transform: translateX(8px); } }
+  .combatant-name { font-weight: 800; font-size: 1rem; margin-bottom: 8px; }
+  .combatant .bars { width: 100%; max-width: 220px; }
+  .combatant .bar-row span.tag { width: 26px; flex-shrink:0; font-weight:700; }
+  .vs-badge { font-weight: 800; color: var(--text-muted); font-size: 1.4rem; padding-bottom: 50px; }
+
+  .action-bar { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 10px; margin-top: 10px; }
+  .action-btn { background: var(--card2); border: 1px solid var(--border); color: white; padding: 14px 10px; border-radius: 12px; font-weight: 700; font-size: 0.85rem; cursor: pointer; transition: 0.15s; text-align: center; }
+  .action-btn:hover:not(:disabled) { border-color: var(--primary); background: #22243A; transform: translateY(-2px); }
+  .action-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+  .action-btn.attack { border-color: rgba(239,68,68,0.4); }
+  .action-btn.skill { border-color: rgba(139,92,246,0.5); }
+  .action-btn.flee { border-color: rgba(156,163,175,0.4); }
+
+  .combat-log { background: #0B0C14; border: 1px solid var(--border); border-radius: 12px; padding: 16px 18px; margin-top: 18px; max-height: 220px; overflow-y: auto; font-size: 0.85rem; line-height: 1.6; color: #D5D7E0; }
+  .combat-log b { color: white; }
+  .combat-log::-webkit-scrollbar { width: 6px; }
+  .combat-log::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+  .result-banner { text-align: center; padding: 20px; border-radius: 14px; margin-top: 18px; font-weight: 800; font-size: 1.2rem; }
+  .result-banner.vitoria { background: rgba(16,185,129,0.12); border: 1px solid var(--green); color: var(--green); }
+  .result-banner.derrota { background: rgba(239,68,68,0.12); border: 1px solid var(--red); color: var(--red); }
+  .result-banner.fuga, .result-banner.empate { background: rgba(156,163,175,0.1); border: 1px solid var(--border); color: var(--text-muted); }
+  .result-rewards { font-size: 0.9rem; font-weight: 600; color: var(--text-muted); margin-top: 8px; }
+  .btn-again { display: block; margin: 18px auto 0; background: var(--primary); color: white; border: none; padding: 12px 26px; border-radius: 10px; font-weight: 700; cursor: pointer; }
 </style>
 </head>
 <body>
@@ -744,57 +785,195 @@ export function startDashboard() {
   </nav>
   <div id="wrap">
     <div class="id-bar">
-      <input id="discordId" type="text" placeholder="Cole seu ID do Discord para ver sua ficha...">
-      <button onclick="loadProfile()">Ver Ficha</button>
+      <input id="discordId" type="text" placeholder="Cole seu ID do Discord para carregar seu personagem...">
+      <button onclick="loadProfile()">Carregar</button>
     </div>
     <div id="result"></div>
-    <p style="color:var(--text-muted); font-size:0.85rem; margin-top:30px;">🛠️ Esta é uma visão de leitura da sua ficha. Ações como combate, dungeons e forja continuam pelo Discord por enquanto — chegam aqui em breve.</p>
   </div>
+
   <script>
+    const state = { discordId: null, stats: null, cls: null, inCombat: false };
+
     async function loadProfile() {
       const id = document.getElementById('discordId').value.trim();
       const resultEl = document.getElementById('result');
       if (!id) return;
+      state.discordId = id;
       resultEl.innerHTML = '<p class="empty">⏳ Carregando ficha...</p>';
 
       try {
         const res = await fetch('/api/activities/rpg/profile?discordId=' + encodeURIComponent(id));
         if (res.status === 404) { resultEl.innerHTML = '<p class="error">Nenhum personagem encontrado para esse ID.</p>'; return; }
         if (!res.ok) { resultEl.innerHTML = '<p class="error">Erro ao carregar ficha.</p>'; return; }
-        const c = await res.json();
-
-        const hpPct = Math.max(0, Math.min(100, (c.currentHp / c.maxHp) * 100));
-        const enPct = Math.max(0, Math.min(100, (c.currentEnergy / c.maxEnergy) * 100));
-
-        const itemsHtml = (c.inventory || []).length
-          ? c.inventory.map(i => \`<div class="item-card">\${i.itemId} <span class="qty">x\${i.quantity}</span></div>\`).join('')
-          : '<p class="empty">Inventário vazio.</p>';
-
-        resultEl.innerHTML = \`
-          <div class="profile-header">
-            <div class="avatar-ring">\${(c.username || '?')[0].toUpperCase()}</div>
-            <div style="flex:1;">
-              <h2>\${c.username} <span style="color:var(--text-muted); font-weight:600; font-size:0.9rem;">— \${c.class} · Nv. \${c.level}</span></h2>
-              <div class="sub">🪙 \${c.gold} de ouro · Geração \${c.generation}</div>
-              <div class="bars">
-                <div class="bar-row">HP <div class="bar-track"><div class="bar-fill" style="width:\${hpPct}%; background:var(--red);"></div></div> \${c.currentHp}/\${c.maxHp}</div>
-                <div class="bar-row">EN <div class="bar-track"><div class="bar-fill" style="width:\${enPct}%; background:var(--green);"></div></div> \${c.currentEnergy}/\${c.maxEnergy}</div>
-              </div>
-            </div>
-          </div>
-          <div class="grid">
-            <div class="stat-card"><div class="label">Força</div><div class="value">\${c.strength}</div></div>
-            <div class="stat-card"><div class="label">Agilidade</div><div class="value">\${c.agility}</div></div>
-            <div class="stat-card"><div class="label">Inteligência</div><div class="value">\${c.intelligence}</div></div>
-            <div class="stat-card"><div class="label">Vitalidade</div><div class="value">\${c.vitality}</div></div>
-            <div class="stat-card"><div class="label">Sorte</div><div class="value">\${c.luck}</div></div>
-          </div>
-          <div class="section-title">🎒 Inventário</div>
-          <div class="item-list">\${itemsHtml}</div>
-        \`;
+        const data = await res.json();
+        renderProfile(data);
       } catch (e) {
         resultEl.innerHTML = '<p class="error">Erro de conexão.</p>';
       }
+    }
+
+    function renderProfile(data) {
+      const c = data.character, s = data.stats, cls = data.class, loc = data.location;
+      state.stats = s; state.cls = cls;
+
+      const hpPct = Math.max(0, Math.min(100, (c.currentHp / s.maxHp) * 100));
+      const enPct = Math.max(0, Math.min(100, (c.currentEnergy / s.maxEnergy) * 100));
+
+      const itemsHtml = (data.inventory || []).length
+        ? data.inventory.map(i => \`<div class="item-card">\${i.itemId} <span class="qty">x\${i.quantity}</span></div>\`).join('')
+        : '<p class="empty">Inventário vazio.</p>';
+
+      document.getElementById('result').innerHTML = \`
+        <div class="profile-header">
+          <div class="avatar-ring">\${cls ? cls.emoji : '⚔️'}</div>
+          <div style="flex:1;">
+            <h2>\${c.username} <span style="color:var(--text-muted); font-weight:600; font-size:0.9rem;">— \${cls ? cls.name : c.class} · Nv. \${c.level}</span></h2>
+            <div class="sub">🪙 \${c.gold} de ouro · \${loc ? loc.emoji + ' ' + loc.name : c.currentLocation}</div>
+            <div class="bars">
+              <div class="bar-row"><span class="tag">HP</span><div class="bar-track"><div class="bar-fill" style="width:\${hpPct}%; background:var(--red);"></div></div> \${c.currentHp}/\${s.maxHp}</div>
+              <div class="bar-row"><span class="tag">EN</span><div class="bar-track"><div class="bar-fill" style="width:\${enPct}%; background:var(--green);"></div></div> \${c.currentEnergy}/\${s.maxEnergy}</div>
+            </div>
+          </div>
+        </div>
+        <div class="grid">
+          <div class="stat-card"><div class="label">Ataque</div><div class="value">\${s.attack}</div></div>
+          <div class="stat-card"><div class="label">Defesa</div><div class="value">\${s.defense}</div></div>
+          <div class="stat-card"><div class="label">Crítico</div><div class="value">\${s.critChance}%</div></div>
+          <div class="stat-card"><div class="label">Esquiva</div><div class="value">\${s.dodgeChance}%</div></div>
+          <div class="stat-card"><div class="label">Poder</div><div class="value">\${s.combatPower}</div></div>
+        </div>
+        <div class="grid">
+          <div class="stat-card"><div class="label">Força</div><div class="value">\${s.str}</div></div>
+          <div class="stat-card"><div class="label">Agilidade</div><div class="value">\${s.agi}</div></div>
+          <div class="stat-card"><div class="label">Inteligência</div><div class="value">\${s.int}</div></div>
+          <div class="stat-card"><div class="label">Vitalidade</div><div class="value">\${s.vit}</div></div>
+          <div class="stat-card"><div class="label">Sorte</div><div class="value">\${s.lck}</div></div>
+        </div>
+
+        <div class="section-title">⚔️ Batalha</div>
+        <div class="battle-setup">
+          <select id="enemySelect"><option value="">Carregando inimigos da região...</option></select>
+          <button class="btn-fight" onclick="startCombat(document.getElementById('enemySelect').value)">▶ Lutar</button>
+          <button class="btn-random" onclick="startCombat(null)">🎲 Caçar Aleatório</button>
+        </div>
+        <div class="arena" id="arena"></div>
+
+        <div class="section-title">🎒 Inventário</div>
+        <div class="item-list">\${itemsHtml}</div>
+      \`;
+
+      loadEnemies();
+    }
+
+    async function loadEnemies() {
+      const sel = document.getElementById('enemySelect');
+      try {
+        const res = await fetch('/api/activities/rpg/enemies?discordId=' + encodeURIComponent(state.discordId));
+        const data = await res.json();
+        if (!data.enemies || !data.enemies.length) { sel.innerHTML = '<option value="">Nenhum inimigo encontrado aqui</option>'; return; }
+        sel.innerHTML = data.enemies.map(e => \`<option value="\${e.id}">\${e.emoji} \${e.name} (HP \${e.baseHp})</option>\`).join('');
+      } catch (e) {
+        sel.innerHTML = '<option value="">Erro ao carregar inimigos</option>';
+      }
+    }
+
+    async function startCombat(enemyId) {
+      const arena = document.getElementById('arena');
+      arena.classList.add('show');
+      arena.innerHTML = '<p class="empty">⏳ Preparando batalha...</p>';
+
+      try {
+        const res = await fetch('/api/activities/rpg/combat/start', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ discordId: state.discordId, enemyId: enemyId || undefined })
+        });
+        const turn = await res.json();
+        if (res.status === 409) { arena.innerHTML = \`<p class="error">⏳ \${turn.message}</p>\`; return; }
+        if (!res.ok) { arena.innerHTML = '<p class="error">Erro ao iniciar combate.</p>'; return; }
+        state.inCombat = true;
+        renderArena(turn);
+      } catch (e) {
+        arena.innerHTML = '<p class="error">Erro de conexão.</p>';
+      }
+    }
+
+    async function sendAction(action) {
+      if (!state.inCombat) return;
+      try {
+        const res = await fetch('/api/activities/rpg/combat/action', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ discordId: state.discordId, action })
+        });
+        const turn = await res.json();
+        if (res.status === 409) { document.getElementById('arena').innerHTML += \`<p class="error">⏳ \${turn.message}</p>\`; return; }
+        renderArena(turn, action);
+      } catch (e) {}
+    }
+
+    function renderArena(turn, lastAction) {
+      const s = state.stats;
+      const maxHp = s ? s.maxHp : turn.playerHp;
+      const maxEn = s ? s.maxEnergy : turn.playerEnergy;
+      const heroEmoji = state.cls ? state.cls.emoji : '🧙';
+
+      const playerHpPct = Math.max(0, Math.min(100, (turn.playerHp / maxHp) * 100));
+      const playerEnPct = Math.max(0, Math.min(100, (turn.playerEnergy / maxEn) * 100));
+      const enemyHpPct = Math.max(0, Math.min(100, (turn.enemyHp / turn.enemyMaxHp) * 100));
+
+      const heroHitClass = lastAction && !turn.finished ? '' : '';
+      const logHtml = (turn.log || []).map(l => '<div>' + l.replace(/\\*\\*(.*?)\\*\\*/g, '<b>$1</b>') + '</div>').join('');
+
+      let resultHtml = '';
+      if (turn.finished && turn.result) {
+        const r = turn.result;
+        const titleMap = { vitoria: '🏆 Vitória!', derrota: '💀 Derrota', fuga: '🏃 Fuga', empate: '💥 Empate' };
+        resultHtml = \`
+          <div class="result-banner \${r.result}">\${titleMap[r.result] || r.result}
+            <div class="result-rewards">
+              \${r.xpGained ? '✨ +' + r.xpGained + ' XP &nbsp;·&nbsp; ' : ''}\${r.goldGained ? '🪙 +' + r.goldGained + ' Ouro' : ''}
+              \${r.itemsDropped && r.itemsDropped.length ? '<br>🎁 ' + r.itemsDropped.join(', ') : ''}
+            </div>
+          </div>
+          <button class="btn-again" onclick="loadProfile(); document.getElementById('discordId').value = state.discordId;">🔄 Atualizar Ficha</button>
+        \`;
+        state.inCombat = false;
+      }
+
+      document.getElementById('arena').innerHTML = \`
+        <div class="arena-stage">
+          <div class="combatant hero">
+            <div class="sprite \${heroHitClass}">\${heroEmoji}</div>
+            <div class="combatant-name">Você</div>
+            <div class="bars">
+              <div class="bar-row"><span class="tag">HP</span><div class="bar-track"><div class="bar-fill" style="width:\${playerHpPct}%; background:var(--red);"></div></div></div>
+              <div class="bar-row"><span class="tag">EN</span><div class="bar-track"><div class="bar-fill" style="width:\${playerEnPct}%; background:var(--green);"></div></div></div>
+            </div>
+          </div>
+          <div class="vs-badge">VS</div>
+          <div class="combatant enemy">
+            <div class="sprite">\${turn.enemyEmoji || '👹'}</div>
+            <div class="combatant-name">\${turn.enemyName}</div>
+            <div class="bars">
+              <div class="bar-row"><span class="tag">HP</span><div class="bar-track"><div class="bar-fill" style="width:\${enemyHpPct}%; background:var(--gold);"></div></div></div>
+            </div>
+          </div>
+        </div>
+
+        \${!turn.finished ? \`
+        <div class="action-bar">
+          <button class="action-btn attack" onclick="sendAction('attack')">⚔️ Atacar</button>
+          <button class="action-btn skill" onclick="sendAction('skill')" \${turn.skillReady ? '' : 'disabled'}>✨ \${turn.skillName || 'Habilidade'}</button>
+          <button class="action-btn" onclick="sendAction('defend')">🛡️ Defender</button>
+          <button class="action-btn" onclick="sendAction('potion')" \${turn.potionAvailable ? '' : 'disabled'}>🧪 Poção</button>
+          <button class="action-btn flee" onclick="sendAction('flee')">🏃 Fugir</button>
+        </div>\` : ''}
+
+        <div class="combat-log" id="combatLog">\${logHtml}</div>
+        \${resultHtml}
+      \`;
+
+      const logEl = document.getElementById('combatLog');
+      if (logEl) logEl.scrollTop = logEl.scrollHeight;
     }
   </script>
 </body>
@@ -806,14 +985,81 @@ export function startDashboard() {
     if (!discordId) return res.status(400).json({ error: 'discordId obrigatório' });
 
     try {
-      const character = await prisma.rpgCharacter.findUnique({
-        where: { discordId },
-        include: { inventory: true, equipment: true }
-      });
+      const character = await getCharacter(discordId);
       if (!character) return res.status(404).json({ error: 'Personagem não encontrado' });
-      res.json(character);
+
+      const stats = computeStats(character);
+      const cls = getClass(character.class);
+      const loc = getLocation(character.currentLocation);
+      const inventory = await prisma.rpgInventoryItem.findMany({ where: { characterId: discordId } });
+
+      res.json({ character, stats, class: cls, location: loc, inventory });
     } catch (e) {
+      console.error('[Atividades/RPG] Erro ao buscar personagem:', e);
       res.status(500).json({ error: 'Erro ao buscar personagem' });
+    }
+  });
+
+  // Lista os inimigos disponíveis na localização atual do personagem (mesma
+  // fonte usada na "Caçada Livre" do Discord: getEnemiesForLocation).
+  app.get('/api/activities/rpg/enemies', async (req, res) => {
+    const discordId = req.query.discordId as string;
+    if (!discordId) return res.status(400).json({ error: 'discordId obrigatório' });
+
+    try {
+      const character = await getCharacter(discordId);
+      if (!character) return res.status(404).json({ error: 'Personagem não encontrado' });
+
+      const enemies = getEnemiesForLocation(character.currentLocation, character.level).slice(0, 25).map(e => ({
+        id: e.id, name: e.name, emoji: e.emoji, baseHp: e.baseHp, baseAttack: e.baseAttack,
+        xpReward: e.xpReward, goldMin: e.goldReward.min, goldMax: e.goldReward.max, type: e.type
+      }));
+
+      res.json({ location: getLocation(character.currentLocation), enemies });
+    } catch (e) {
+      res.status(500).json({ error: 'Erro ao buscar inimigos' });
+    }
+  });
+
+  // Inicia uma batalha real usando a MESMA engine de combate do Discord.
+  // O estado da luta fica na sessão em memória (activeCombats) do combat.ts —
+  // ou seja, se o jogador já estiver batalhando pelo Discord, o site respeita
+  // e bloqueia (CombatBlockedError), exatamente como aconteceria lá.
+  app.post('/api/activities/rpg/combat/start', async (req, res) => {
+    const { discordId, guildId, enemyId } = req.body || {};
+    if (!discordId) return res.status(400).json({ error: 'discordId obrigatório' });
+
+    try {
+      const character = await getCharacter(discordId);
+      if (!character) return res.status(404).json({ error: 'Personagem não encontrado' });
+
+      let enemy = enemyId ? getEnemy(enemyId) : undefined;
+      if (!enemy) {
+        const pool = getEnemiesForLocation(character.currentLocation, character.level);
+        if (!pool.length) return res.status(404).json({ error: 'Nenhum inimigo encontrado nessa região.' });
+        enemy = pool[Math.floor(Math.random() * pool.length)];
+      }
+
+      const turn = await startInteractiveCombat(character, enemy, guildId, 'hunt');
+      res.json(turn);
+    } catch (err) {
+      if (err instanceof CombatBlockedError) return res.status(409).json(isCombatBlockedMessage(err.message));
+      console.error('[Atividades/RPG] Erro ao iniciar combate:', err);
+      res.status(500).json({ error: 'Erro ao iniciar combate' });
+    }
+  });
+
+  app.post('/api/activities/rpg/combat/action', async (req, res) => {
+    const { discordId, action } = req.body || {};
+    if (!discordId || !action) return res.status(400).json({ error: 'discordId e action são obrigatórios' });
+
+    try {
+      const turn = await takeCombatAction(discordId, action as CombatAction);
+      res.json(turn);
+    } catch (err) {
+      if (err instanceof CombatBlockedError) return res.status(409).json(isCombatBlockedMessage(err.message));
+      console.error('[Atividades/RPG] Erro na ação de combate:', err);
+      res.status(500).json({ error: 'Erro ao processar ação' });
     }
   });
 

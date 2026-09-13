@@ -6,6 +6,69 @@ import { prisma } from '../database/client';
 
 const BOT_OWNER_ID = '1195254699943796791';
 const TMDB_KEY = '3fd2be6f0c70a2a598f084ddfb75487c'; 
+const MISTRAL_API_KEY = process.env.MISTRAL_API_KEY;
+
+// =====================================================================
+// 🕹️ CATÁLOGO DE ATIVIDADES DO BRYAN
+// =====================================================================
+const ACTIVITIES = [
+  {
+    id: 'rpg',
+    name: 'RPG Skyline',
+    icon: '⚔️',
+    tagline: 'Veja sua ficha, inventário e progresso em tempo real.',
+    status: 'live',
+    href: '/atividades/rpg'
+  },
+  {
+    id: 'chat',
+    name: 'Falar com o Bryan',
+    icon: '🤖',
+    tagline: 'Converse com a IA do bot direto pelo navegador.',
+    status: 'live',
+    href: '/atividades/chat'
+  },
+  {
+    id: 'social',
+    name: 'Feed Social',
+    icon: '📸',
+    tagline: 'Reviva as postagens do Instagram interno do servidor.',
+    status: 'soon',
+    href: '#'
+  },
+  {
+    id: 'missions',
+    name: 'Missões Diárias',
+    icon: '📜',
+    tagline: 'Acompanhe suas missões e recompensas do dia.',
+    status: 'soon',
+    href: '#'
+  }
+];
+
+async function callBryanAI(systemPrompt: string, userMessage: string, memory: { role: 'user' | 'assistant'; content: string }[] = []): Promise<string> {
+  if (!MISTRAL_API_KEY) return '🔑 A IA não está configurada no momento. Peça para o dono do bot definir a MISTRAL_API_KEY.';
+
+  const messages = [
+    { role: 'system' as const, content: systemPrompt },
+    ...memory.slice(-12).map((m) => ({ role: m.role, content: m.content })),
+    { role: 'user' as const, content: userMessage }
+  ];
+
+  try {
+    const res = await fetch('https://api.mistral.ai/v1/chat/completions', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${MISTRAL_API_KEY.trim()}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model: 'mistral-small-latest', messages, max_tokens: 400, temperature: 0.6 })
+    });
+    const data: any = await res.json().catch(() => null);
+    if (!res.ok) return `❌ Erro ${res.status} ao contactar a IA.`;
+    const content = data?.choices?.[0]?.message?.content;
+    return typeof content === 'string' && content.trim() ? content.trim() : 'Ué... fiquei sem resposta KKKK';
+  } catch {
+    return '❌ Erro de conexão com a IA. Tenta novamente.';
+  }
+}
 
 const SERVER_CATEGORIES = [
   { category: "🤖 Inteligência Artificial", desc: "Sistemas de voz e conversação avançada", features: [{ id: 'featVoiceAi', name: 'Callia (IA de Voz)', desc: 'Permite que os membros chamem o Bryan ou a IA Local.', icon: '🎙️' }] },
@@ -359,48 +422,59 @@ export function startDashboard() {
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <style>
     :root { 
-      --bg: #0B0D17; 
-      --card: #131521; 
+      --bg: #05050A; 
+      --card: #12131F; 
       --card-hover: #1A1D2D; 
-      --border: #2A2E45; 
+      --border: #262A40; 
       --primary: #8B5CF6; 
+      --primary2: #C084FC;
       --primary-hover: #7C3AED; 
       --text: #F2F3F5; 
       --text-muted: #9CA3AF; 
     }
     * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Inter', sans-serif; }
-    body { background: var(--bg); color: var(--text); overflow-x: hidden; line-height: 1.6; }
+    body { background: radial-gradient(circle at 15% -10%, rgba(139,92,246,0.20), transparent 40%), radial-gradient(circle at 90% 5%, rgba(192,132,252,0.14), transparent 35%), var(--bg); color: var(--text); overflow-x: hidden; line-height: 1.6; }
     
-    nav { display: flex; justify-content: space-between; align-items: center; padding: 1rem 5%; background: rgba(11, 13, 23, 0.85); backdrop-filter: blur(12px); position: sticky; top: 0; z-index: 1000; border-bottom: 1px solid var(--border); }
+    nav { display: flex; justify-content: space-between; align-items: center; padding: 1rem 5%; background: rgba(5, 5, 10, 0.75); backdrop-filter: blur(14px); position: sticky; top: 0; z-index: 1000; border-bottom: 1px solid var(--border); }
     .brand { display: flex; align-items: center; gap: 12px; font-weight: 800; font-size: 1.3rem; color: white; text-decoration: none; letter-spacing: -0.5px; }
     .brand img { width: 38px; height: 38px; border-radius: 50%; border: 2px solid var(--primary); }
-    .nav-links a { color: var(--text-muted); text-decoration: none; font-weight: 600; font-size: 0.95rem; margin-left: 20px; transition: 0.2s; }
+    .nav-links a { color: var(--text-muted); text-decoration: none; font-weight: 600; font-size: 0.95rem; margin-left: 24px; transition: 0.2s; }
     .nav-links a:hover { color: white; }
-    .nav-links .btn-login { background: var(--primary); color: white; padding: 8px 20px; border-radius: 6px; margin-left: 20px; box-shadow: 0 4px 15px rgba(139, 92, 246, 0.3); }
+    .nav-links .btn-login { background: var(--primary); color: white; padding: 9px 22px; border-radius: 8px; margin-left: 24px; box-shadow: 0 4px 15px rgba(139, 92, 246, 0.35); }
     .nav-links .btn-login:hover { background: var(--primary-hover); }
     
-    .hero { text-align: center; padding: 140px 20px 100px 20px; position: relative; overflow: hidden; }
-    .hero-bg { position: absolute; top: -20%; left: 50%; transform: translateX(-50%); width: 1000px; height: 1000px; background: radial-gradient(circle, rgba(139, 92, 246, 0.15) 0%, transparent 60%); z-index: -1; pointer-events: none; }
-    .hero h1 { font-size: clamp(2.8rem, 6vw, 5rem); font-weight: 800; letter-spacing: -2px; margin-bottom: 20px; line-height: 1.1; background: linear-gradient(to right, #fff, #A78BFA); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
-    .hero p { font-size: 1.15rem; color: var(--text-muted); max-width: 650px; margin: 0 auto 40px auto; }
+    .hero { text-align: center; padding: 150px 20px 110px 20px; position: relative; overflow: hidden; }
+    .hero-bg { position: absolute; top: -25%; left: 50%; transform: translateX(-50%); width: 1100px; height: 1100px; background: radial-gradient(circle, rgba(139, 92, 246, 0.18) 0%, transparent 60%); z-index: -1; pointer-events: none; animation: pulseGlow 6s ease-in-out infinite; }
+    @keyframes pulseGlow { 0%, 100% { opacity: 0.7; } 50% { opacity: 1; } }
+    .hero-badge { display: inline-flex; align-items: center; gap: 8px; background: rgba(139,92,246,0.12); border: 1px solid rgba(139,92,246,0.35); color: var(--primary2); font-weight: 700; font-size: 0.82rem; padding: 7px 16px; border-radius: 999px; margin-bottom: 26px; }
+    .hero h1 { font-size: clamp(2.8rem, 6vw, 5.2rem); font-weight: 800; letter-spacing: -2px; margin-bottom: 22px; line-height: 1.08; background: linear-gradient(to right, #fff, var(--primary2)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+    .hero p { font-size: 1.15rem; color: var(--text-muted); max-width: 650px; margin: 0 auto 44px auto; }
     
     .btn-group { display: flex; gap: 15px; justify-content: center; flex-wrap: wrap; }
-    .btn { padding: 15px 32px; border-radius: 8px; font-weight: 600; font-size: 1rem; text-decoration: none; transition: 0.2s; display: inline-flex; align-items: center; gap: 8px; }
-    .btn-primary { background: var(--primary); color: white; box-shadow: 0 4px 20px rgba(139, 92, 246, 0.4); }
-    .btn-primary:hover { background: var(--primary-hover); transform: translateY(-3px); box-shadow: 0 6px 25px rgba(139, 92, 246, 0.5); }
+    .btn { padding: 15px 32px; border-radius: 10px; font-weight: 700; font-size: 1rem; text-decoration: none; transition: 0.2s; display: inline-flex; align-items: center; gap: 8px; }
+    .btn-primary { background: var(--primary); color: white; box-shadow: 0 8px 25px rgba(139, 92, 246, 0.45); }
+    .btn-primary:hover { background: var(--primary-hover); transform: translateY(-3px); box-shadow: 0 10px 30px rgba(139, 92, 246, 0.55); }
     .btn-secondary { background: var(--card); color: white; border: 1px solid var(--border); }
     .btn-secondary:hover { background: var(--card-hover); transform: translateY(-3px); border-color: var(--primary); }
+    .btn-ghost { background: transparent; color: var(--primary2); border: 1px solid rgba(192,132,252,0.4); }
+    .btn-ghost:hover { background: rgba(192,132,252,0.08); transform: translateY(-3px); }
     
-    .features { padding: 80px 5%; max-width: 1200px; margin: 0 auto; }
-    .features-title { text-align: center; font-size: 2.2rem; font-weight: 800; margin-bottom: 50px; color: white; }
+    .features { padding: 90px 5%; max-width: 1200px; margin: 0 auto; }
+    .features-title { text-align: center; font-size: 2.2rem; font-weight: 800; margin-bottom: 10px; color: white; }
+    .features-sub { text-align: center; color: var(--text-muted); margin-bottom: 50px; }
     .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 24px; }
-    .card { background: var(--card); border: 1px solid var(--border); padding: 35px; border-radius: 16px; transition: 0.3s; position: relative; overflow: hidden; }
-    .card::before { content: ''; position: absolute; top: 0; left: 0; width: 100%; height: 4px; background: var(--primary); opacity: 0; transition: 0.3s; }
-    .card:hover { border-color: var(--primary); transform: translateY(-5px); box-shadow: 0 10px 30px rgba(0,0,0,0.3); }
+    .card { background: linear-gradient(160deg, var(--card), #0d0e17); border: 1px solid var(--border); padding: 35px; border-radius: 18px; transition: 0.3s; position: relative; overflow: hidden; }
+    .card::before { content: ''; position: absolute; top: 0; left: 0; width: 100%; height: 3px; background: linear-gradient(to right, var(--primary), var(--primary2)); opacity: 0; transition: 0.3s; }
+    .card:hover { border-color: var(--primary); transform: translateY(-6px); box-shadow: 0 16px 36px rgba(0,0,0,0.35); }
     .card:hover::before { opacity: 1; }
     .card-icon { width: 55px; height: 55px; background: rgba(139, 92, 246, 0.1); border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 26px; margin-bottom: 20px; border: 1px solid rgba(139, 92, 246, 0.2); }
     .card h3 { font-size: 1.3rem; font-weight: 700; margin-bottom: 12px; color: white; }
     .card p { color: var(--text-muted); font-size: 0.95rem; line-height: 1.5; }
+
+    .activities-strip { max-width: 1200px; margin: 0 auto; padding: 0 5% 90px; }
+    .strip-card { display: flex; align-items: center; justify-content: space-between; background: linear-gradient(120deg, rgba(139,92,246,0.14), rgba(192,132,252,0.06)); border: 1px solid rgba(139,92,246,0.3); border-radius: 20px; padding: 40px; flex-wrap: wrap; gap: 20px; }
+    .strip-card h3 { font-size: 1.5rem; font-weight: 800; margin-bottom: 8px; color: white; }
+    .strip-card p { color: var(--text-muted); max-width: 480px; }
     
     footer { text-align: center; padding: 40px; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.9rem; margin-top: 50px; background: var(--card); }
   </style>
@@ -409,6 +483,7 @@ export function startDashboard() {
   <nav>
     <a href="/" class="brand"><img src="/skylineicon.jpg" alt="Bryan"> Bryan Bot</a>
     <div class="nav-links">
+      <a href="/atividades">Atividades</a>
       <a href="${botInviteUrl}">Adicionar ao Servidor</a>
       <a href="/login" class="btn-login">Acessar Painel</a>
     </div>
@@ -416,16 +491,19 @@ export function startDashboard() {
   
   <header class="hero">
     <div class="hero-bg"></div>
+    <span class="hero-badge">✨ Rede Aliança Skyline</span>
     <h1>O Guardião da Aliança.</h1>
     <p>Traga o <b>Bryan</b> para o seu servidor e conecte-se à maior rede interdimensional. Inteligência Artificial por voz, Feed Social, RPG imersivo e moderação absoluta.</p>
     <div class="btn-group">
       <a href="${botInviteUrl}" class="btn btn-primary">Adicionar ao Discord</a>
+      <a href="/atividades" class="btn btn-ghost">🕹️ Ver Atividades</a>
       <a href="/login" class="btn btn-secondary">Configurar Bot</a>
     </div>
   </header>
   
   <section class="features">
     <h2 class="features-title">Sistemas Integrados</h2>
+    <p class="features-sub">Tudo o que a sua Aliança precisa, em um só bot.</p>
     <div class="grid">
       <div class="card"><div class="card-icon">🎙️</div><h3>Inteligência Artificial</h3><p>Acesse chamadas de voz com o Bryan, com a Suki ou crie a IA exclusiva do seu servidor.</p></div>
       <div class="card"><div class="card-icon">📸</div><h3>Feed Social (Instagram)</h3><p>Crie uma rede social interna perfeita com direito a seguidores, curtidas e comentários.</p></div>
@@ -433,6 +511,16 @@ export function startDashboard() {
       <div class="card"><div class="card-icon">💎</div><h3>Sistema VIP</h3><p>Recompense os apoiadores com cargos, painéis especiais e gradientes exclusivos.</p></div>
       <div class="card"><div class="card-icon">🎫</div><h3>Sistema de Tickets</h3><p>Organize o atendimento da sua comunidade com logs automáticos e transcrições.</p></div>
       <div class="card"><div class="card-icon">🎵</div><h3>Música FFmpeg</h3><p>Qualidade de áudio de estúdio para escutar Spotify ou YouTube com os amigos na call.</p></div>
+    </div>
+  </section>
+
+  <section class="activities-strip">
+    <div class="strip-card">
+      <div>
+        <h3>🕹️ Novo: Atividades do Bryan</h3>
+        <p>Veja sua ficha de RPG e converse com a IA do bot direto pelo navegador, sem precisar abrir o Discord.</p>
+      </div>
+      <a href="/atividades" class="btn btn-primary">Explorar Atividades</a>
     </div>
   </section>
   
@@ -443,6 +531,290 @@ export function startDashboard() {
 
   app.get('/bryanflix', async (req, res) => {
     await renderBryanflix(res);
+  });
+
+  // =====================================================================
+  // 🕹️ HUB DE ATIVIDADES DO BRYAN
+  // =====================================================================
+  app.get('/atividades', (req, res) => {
+    const cardsHtml = ACTIVITIES.map(a => {
+      const soon = a.status === 'soon';
+      return `
+        <a href="${soon ? '#' : a.href}" class="act-card ${soon ? 'soon' : ''}" ${soon ? 'onclick="return false;"' : ''}>
+          <div class="act-icon">${a.icon}</div>
+          <h3>${a.name}</h3>
+          <p>${a.tagline}</p>
+          <span class="act-badge">${soon ? '🔒 Em breve' : '▶ Abrir'}</span>
+        </a>`;
+    }).join('');
+
+    res.send(`<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Atividades — Bryan Bot</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root { --bg: #05050A; --primary: #8B5CF6; --primary2: #C084FC; --card: #12131F; --border: #262A40; --text: #F2F3F5; --text-muted: #9CA3AF; }
+  * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Inter', sans-serif; }
+  body { background: radial-gradient(circle at 20% -10%, rgba(139,92,246,0.18), transparent 40%), radial-gradient(circle at 90% 10%, rgba(192,132,252,0.12), transparent 35%), var(--bg); color: var(--text); min-height: 100vh; }
+  nav { display: flex; justify-content: space-between; align-items: center; padding: 20px 5%; }
+  .brand { font-weight: 800; font-size: 1.3rem; color: white; text-decoration: none; display:flex; align-items:center; gap:10px; }
+  nav a.back { color: var(--text-muted); text-decoration: none; font-weight: 600; font-size: 0.9rem; border: 1px solid var(--border); padding: 8px 16px; border-radius: 8px; transition: .2s; }
+  nav a.back:hover { border-color: var(--primary); color: white; }
+  header.hub-hero { text-align: center; padding: 60px 20px 40px; }
+  header.hub-hero h1 { font-size: clamp(2.2rem, 5vw, 3.2rem); font-weight: 800; letter-spacing: -1px; background: linear-gradient(to right, #fff, var(--primary2)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; margin-bottom: 12px; }
+  header.hub-hero p { color: var(--text-muted); font-size: 1.05rem; max-width: 560px; margin: 0 auto; }
+  .act-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 24px; max-width: 1100px; margin: 0 auto; padding: 20px 5% 80px; }
+  .act-card { background: var(--card); border: 1px solid var(--border); border-radius: 18px; padding: 32px 26px; text-decoration: none; color: var(--text); position: relative; overflow: hidden; transition: .25s; }
+  .act-card::before { content: ''; position: absolute; inset: 0; background: linear-gradient(135deg, rgba(139,92,246,0.12), transparent 60%); opacity: 0; transition: .25s; }
+  .act-card:not(.soon):hover { transform: translateY(-6px); border-color: var(--primary); box-shadow: 0 20px 40px rgba(139,92,246,0.25); }
+  .act-card:not(.soon):hover::before { opacity: 1; }
+  .act-card.soon { opacity: 0.55; cursor: not-allowed; }
+  .act-icon { font-size: 2.3rem; margin-bottom: 16px; }
+  .act-card h3 { font-size: 1.2rem; font-weight: 700; margin-bottom: 8px; }
+  .act-card p { color: var(--text-muted); font-size: 0.9rem; line-height: 1.5; margin-bottom: 18px; }
+  .act-badge { font-size: 0.8rem; font-weight: 700; color: var(--primary2); }
+</style>
+</head>
+<body>
+  <nav>
+    <a href="/" class="brand">🌌 Bryan Bot</a>
+    <a href="/painel" class="back">← Voltar ao Painel</a>
+  </nav>
+  <header class="hub-hero">
+    <h1>Atividades do Bryan</h1>
+    <p>Tudo o que você faria dentro do Discord, agora também aqui — direto do navegador.</p>
+  </header>
+  <div class="act-grid">${cardsHtml}</div>
+</body>
+</html>`);
+  });
+
+  // ----- Chat com a IA (Bryan) -----
+  app.get('/atividades/chat', (req, res) => {
+    res.send(`<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Falar com o Bryan</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root { --bg: #05050A; --primary: #8B5CF6; --card: #12131F; --bubble-user: #8B5CF6; --bubble-bot: #1A1D2D; --border: #262A40; --text: #F2F3F5; --text-muted: #9CA3AF; }
+  * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Inter', sans-serif; }
+  html, body { height: 100%; }
+  body { background: var(--bg); color: var(--text); display: flex; flex-direction: column; }
+  nav { display: flex; justify-content: space-between; align-items: center; padding: 16px 5%; border-bottom: 1px solid var(--border); }
+  nav a { color: var(--text-muted); text-decoration: none; font-weight: 600; font-size: 0.9rem; }
+  .brand { font-weight: 800; color: white; display:flex; align-items:center; gap:8px; }
+  #chat-wrap { flex: 1; display: flex; flex-direction: column; max-width: 760px; width: 100%; margin: 0 auto; padding: 20px; overflow: hidden; }
+  #messages { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 14px; padding: 10px 4px 20px; }
+  .msg { max-width: 78%; padding: 12px 16px; border-radius: 14px; line-height: 1.5; font-size: 0.95rem; white-space: pre-wrap; }
+  .msg.user { align-self: flex-end; background: var(--bubble-user); color: white; border-bottom-right-radius: 4px; }
+  .msg.bot { align-self: flex-start; background: var(--bubble-bot); border: 1px solid var(--border); border-bottom-left-radius: 4px; }
+  .msg.typing { color: var(--text-muted); font-style: italic; }
+  #input-bar { display: flex; gap: 10px; padding-top: 10px; border-top: 1px solid var(--border); }
+  #input-bar input { flex: 1; background: var(--card); border: 1px solid var(--border); color: white; padding: 14px 16px; border-radius: 10px; outline: none; font-size: 0.95rem; }
+  #input-bar input:focus { border-color: var(--primary); }
+  #input-bar button { background: var(--primary); color: white; border: none; padding: 0 22px; border-radius: 10px; font-weight: 700; cursor: pointer; transition: .2s; }
+  #input-bar button:hover { background: #7C3AED; }
+  #input-bar button:disabled { opacity: 0.5; cursor: not-allowed; }
+</style>
+</head>
+<body>
+  <nav>
+    <span class="brand">🤖 Falar com o Bryan</span>
+    <a href="/atividades">← Atividades</a>
+  </nav>
+  <div id="chat-wrap">
+    <div id="messages">
+      <div class="msg bot">E aí! Eu sou o Bryan 👋 Pode perguntar qualquer coisa sobre o servidor, o RPG, ou só bater um papo.</div>
+    </div>
+    <div id="input-bar">
+      <input id="userInput" type="text" placeholder="Digite sua mensagem..." autocomplete="off">
+      <button id="sendBtn">Enviar</button>
+    </div>
+  </div>
+  <script>
+    const messagesEl = document.getElementById('messages');
+    const input = document.getElementById('userInput');
+    const btn = document.getElementById('sendBtn');
+    let history = [];
+
+    function addMsg(text, cls) {
+      const div = document.createElement('div');
+      div.className = 'msg ' + cls;
+      div.innerText = text;
+      messagesEl.appendChild(div);
+      messagesEl.scrollTop = messagesEl.scrollHeight;
+      return div;
+    }
+
+    async function send() {
+      const text = input.value.trim();
+      if (!text) return;
+      input.value = '';
+      btn.disabled = true;
+      addMsg(text, 'user');
+      history.push({ role: 'user', content: text });
+      const typingEl = addMsg('Bryan está digitando...', 'bot typing');
+
+      try {
+        const res = await fetch('/api/activities/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ message: text, history })
+        });
+        const data = await res.json();
+        typingEl.remove();
+        addMsg(data.reply, 'bot');
+        history.push({ role: 'assistant', content: data.reply });
+      } catch (e) {
+        typingEl.remove();
+        addMsg('❌ Erro de conexão. Tenta de novo.', 'bot');
+      }
+      btn.disabled = false;
+      input.focus();
+    }
+
+    btn.addEventListener('click', send);
+    input.addEventListener('keydown', (e) => { if (e.key === 'Enter') send(); });
+  </script>
+</body>
+</html>`);
+  });
+
+  app.post('/api/activities/chat', async (req, res) => {
+    const { message, history } = req.body || {};
+    if (!message || typeof message !== 'string') return res.status(400).json({ error: 'Mensagem inválida' });
+
+    const systemPrompt = 'Você é Bryan, o assistente oficial e simpático do servidor de Discord Skyline. Responda em português do Brasil, de forma curta, descontraída e prestativa.';
+    const reply = await callBryanAI(systemPrompt, message.slice(0, 1000), Array.isArray(history) ? history : []);
+    res.json({ reply });
+  });
+
+  // ----- Ficha de RPG (leitura) -----
+  app.get('/atividades/rpg', (req, res) => {
+    res.send(`<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RPG Skyline</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root { --bg: #05050A; --primary: #8B5CF6; --card: #12131F; --border: #262A40; --text: #F2F3F5; --text-muted: #9CA3AF; --green:#10B981; --red:#EF4444; }
+  * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Inter', sans-serif; }
+  body { background: var(--bg); color: var(--text); min-height: 100vh; }
+  nav { display: flex; justify-content: space-between; align-items: center; padding: 16px 5%; border-bottom: 1px solid var(--border); }
+  nav a { color: var(--text-muted); text-decoration: none; font-weight: 600; font-size: 0.9rem; }
+  .brand { font-weight: 800; color: white; }
+  #wrap { max-width: 900px; margin: 0 auto; padding: 30px 20px 80px; }
+  .id-bar { display: flex; gap: 10px; margin-bottom: 30px; }
+  .id-bar input { flex: 1; background: var(--card); border: 1px solid var(--border); color: white; padding: 12px 16px; border-radius: 10px; outline: none; }
+  .id-bar button { background: var(--primary); color: white; border: none; padding: 0 22px; border-radius: 10px; font-weight: 700; cursor: pointer; }
+  .sheet { display: none; }
+  .sheet.show { display: block; }
+  .profile-header { display: flex; align-items: center; gap: 20px; background: var(--card); border: 1px solid var(--border); border-radius: 16px; padding: 24px; margin-bottom: 20px; }
+  .avatar-ring { width: 64px; height: 64px; border-radius: 50%; background: linear-gradient(135deg, var(--primary), #C084FC); display: flex; align-items: center; justify-content: center; font-size: 1.6rem; font-weight: 800; flex-shrink: 0; }
+  .profile-header h2 { font-size: 1.4rem; font-weight: 800; }
+  .profile-header .sub { color: var(--text-muted); font-size: 0.9rem; margin-top: 4px; }
+  .bars { margin-top: 12px; display: flex; flex-direction: column; gap: 6px; }
+  .bar-row { display: flex; align-items: center; gap: 8px; font-size: 0.78rem; color: var(--text-muted); }
+  .bar-track { flex: 1; height: 8px; background: #1A1D2D; border-radius: 4px; overflow: hidden; }
+  .bar-fill { height: 100%; border-radius: 4px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 20px; }
+  .stat-card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 18px; }
+  .stat-card .label { color: var(--text-muted); font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; }
+  .stat-card .value { font-size: 1.4rem; font-weight: 800; }
+  .section-title { font-size: 1.05rem; font-weight: 700; margin: 30px 0 14px; }
+  .item-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 12px; }
+  .item-card { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 14px; font-size: 0.85rem; }
+  .item-card .qty { color: var(--primary); font-weight: 700; }
+  .empty, .error { color: var(--text-muted); padding: 40px 0; text-align: center; }
+  .error { color: var(--red); }
+</style>
+</head>
+<body>
+  <nav>
+    <span class="brand">⚔️ RPG Skyline</span>
+    <a href="/atividades">← Atividades</a>
+  </nav>
+  <div id="wrap">
+    <div class="id-bar">
+      <input id="discordId" type="text" placeholder="Cole seu ID do Discord para ver sua ficha...">
+      <button onclick="loadProfile()">Ver Ficha</button>
+    </div>
+    <div id="result"></div>
+    <p style="color:var(--text-muted); font-size:0.85rem; margin-top:30px;">🛠️ Esta é uma visão de leitura da sua ficha. Ações como combate, dungeons e forja continuam pelo Discord por enquanto — chegam aqui em breve.</p>
+  </div>
+  <script>
+    async function loadProfile() {
+      const id = document.getElementById('discordId').value.trim();
+      const resultEl = document.getElementById('result');
+      if (!id) return;
+      resultEl.innerHTML = '<p class="empty">⏳ Carregando ficha...</p>';
+
+      try {
+        const res = await fetch('/api/activities/rpg/profile?discordId=' + encodeURIComponent(id));
+        if (res.status === 404) { resultEl.innerHTML = '<p class="error">Nenhum personagem encontrado para esse ID.</p>'; return; }
+        if (!res.ok) { resultEl.innerHTML = '<p class="error">Erro ao carregar ficha.</p>'; return; }
+        const c = await res.json();
+
+        const hpPct = Math.max(0, Math.min(100, (c.currentHp / c.maxHp) * 100));
+        const enPct = Math.max(0, Math.min(100, (c.currentEnergy / c.maxEnergy) * 100));
+
+        const itemsHtml = (c.inventory || []).length
+          ? c.inventory.map(i => \`<div class="item-card">\${i.itemId} <span class="qty">x\${i.quantity}</span></div>\`).join('')
+          : '<p class="empty">Inventário vazio.</p>';
+
+        resultEl.innerHTML = \`
+          <div class="profile-header">
+            <div class="avatar-ring">\${(c.username || '?')[0].toUpperCase()}</div>
+            <div style="flex:1;">
+              <h2>\${c.username} <span style="color:var(--text-muted); font-weight:600; font-size:0.9rem;">— \${c.class} · Nv. \${c.level}</span></h2>
+              <div class="sub">🪙 \${c.gold} de ouro · Geração \${c.generation}</div>
+              <div class="bars">
+                <div class="bar-row">HP <div class="bar-track"><div class="bar-fill" style="width:\${hpPct}%; background:var(--red);"></div></div> \${c.currentHp}/\${c.maxHp}</div>
+                <div class="bar-row">EN <div class="bar-track"><div class="bar-fill" style="width:\${enPct}%; background:var(--green);"></div></div> \${c.currentEnergy}/\${c.maxEnergy}</div>
+              </div>
+            </div>
+          </div>
+          <div class="grid">
+            <div class="stat-card"><div class="label">Força</div><div class="value">\${c.strength}</div></div>
+            <div class="stat-card"><div class="label">Agilidade</div><div class="value">\${c.agility}</div></div>
+            <div class="stat-card"><div class="label">Inteligência</div><div class="value">\${c.intelligence}</div></div>
+            <div class="stat-card"><div class="label">Vitalidade</div><div class="value">\${c.vitality}</div></div>
+            <div class="stat-card"><div class="label">Sorte</div><div class="value">\${c.luck}</div></div>
+          </div>
+          <div class="section-title">🎒 Inventário</div>
+          <div class="item-list">\${itemsHtml}</div>
+        \`;
+      } catch (e) {
+        resultEl.innerHTML = '<p class="error">Erro de conexão.</p>';
+      }
+    }
+  </script>
+</body>
+</html>`);
+  });
+
+  app.get('/api/activities/rpg/profile', async (req, res) => {
+    const discordId = req.query.discordId as string;
+    if (!discordId) return res.status(400).json({ error: 'discordId obrigatório' });
+
+    try {
+      const character = await prisma.rpgCharacter.findUnique({
+        where: { discordId },
+        include: { inventory: true, equipment: true }
+      });
+      if (!character) return res.status(404).json({ error: 'Personagem não encontrado' });
+      res.json(character);
+    } catch (e) {
+      res.status(500).json({ error: 'Erro ao buscar personagem' });
+    }
   });
 
   app.get('/api/discord-data', async (req, res) => {
@@ -599,13 +971,14 @@ export function startDashboard() {
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <style>
     :root { 
-      --bg: #0B0D17; 
-      --sidebar: #131521; 
-      --header: #131521; 
-      --card: #1A1D2D; 
-      --card-hover: #22263A; 
-      --border: #2A2E45; 
+      --bg: #05050A; 
+      --sidebar: #0D0E18; 
+      --header: #0D0E18; 
+      --card: #161826; 
+      --card-hover: #1F2233; 
+      --border: #262A40; 
       --primary: #8B5CF6; 
+      --primary2: #C084FC;
       --primary-hover: #7C3AED; 
       --green: #10B981; 
       --red: #EF4444; 
@@ -613,7 +986,7 @@ export function startDashboard() {
       --text-muted: #9CA3AF; 
     }
     * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Inter', sans-serif; }
-    body { background-color: var(--bg); color: var(--text); display: flex; height: 100vh; overflow: hidden; }
+    body { background: radial-gradient(circle at 0% 0%, rgba(139,92,246,0.08), transparent 40%), var(--bg); color: var(--text); display: flex; height: 100vh; overflow: hidden; }
     ::-webkit-scrollbar { width: 8px; }
     ::-webkit-scrollbar-track { background: var(--bg); }
     ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
@@ -621,6 +994,8 @@ export function startDashboard() {
     .sidebar { width: 280px; background: var(--sidebar); display: flex; flex-direction: column; border-right: 1px solid var(--border); }
     .brand { padding: 22px 20px; font-size: 1.15rem; font-weight: 800; display: flex; align-items: center; gap: 12px; color: white; border-bottom: 1px solid var(--border); letter-spacing: -0.5px; }
     .brand img { width: 32px; height: 32px; border-radius: 50%; border: 2px solid var(--primary); }
+    .sidebar-cta { margin: 14px 16px 0; display: block; text-align: center; background: linear-gradient(120deg, var(--primary), var(--primary2)); color: white; text-decoration: none; font-weight: 700; font-size: 0.85rem; padding: 11px; border-radius: 10px; box-shadow: 0 6px 18px rgba(139,92,246,0.35); transition: 0.2s; }
+    .sidebar-cta:hover { transform: translateY(-2px); box-shadow: 0 8px 22px rgba(139,92,246,0.5); }
     
     .nav-items { flex: 1; padding: 15px 0; overflow-y: auto; }
     .nav-group { 
@@ -718,6 +1093,7 @@ export function startDashboard() {
 <body>
   <div class="sidebar">
     <div class="brand"><img src="/skylineicon.jpg" alt="Logo"> Bryan Bot</div>
+    <a href="/atividades" class="sidebar-cta" target="_blank">🕹️ Ver Atividades</a>
     <div class="nav-items" id="sidebar-nav">
       <!-- Nav gerada via JS -->
     </div>

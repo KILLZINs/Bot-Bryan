@@ -1,6 +1,7 @@
 import { prisma } from '../database/client';
 
-const MISTRAL_API_KEY = process.env.MISTRAL_API_KEY;
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+const GEMINI_MODEL = 'gemini-flash-latest';
 
 type MemoryMessage = {
   role: 'user' | 'assistant';
@@ -11,50 +12,63 @@ function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-async function callMistral(
+async function callGemini(
   systemPrompt: string,
   userMessage: string,
   memory: MemoryMessage[] = [],
   temperature = 0.60,
   attempt = 0
 ): Promise<string> {
-  if (!MISTRAL_API_KEY) {
-    return '🔑 Chave da Mistral não configurada no servidor.';
+  if (!GEMINI_API_KEY) {
+    return '🔑 Chave da Gemini não configurada no servidor.';
   }
 
-  const messages = [
-    { role: 'system' as const, content: systemPrompt },
-    ...memory.map((msg) => ({ role: msg.role, content: msg.content })),
-    { role: 'user' as const, content: userMessage },
+  const contents = [
+    ...memory.map((msg) => ({
+      role: msg.role === 'assistant' ? 'model' as const : 'user' as const,
+      parts: [{ text: msg.content }],
+    })),
+    { role: 'user' as const, parts: [{ text: userMessage }] },
   ];
 
   try {
-    const res = await fetch('https://api.mistral.ai/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${MISTRAL_API_KEY.trim()}`,
-        'Content-Type': 'application/json',
-        Accept: 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'mistral-small-latest',
-        messages,
-        max_tokens: 180,
-        temperature,
-      }),
-    });
+    const res = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`,
+      {
+        method: 'POST',
+        headers: {
+          'x-goog-api-key': GEMINI_API_KEY.trim(),
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+        },
+        body: JSON.stringify({
+          system_instruction: { parts: [{ text: systemPrompt }] },
+          contents,
+          generationConfig: { temperature, maxOutputTokens: 250 },
+        }),
+      }
+    );
 
     const body = await res.text();
     let data: any = null;
     try { data = body ? JSON.parse(body) : null; } catch { data = null; }
 
     if (res.status === 429 && attempt < 2) {
-      await sleep(800 * (attempt + 1));
-      return callMistral(systemPrompt, userMessage, memory, temperature, attempt + 1);
+      await sleep(1000 * (attempt + 1));
+      return callGemini(systemPrompt, userMessage, memory, temperature, attempt + 1);
     }
-    if (!res.ok) return `❌ Erro na Mistral: ${res.status}`;
-    const content = data?.choices?.[0]?.message?.content;
-    return typeof content === 'string' && content.trim() ? content.trim() : 'Deu branco aqui, desculpa.';
+    if (res.status === 400 || res.status === 403) {
+      return '🔑 A chave da Gemini é inválida ou sem permissão. Verifique GEMINI_API_KEY.';
+    }
+    if (!res.ok) return `❌ Erro na Gemini: ${res.status}`;
+
+    if (data?.promptFeedback?.blockReason) {
+      return 'Prefiro não responder isso agora, muda de assunto?';
+    }
+
+    const parts = data?.candidates?.[0]?.content?.parts;
+    const content = Array.isArray(parts) ? parts.map((p: any) => p?.text || '').join('').trim() : '';
+    return content || 'Deu branco aqui, desculpa.';
   } catch (err) {
     return '❌ Erro de conexão com a IA. Tenta novamente.';
   }
@@ -102,5 +116,5 @@ ${chatLog}
 ATENÇÃO: QUEM ESTÁ FALANDO COM VOCÊ AGORA É: ${safeUsername}.
 NÃO interaja com o histórico, foque em ${safeUsername}. Responda diretamente e de forma curta (1 a 3 frases no máximo):`;
 
-  return callMistral(finalPrompt, safeMessage, [], 0.60);
+  return callGemini(finalPrompt, safeMessage, [], 0.60);
 }

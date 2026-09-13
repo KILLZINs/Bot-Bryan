@@ -9,6 +9,7 @@ import { getEnemiesForLocation, getEnemy } from '../rpg/constants/enemies';
 import { getLocation } from '../rpg/constants/locations';
 import { getClass } from '../rpg/constants/classes';
 import { startInteractiveCombat, takeCombatAction, CombatBlockedError, type CombatAction } from '../rpg/services/combat';
+import { getItem } from '../rpg/constants/items';
 
 const BOT_OWNER_ID = '1195254699943796791';
 const TMDB_KEY = '3fd2be6f0c70a2a598f084ddfb75487c'; 
@@ -21,7 +22,7 @@ const ACTIVITIES = [
     id: 'rpg',
     name: 'RPG Skyline',
     icon: '⚔️',
-    tagline: 'Batalhe, veja sua ficha e inventário em tempo real.',
+    tagline: 'Batalhe, veja sua ficha e inventário — login com Discord.',
     status: 'live',
     href: '/atividades/rpg'
   },
@@ -53,6 +54,25 @@ const ACTIVITIES = [
 
 function isCombatBlockedMessage(msg: string) {
   return { blocked: true, message: msg };
+}
+
+function enrichItem(itemId: string) {
+  const item = getItem(itemId);
+  return item ? { id: itemId, name: item.name, emoji: item.emoji, rarity: item.rarity } : { id: itemId, name: itemId, emoji: '📦', rarity: null };
+}
+
+// Middleware: exige login de JOGADOR (qualquer conta do Discord — não precisa
+// ser staff da Aliança). Isso é INTENCIONALMENTE separado do login /login do
+// painel administrativo (que exige cadastro em AllianceServerMember) — aqui
+// qualquer pessoa pode entrar, só precisa provar que é dona daquele Discord ID.
+function requirePlayerAuth(req: express.Request, res: express.Response, next: express.NextFunction) {
+  if (req.cookies?.player_auth === 'permitido' && req.cookies?.player_userid) return next();
+  return res.status(401).json({ error: 'Faça login com o Discord para continuar.', loginUrl: '/login/player' });
+}
+
+const PLAYER_REDIRECT_WHITELIST = new Set(['/atividades/rpg', '/atividades', '/atividades/chat']);
+function safePlayerRedirect(next: unknown): string {
+  return typeof next === 'string' && PLAYER_REDIRECT_WHITELIST.has(next) ? next : '/atividades/rpg';
 }
 
 const SERVER_CATEGORIES = [
@@ -690,7 +710,52 @@ export function startDashboard() {
   });
 
   // ----- RPG: Ficha + Batalha (engine real do jogo) -----
+  // ----- RPG: Ficha + Batalha (engine real do jogo, atrás de login do Discord) -----
   app.get('/atividades/rpg', (req, res) => {
+    const isLogged = req.cookies?.player_auth === 'permitido' && req.cookies?.player_userid;
+
+    if (!isLogged) {
+      return res.send(`<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RPG Skyline — Login</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root { --bg: #05050A; --primary: #8B5CF6; --primary2: #C084FC; --card: #12131F; --border: #262A40; --text: #F2F3F5; --text-muted: #9CA3AF; }
+  * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Inter', sans-serif; }
+  body { background: radial-gradient(circle at 50% 0%, rgba(139,92,246,0.18), transparent 45%), var(--bg); color: var(--text); min-height: 100vh; display: flex; flex-direction: column; }
+  nav { display: flex; justify-content: space-between; align-items: center; padding: 16px 5%; }
+  nav a { color: var(--text-muted); text-decoration: none; font-weight: 600; font-size: 0.9rem; }
+  .brand { font-weight: 800; color: white; }
+  .gate { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 20px; }
+  .gate .icon { font-size: 3.4rem; margin-bottom: 18px; }
+  .gate h1 { font-size: 1.8rem; font-weight: 800; margin-bottom: 12px; }
+  .gate p { color: var(--text-muted); max-width: 420px; margin-bottom: 30px; line-height: 1.5; }
+  .discord-btn { display: inline-flex; align-items: center; gap: 10px; background: #5865F2; color: white; text-decoration: none; font-weight: 700; padding: 14px 28px; border-radius: 10px; box-shadow: 0 8px 25px rgba(88,101,242,0.4); transition: 0.2s; }
+  .discord-btn:hover { transform: translateY(-3px); box-shadow: 0 10px 30px rgba(88,101,242,0.55); }
+  .note { color: var(--text-muted); font-size: 0.8rem; margin-top: 18px; max-width: 380px; }
+</style>
+</head>
+<body>
+  <nav><span class="brand">⚔️ RPG Skyline</span><a href="/atividades">← Atividades</a></nav>
+  <div class="gate">
+    <div class="icon">🔒</div>
+    <h1>Entre com sua conta do Discord</h1>
+    <p>Sua ficha de RPG é pessoal — por isso pedimos login com o Discord em vez de um ID digitado, pra garantir que só você veja e jogue com o seu personagem.</p>
+    <a class="discord-btn" href="/login/player?next=/atividades/rpg">🎮 Entrar com Discord</a>
+    <p class="note">Isso não te dá acesso ao painel administrativo do bot — é só pra identificar seu personagem de RPG.</p>
+  </div>
+</body>
+</html>`);
+    }
+
+    const username = req.cookies?.player_username || 'Aventureiro';
+    const avatarHash = req.cookies?.player_avatar;
+    const userId = req.cookies?.player_userid;
+    const avatarUrl = avatarHash ? `https://cdn.discordapp.com/avatars/${userId}/${avatarHash}.png?size=128` : '';
+
     res.send(`<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
@@ -699,18 +764,18 @@ export function startDashboard() {
 <title>RPG Skyline</title>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
 <style>
-  :root { --bg: #05050A; --primary: #8B5CF6; --primary2: #C084FC; --card: #12131F; --card2: #191B2B; --border: #262A40; --text: #F2F3F5; --text-muted: #9CA3AF; --green:#10B981; --red:#EF4444; --gold:#F5C242; }
+  :root { --bg: #05050A; --primary: #8B5CF6; --primary2: #C084FC; --card: #12131F; --card2: #191B2B; --border: #262A40; --text: #F2F3F5; --text-muted: #9CA3AF; --green:#2ECC71; --red:#E74C3C; --gold:#F5C242; --orange:#F39C12; }
   * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Inter', sans-serif; }
   body { background: radial-gradient(circle at 10% 0%, rgba(139,92,246,0.15), transparent 40%), var(--bg); color: var(--text); min-height: 100vh; }
   nav { display: flex; justify-content: space-between; align-items: center; padding: 16px 5%; border-bottom: 1px solid var(--border); }
   nav a { color: var(--text-muted); text-decoration: none; font-weight: 600; font-size: 0.9rem; }
   .brand { font-weight: 800; color: white; }
+  .nav-user { display: flex; align-items: center; gap: 10px; }
+  .nav-user img { width: 30px; height: 30px; border-radius: 50%; border: 2px solid var(--primary); }
+  .nav-user span { font-weight: 700; font-size: 0.9rem; }
+  .nav-user a.logout { color: var(--text-muted); font-size: 0.8rem; border: 1px solid var(--border); padding: 5px 12px; border-radius: 8px; }
+  .nav-user a.logout:hover { border-color: var(--red); color: var(--red); }
   #wrap { max-width: 980px; margin: 0 auto; padding: 30px 20px 80px; }
-
-  .id-bar { display: flex; gap: 10px; margin-bottom: 26px; }
-  .id-bar input { flex: 1; background: var(--card); border: 1px solid var(--border); color: white; padding: 12px 16px; border-radius: 10px; outline: none; }
-  .id-bar button { background: var(--primary); color: white; border: none; padding: 0 22px; border-radius: 10px; font-weight: 700; cursor: pointer; }
-  .id-bar button:hover { background: #7C3AED; }
 
   .empty, .error { color: var(--text-muted); padding: 30px 0; text-align: center; }
   .error { color: var(--red); }
@@ -731,84 +796,75 @@ export function startDashboard() {
 
   .section-title { font-size: 1.05rem; font-weight: 700; margin: 30px 0 14px; display:flex; align-items:center; gap:8px; }
   .item-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 12px; }
-  .item-card { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 14px; font-size: 0.85rem; }
-  .item-card .qty { color: var(--primary); font-weight: 700; }
+  .item-card { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 14px; font-size: 0.85rem; display: flex; align-items: center; gap: 8px; }
+  .item-card .qty { color: var(--primary); font-weight: 700; margin-left: auto; }
 
-  /* ===== Arena de Batalha (Task Bar / JRPG style) ===== */
+  /* ===== Arena de Batalha ===== */
   .battle-setup { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 18px; margin-bottom: 20px; }
   .battle-setup select { flex: 1; min-width: 200px; background: #0B0C14; border: 1px solid var(--border); color: white; padding: 12px 14px; border-radius: 10px; outline: none; }
   .btn-fight { background: linear-gradient(120deg, var(--primary), var(--primary2)); color: white; border: none; padding: 12px 22px; border-radius: 10px; font-weight: 700; cursor: pointer; white-space: nowrap; }
   .btn-fight:hover { filter: brightness(1.1); }
   .btn-random { background: var(--card2); border: 1px solid var(--border); color: white; padding: 12px 22px; border-radius: 10px; font-weight: 700; cursor: pointer; white-space: nowrap; }
 
-  .arena { display: none; background: radial-gradient(circle at 50% 0%, rgba(139,92,246,0.12), transparent 60%), var(--card); border: 1px solid var(--border); border-radius: 18px; padding: 30px 24px; margin-bottom: 20px; }
+  .arena { display: none; border-radius: 18px; padding: 26px 24px; margin-bottom: 20px; border: 1px solid var(--border); transition: border-color 0.3s, background 0.3s; background: var(--card); }
   .arena.show { display: block; }
-  .arena-stage { display: flex; justify-content: space-between; align-items: flex-end; gap: 20px; padding: 20px 10px 40px; position: relative; }
-  .arena-stage::after { content: ''; position: absolute; bottom: 18px; left: 5%; right: 5%; height: 2px; background: linear-gradient(to right, transparent, var(--border), transparent); }
+  .arena-title { font-weight: 800; font-size: 1rem; margin-bottom: 6px; display: flex; justify-content: space-between; align-items: center; }
+  .arena-stage { display: flex; justify-content: space-between; align-items: flex-end; gap: 20px; padding: 16px 10px 34px; position: relative; }
+  .arena-stage::after { content: ''; position: absolute; bottom: 14px; left: 5%; right: 5%; height: 2px; background: linear-gradient(to right, transparent, var(--border), transparent); }
   .combatant { display: flex; flex-direction: column; align-items: center; width: 42%; }
-  .combatant.enemy { align-items: center; }
-  .sprite { font-size: 4.2rem; line-height: 1; margin-bottom: 14px; filter: drop-shadow(0 8px 16px rgba(0,0,0,0.5)); animation: floatY 3s ease-in-out infinite; }
+  .sprite { font-size: 4rem; line-height: 1; margin-bottom: 12px; filter: drop-shadow(0 8px 16px rgba(0,0,0,0.5)); animation: floatY 3s ease-in-out infinite; }
   .combatant.enemy .sprite { animation-delay: 0.4s; }
   @keyframes floatY { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-8px); } }
-  .sprite.hit { animation: hitShake 0.35s ease; }
-  @keyframes hitShake { 0%,100% { transform: translateX(0); } 25% { transform: translateX(-8px); } 75% { transform: translateX(8px); } }
-  .combatant-name { font-weight: 800; font-size: 1rem; margin-bottom: 8px; }
+  .combatant-name { font-weight: 800; font-size: 0.95rem; margin-bottom: 8px; }
   .combatant .bars { width: 100%; max-width: 220px; }
   .combatant .bar-row span.tag { width: 26px; flex-shrink:0; font-weight:700; }
-  .vs-badge { font-weight: 800; color: var(--text-muted); font-size: 1.4rem; padding-bottom: 50px; }
+  .vs-badge { font-weight: 800; color: var(--text-muted); font-size: 1.3rem; padding-bottom: 46px; }
 
-  .action-bar { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 10px; margin-top: 10px; }
+  .action-bar { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 10px; margin-top: 6px; }
   .action-btn { background: var(--card2); border: 1px solid var(--border); color: white; padding: 14px 10px; border-radius: 12px; font-weight: 700; font-size: 0.85rem; cursor: pointer; transition: 0.15s; text-align: center; }
   .action-btn:hover:not(:disabled) { border-color: var(--primary); background: #22243A; transform: translateY(-2px); }
   .action-btn:disabled { opacity: 0.35; cursor: not-allowed; }
-  .action-btn.attack { border-color: rgba(239,68,68,0.4); }
-  .action-btn.skill { border-color: rgba(139,92,246,0.5); }
-  .action-btn.flee { border-color: rgba(156,163,175,0.4); }
 
-  .combat-log { background: #0B0C14; border: 1px solid var(--border); border-radius: 12px; padding: 16px 18px; margin-top: 18px; max-height: 220px; overflow-y: auto; font-size: 0.85rem; line-height: 1.6; color: #D5D7E0; }
+  .combat-log { background: #0B0C14; border: 1px solid var(--border); border-radius: 12px; padding: 16px 18px; margin-top: 16px; max-height: 220px; overflow-y: auto; font-size: 0.85rem; line-height: 1.6; color: #D5D7E0; }
   .combat-log b { color: white; }
   .combat-log::-webkit-scrollbar { width: 6px; }
   .combat-log::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
 
-  .result-banner { text-align: center; padding: 20px; border-radius: 14px; margin-top: 18px; font-weight: 800; font-size: 1.2rem; }
-  .result-banner.vitoria { background: rgba(16,185,129,0.12); border: 1px solid var(--green); color: var(--green); }
-  .result-banner.derrota { background: rgba(239,68,68,0.12); border: 1px solid var(--red); color: var(--red); }
-  .result-banner.fuga, .result-banner.empate { background: rgba(156,163,175,0.1); border: 1px solid var(--border); color: var(--text-muted); }
-  .result-rewards { font-size: 0.9rem; font-weight: 600; color: var(--text-muted); margin-top: 8px; }
+  .result-banner { text-align: center; padding: 18px; border-radius: 14px; margin-top: 16px; font-weight: 800; font-size: 1.15rem; }
+  .result-banner.vitoria { background: rgba(46,204,113,0.12); border: 1px solid var(--green); color: var(--green); }
+  .result-banner.derrota { background: rgba(231,76,60,0.12); border: 1px solid var(--red); color: var(--red); }
+  .result-banner.fuga, .result-banner.empate { background: rgba(243,156,18,0.1); border: 1px solid var(--orange); color: var(--orange); }
+  .reward-fields { display: flex; gap: 10px; justify-content: center; margin-top: 10px; flex-wrap: wrap; }
+  .reward-field { background: rgba(255,255,255,0.05); border-radius: 8px; padding: 6px 14px; font-size: 0.85rem; font-weight: 600; color: var(--text); }
+  .drop-list { margin-top: 8px; font-size: 0.85rem; color: var(--text-muted); }
   .btn-again { display: block; margin: 18px auto 0; background: var(--primary); color: white; border: none; padding: 12px 26px; border-radius: 10px; font-weight: 700; cursor: pointer; }
 </style>
 </head>
 <body>
   <nav>
     <span class="brand">⚔️ RPG Skyline</span>
-    <a href="/atividades">← Atividades</a>
-  </nav>
-  <div id="wrap">
-    <div class="id-bar">
-      <input id="discordId" type="text" placeholder="Cole seu ID do Discord para carregar seu personagem...">
-      <button onclick="loadProfile()">Carregar</button>
+    <div class="nav-user">
+      ${avatarUrl ? `<img src="${avatarUrl}" alt="">` : ''}
+      <span>${username}</span>
+      <a href="/atividades">← Atividades</a>
+      <a class="logout" href="/logout/player">Sair</a>
     </div>
-    <div id="result"></div>
-  </div>
+  </nav>
+  <div id="wrap"><p class="empty">⏳ Carregando sua ficha...</p></div>
 
   <script>
-    const state = { discordId: null, stats: null, cls: null, inCombat: false };
+    const state = { stats: null, cls: null, inCombat: false };
 
     async function loadProfile() {
-      const id = document.getElementById('discordId').value.trim();
-      const resultEl = document.getElementById('result');
-      if (!id) return;
-      state.discordId = id;
-      resultEl.innerHTML = '<p class="empty">⏳ Carregando ficha...</p>';
-
+      const wrap = document.getElementById('wrap');
       try {
-        const res = await fetch('/api/activities/rpg/profile?discordId=' + encodeURIComponent(id));
-        if (res.status === 404) { resultEl.innerHTML = '<p class="error">Nenhum personagem encontrado para esse ID.</p>'; return; }
-        if (!res.ok) { resultEl.innerHTML = '<p class="error">Erro ao carregar ficha.</p>'; return; }
-        const data = await res.json();
-        renderProfile(data);
+        const res = await fetch('/api/activities/rpg/profile');
+        if (res.status === 401) { window.location.href = '/login/player?next=/atividades/rpg'; return; }
+        if (res.status === 404) { const d = await res.json(); wrap.innerHTML = '<p class="error">' + d.error + '</p>'; return; }
+        if (!res.ok) { wrap.innerHTML = '<p class="error">Erro ao carregar ficha.</p>'; return; }
+        renderProfile(await res.json());
       } catch (e) {
-        resultEl.innerHTML = '<p class="error">Erro de conexão.</p>';
+        wrap.innerHTML = '<p class="error">Erro de conexão.</p>';
       }
     }
 
@@ -820,10 +876,10 @@ export function startDashboard() {
       const enPct = Math.max(0, Math.min(100, (c.currentEnergy / s.maxEnergy) * 100));
 
       const itemsHtml = (data.inventory || []).length
-        ? data.inventory.map(i => \`<div class="item-card">\${i.itemId} <span class="qty">x\${i.quantity}</span></div>\`).join('')
+        ? data.inventory.map(i => \`<div class="item-card">\${i.emoji} \${i.name} <span class="qty">x\${i.quantity}</span></div>\`).join('')
         : '<p class="empty">Inventário vazio.</p>';
 
-      document.getElementById('result').innerHTML = \`
+      document.getElementById('wrap').innerHTML = \`
         <div class="profile-header">
           <div class="avatar-ring">\${cls ? cls.emoji : '⚔️'}</div>
           <div style="flex:1;">
@@ -868,7 +924,7 @@ export function startDashboard() {
     async function loadEnemies() {
       const sel = document.getElementById('enemySelect');
       try {
-        const res = await fetch('/api/activities/rpg/enemies?discordId=' + encodeURIComponent(state.discordId));
+        const res = await fetch('/api/activities/rpg/enemies');
         const data = await res.json();
         if (!data.enemies || !data.enemies.length) { sel.innerHTML = '<option value="">Nenhum inimigo encontrado aqui</option>'; return; }
         sel.innerHTML = data.enemies.map(e => \`<option value="\${e.id}">\${e.emoji} \${e.name} (HP \${e.baseHp})</option>\`).join('');
@@ -885,8 +941,9 @@ export function startDashboard() {
       try {
         const res = await fetch('/api/activities/rpg/combat/start', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ discordId: state.discordId, enemyId: enemyId || undefined })
+          body: JSON.stringify({ enemyId: enemyId || undefined })
         });
+        if (res.status === 401) { window.location.href = '/login/player?next=/atividades/rpg'; return; }
         const turn = await res.json();
         if (res.status === 409) { arena.innerHTML = \`<p class="error">⏳ \${turn.message}</p>\`; return; }
         if (!res.ok) { arena.innerHTML = '<p class="error">Erro ao iniciar combate.</p>'; return; }
@@ -902,15 +959,19 @@ export function startDashboard() {
       try {
         const res = await fetch('/api/activities/rpg/combat/action', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ discordId: state.discordId, action })
+          body: JSON.stringify({ action })
         });
+        if (res.status === 401) { window.location.href = '/login/player?next=/atividades/rpg'; return; }
         const turn = await res.json();
         if (res.status === 409) { document.getElementById('arena').innerHTML += \`<p class="error">⏳ \${turn.message}</p>\`; return; }
-        renderArena(turn, action);
+        renderArena(turn);
       } catch (e) {}
     }
 
-    function renderArena(turn, lastAction) {
+    // Cores/títulos espelham exatamente o embed do Discord (buildCombatTurnEmbed /
+    // buildCombatResultEmbed em dungeon.ts): verde = Caçada em andamento,
+    // verde/vermelho/laranja = vitória/derrota/fuga.
+    function renderArena(turn) {
       const s = state.stats;
       const maxHp = s ? s.maxHp : turn.playerHp;
       const maxEn = s ? s.maxEnergy : turn.playerEnergy;
@@ -920,29 +981,41 @@ export function startDashboard() {
       const playerEnPct = Math.max(0, Math.min(100, (turn.playerEnergy / maxEn) * 100));
       const enemyHpPct = Math.max(0, Math.min(100, (turn.enemyHp / turn.enemyMaxHp) * 100));
 
-      const heroHitClass = lastAction && !turn.finished ? '' : '';
       const logHtml = (turn.log || []).map(l => '<div>' + l.replace(/\\*\\*(.*?)\\*\\*/g, '<b>$1</b>') + '</div>').join('');
+      const arena = document.getElementById('arena');
 
       let resultHtml = '';
+      let borderColor = '#2ECC71'; // Caçada em andamento
+
       if (turn.finished && turn.result) {
         const r = turn.result;
-        const titleMap = { vitoria: '🏆 Vitória!', derrota: '💀 Derrota', fuga: '🏃 Fuga', empate: '💥 Empate' };
+        const titleMap = { vitoria: '🏆 Vitória!', derrota: '💀 Derrota!', fuga: '🏃 Fuga', empate: '💥 Empate!' };
+        borderColor = r.result === 'vitoria' ? '#2ECC71' : r.result === 'derrota' ? '#E74C3C' : '#F39C12';
+
+        const dropsHtml = (r.itemsDropped && r.itemsDropped.length)
+          ? '<div class="drop-list">🎁 ' + r.itemsDropped.map(i => i.emoji + ' <b>' + i.name + '</b>').join('  •  ') + '</div>'
+          : '';
+
         resultHtml = \`
           <div class="result-banner \${r.result}">\${titleMap[r.result] || r.result}
-            <div class="result-rewards">
-              \${r.xpGained ? '✨ +' + r.xpGained + ' XP &nbsp;·&nbsp; ' : ''}\${r.goldGained ? '🪙 +' + r.goldGained + ' Ouro' : ''}
-              \${r.itemsDropped && r.itemsDropped.length ? '<br>🎁 ' + r.itemsDropped.join(', ') : ''}
+            <div class="reward-fields">
+              <div class="reward-field">⭐ +\${r.xpGained} XP</div>
+              <div class="reward-field">💰 +\${r.goldGained} Ouro</div>
             </div>
+            \${dropsHtml}
           </div>
-          <button class="btn-again" onclick="loadProfile(); document.getElementById('discordId').value = state.discordId;">🔄 Atualizar Ficha</button>
+          <button class="btn-again" onclick="loadProfile();">🔄 Atualizar Ficha</button>
         \`;
         state.inCombat = false;
       }
 
-      document.getElementById('arena').innerHTML = \`
+      arena.style.borderColor = borderColor;
+
+      arena.innerHTML = \`
+        <div class="arena-title"><span>\${turn.finished ? 'Resultado' : '🌲 Caçada — Rodada ' + (turn.round || 1)}</span></div>
         <div class="arena-stage">
           <div class="combatant hero">
-            <div class="sprite \${heroHitClass}">\${heroEmoji}</div>
+            <div class="sprite">\${heroEmoji}</div>
             <div class="combatant-name">Você</div>
             <div class="bars">
               <div class="bar-row"><span class="tag">HP</span><div class="bar-track"><div class="bar-fill" style="width:\${playerHpPct}%; background:var(--red);"></div></div></div>
@@ -961,11 +1034,11 @@ export function startDashboard() {
 
         \${!turn.finished ? \`
         <div class="action-bar">
-          <button class="action-btn attack" onclick="sendAction('attack')">⚔️ Atacar</button>
-          <button class="action-btn skill" onclick="sendAction('skill')" \${turn.skillReady ? '' : 'disabled'}>✨ \${turn.skillName || 'Habilidade'}</button>
+          <button class="action-btn" onclick="sendAction('attack')">⚔️ Atacar</button>
+          <button class="action-btn" onclick="sendAction('skill')" \${turn.skillReady ? '' : 'disabled'}>✨ \${turn.skillName || 'Habilidade'}</button>
           <button class="action-btn" onclick="sendAction('defend')">🛡️ Defender</button>
           <button class="action-btn" onclick="sendAction('potion')" \${turn.potionAvailable ? '' : 'disabled'}>🧪 Poção</button>
-          <button class="action-btn flee" onclick="sendAction('flee')">🏃 Fugir</button>
+          <button class="action-btn" onclick="sendAction('flee')">🏃 Fugir</button>
         </div>\` : ''}
 
         <div class="combat-log" id="combatLog">\${logHtml}</div>
@@ -975,23 +1048,26 @@ export function startDashboard() {
       const logEl = document.getElementById('combatLog');
       if (logEl) logEl.scrollTop = logEl.scrollHeight;
     }
+
+    loadProfile();
   </script>
 </body>
 </html>`);
   });
 
-  app.get('/api/activities/rpg/profile', async (req, res) => {
-    const discordId = req.query.discordId as string;
-    if (!discordId) return res.status(400).json({ error: 'discordId obrigatório' });
+
+  app.get('/api/activities/rpg/profile', requirePlayerAuth, async (req, res) => {
+    const discordId = req.cookies.player_userid as string;
 
     try {
       const character = await getCharacter(discordId);
-      if (!character) return res.status(404).json({ error: 'Personagem não encontrado' });
+      if (!character) return res.status(404).json({ error: 'Você ainda não tem um personagem de RPG. Crie um pelo comando do Discord primeiro!' });
 
       const stats = computeStats(character);
       const cls = getClass(character.class);
       const loc = getLocation(character.currentLocation);
-      const inventory = await prisma.rpgInventoryItem.findMany({ where: { characterId: discordId } });
+      const rawInventory = await prisma.rpgInventoryItem.findMany({ where: { characterId: discordId } });
+      const inventory = rawInventory.map(i => ({ ...enrichItem(i.itemId), quantity: i.quantity }));
 
       res.json({ character, stats, class: cls, location: loc, inventory });
     } catch (e) {
@@ -1002,9 +1078,8 @@ export function startDashboard() {
 
   // Lista os inimigos disponíveis na localização atual do personagem (mesma
   // fonte usada na "Caçada Livre" do Discord: getEnemiesForLocation).
-  app.get('/api/activities/rpg/enemies', async (req, res) => {
-    const discordId = req.query.discordId as string;
-    if (!discordId) return res.status(400).json({ error: 'discordId obrigatório' });
+  app.get('/api/activities/rpg/enemies', requirePlayerAuth, async (req, res) => {
+    const discordId = req.cookies.player_userid as string;
 
     try {
       const character = await getCharacter(discordId);
@@ -1025,9 +1100,12 @@ export function startDashboard() {
   // O estado da luta fica na sessão em memória (activeCombats) do combat.ts —
   // ou seja, se o jogador já estiver batalhando pelo Discord, o site respeita
   // e bloqueia (CombatBlockedError), exatamente como aconteceria lá.
-  app.post('/api/activities/rpg/combat/start', async (req, res) => {
-    const { discordId, guildId, enemyId } = req.body || {};
-    if (!discordId) return res.status(400).json({ error: 'discordId obrigatório' });
+  // O discordId agora vem SEMPRE do cookie de sessão (nunca do corpo da
+  // requisição) — assim ninguém consegue lutar/ver a ficha de outra pessoa
+  // só colando o ID dela.
+  app.post('/api/activities/rpg/combat/start', requirePlayerAuth, async (req, res) => {
+    const discordId = req.cookies.player_userid as string;
+    const { guildId, enemyId } = req.body || {};
 
     try {
       const character = await getCharacter(discordId);
@@ -1040,7 +1118,10 @@ export function startDashboard() {
         enemy = pool[Math.floor(Math.random() * pool.length)];
       }
 
-      const turn = await startInteractiveCombat(character, enemy, guildId, 'hunt');
+      const turn: any = await startInteractiveCombat(character, enemy, guildId, 'hunt');
+      if (turn.finished && turn.result?.itemsDropped) {
+        turn.result.itemsDropped = turn.result.itemsDropped.map(enrichItem);
+      }
       res.json(turn);
     } catch (err) {
       if (err instanceof CombatBlockedError) return res.status(409).json(isCombatBlockedMessage(err.message));
@@ -1049,12 +1130,16 @@ export function startDashboard() {
     }
   });
 
-  app.post('/api/activities/rpg/combat/action', async (req, res) => {
-    const { discordId, action } = req.body || {};
-    if (!discordId || !action) return res.status(400).json({ error: 'discordId e action são obrigatórios' });
+  app.post('/api/activities/rpg/combat/action', requirePlayerAuth, async (req, res) => {
+    const discordId = req.cookies.player_userid as string;
+    const { action } = req.body || {};
+    if (!action) return res.status(400).json({ error: 'action é obrigatório' });
 
     try {
-      const turn = await takeCombatAction(discordId, action as CombatAction);
+      const turn: any = await takeCombatAction(discordId, action as CombatAction);
+      if (turn.finished && turn.result?.itemsDropped) {
+        turn.result.itemsDropped = turn.result.itemsDropped.map(enrichItem);
+      }
       res.json(turn);
     } catch (err) {
       if (err instanceof CombatBlockedError) return res.status(409).json(isCombatBlockedMessage(err.message));
@@ -1111,6 +1196,52 @@ export function startDashboard() {
 
       res.redirect('/painel');
     } catch (error) { res.status(500).send('Erro na autenticação.'); }
+  });
+
+  // =====================================================================
+  // 🔑 LOGIN DE JOGADOR (separado do login admin do painel!)
+  // Qualquer conta do Discord pode entrar aqui — não checa AllianceServerMember.
+  // Serve só para as Atividades (RPG, chat) saberem com certeza QUEM é o
+  // jogador, sem depender de um ID digitado manualmente (que qualquer um
+  // poderia colar e ver/mexer na ficha alheia).
+  // =====================================================================
+  app.get('/login/player', (req, res) => {
+    const next = safePlayerRedirect(req.query.next);
+    const state = encodeURIComponent(next);
+    res.redirect(`https://discord.com/api/oauth2/authorize?client_id=${clientId}&redirect_uri=${encodeURIComponent(dashboardUrl + '/auth/callback/player')}&response_type=code&scope=identify&state=${state}`);
+  });
+
+  app.get('/auth/callback/player', async (req, res) => {
+    const code = req.query.code as string;
+    const next = safePlayerRedirect(req.query.state);
+    if (!code) return res.redirect('/login/player');
+
+    try {
+      const tokenRes = await axios.post('https://discord.com/api/oauth2/token', new URLSearchParams({
+        client_id: clientId!, client_secret: clientSecret!, grant_type: 'authorization_code', code, redirect_uri: `${dashboardUrl}/auth/callback/player`,
+      }), { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } });
+
+      const userRes = await axios.get('https://discord.com/api/users/@me', { headers: { Authorization: `Bearer ${tokenRes.data.access_token}` } });
+      const { id: userId, username, avatar } = userRes.data;
+
+      res.cookie('player_auth', 'permitido', { maxAge: 86400000, httpOnly: false });
+      res.cookie('player_userid', userId, { maxAge: 86400000, httpOnly: false });
+      res.cookie('player_username', username, { maxAge: 86400000, httpOnly: false });
+      if (avatar) res.cookie('player_avatar', avatar, { maxAge: 86400000, httpOnly: false });
+
+      res.redirect(next);
+    } catch (error) {
+      console.error('[Login/Player] Erro na autenticação:', error);
+      res.status(500).send('Erro na autenticação com o Discord.');
+    }
+  });
+
+  app.get('/logout/player', (req, res) => {
+    res.clearCookie('player_auth');
+    res.clearCookie('player_userid');
+    res.clearCookie('player_username');
+    res.clearCookie('player_avatar');
+    res.redirect('/atividades');
   });
 
   app.get('/api/config', async (req, res) => {

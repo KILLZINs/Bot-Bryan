@@ -1,4 +1,5 @@
-const MISTRAL_API_KEY = process.env.MISTRAL_API_KEY;
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+const GEMINI_MODEL = 'gemini-flash-latest';
 
 const SUKI_ALLOWED_GUILDS = new Set(
   (
@@ -23,48 +24,46 @@ function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-async function callMistral(
+async function callGemini(
   systemPrompt: string,
   userMessage: string,
   memory: MemoryMessage[] = [],
   temperature = 0.55,
   attempt = 0
 ): Promise<string> {
-  if (!MISTRAL_API_KEY) {
-    console.error('[Mistral/Suki] ERRO: MISTRAL_API_KEY não definida!');
-    return '🔑 Chave da Mistral não configurada. Adicione MISTRAL_API_KEY no Railway.';
+  if (!GEMINI_API_KEY) {
+    console.error('[Gemini/Suki] ERRO: GEMINI_API_KEY não definida!');
+    return '🔑 Chave da Gemini não configurada. Adicione GEMINI_API_KEY no Railway.';
   }
 
-  const messages = [
-    {
-      role: 'system' as const,
-      content: systemPrompt,
-    },
+  const contents = [
     ...memory.map((msg) => ({
-      role: msg.role,
-      content: msg.content,
+      role: msg.role === 'assistant' ? 'model' as const : 'user' as const,
+      parts: [{ text: msg.content }],
     })),
     {
       role: 'user' as const,
-      content: userMessage,
+      parts: [{ text: userMessage }],
     },
   ];
 
   try {
-    const res = await fetch('https://api.mistral.ai/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${MISTRAL_API_KEY.trim()}`,
-        'Content-Type': 'application/json',
-        Accept: 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'mistral-small-latest',
-        messages,
-        max_tokens: 180,
-        temperature,
-      }),
-    });
+    const res = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`,
+      {
+        method: 'POST',
+        headers: {
+          'x-goog-api-key': GEMINI_API_KEY.trim(),
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+        },
+        body: JSON.stringify({
+          system_instruction: { parts: [{ text: systemPrompt }] },
+          contents,
+          generationConfig: { temperature, maxOutputTokens: 250 },
+        }),
+      }
+    );
 
     const body = await res.text();
     let data: any = null;
@@ -77,43 +76,53 @@ async function callMistral(
 
     if (!res.ok) {
       console.error(
-        `[Mistral/Suki] HTTP ${res.status}:`,
+        `[Gemini/Suki] HTTP ${res.status}:`,
         body.slice(0, 1000)
       );
 
-      if (res.status === 401) {
-        return '🔑 A chave da Mistral é inválida. Verifique MISTRAL_API_KEY no Railway.';
+      if (res.status === 400 || res.status === 403) {
+        return '🔑 A chave da Gemini é inválida ou sem permissão. Verifique GEMINI_API_KEY no Railway/AI Studio.';
       }
 
       if (res.status === 429) {
         if (attempt < 2) {
-          await sleep(800 * (attempt + 1));
-          return callMistral(systemPrompt, userMessage, memory, temperature, attempt + 1);
+          await sleep(1000 * (attempt + 1));
+          return callGemini(systemPrompt, userMessage, memory, temperature, attempt + 1);
         }
-        return '⏳ Calma aí KKKK, a Mistral limitou as requisições. Tenta de novo em alguns segundos.';
+        return '⏳ Calma aí KKKK, a Gemini limitou as requisições. Tenta de novo em alguns segundos.';
       }
 
-      if (res.status === 402) {
-        return '💳 A conta da Mistral não pode processar essa requisição agora.';
+      if (res.status >= 500 && attempt < 1) {
+        await sleep(800);
+        return callGemini(systemPrompt, userMessage, memory, temperature, attempt + 1);
       }
 
       return `❌ Erro ${res.status} ao contactar a IA.`;
     }
 
-    const content = data?.choices?.[0]?.message?.content;
+    const blockReason = data?.promptFeedback?.blockReason;
+    if (blockReason) {
+      console.error('[Gemini/Suki] Bloqueado por segurança:', blockReason);
+      return 'Prefiro não falar disso agora KKKK, muda de assunto?';
+    }
 
-    if (typeof content === 'string' && content.trim()) {
-      return content.trim();
+    const parts = data?.candidates?.[0]?.content?.parts;
+    const content = Array.isArray(parts)
+      ? parts.map((p: any) => p?.text || '').join('').trim()
+      : '';
+
+    if (content) {
+      return content;
     }
 
     console.error(
-      '[Mistral/Suki] Resposta inesperada:',
+      '[Gemini/Suki] Resposta inesperada:',
       body.slice(0, 1000)
     );
 
     return 'Ué... fiquei sem resposta KKKK';
   } catch (err) {
-    console.error('[Mistral/Suki] Erro de conexão/fetch:', err);
+    console.error('[Gemini/Suki] Erro de conexão/fetch:', err);
     return '❌ Erro de conexão com a IA. Tenta novamente.';
   }
 }
@@ -175,7 +184,7 @@ NÃO interaja com os outros nomes do histórico. Responda APENAS e DIRETAMENTE �
 
 Mensagem de ${safeUsername}: "${safeMessage}"`;
 
-  return callMistral(
+  return callGemini(
     prompt,
     safeMessage,
     [], // 💡 Passamos Array Vazio aqui porque o histórico já está injetado no Prompt de forma segura!

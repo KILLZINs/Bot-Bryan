@@ -5,11 +5,16 @@ type MemoryMessage = {
   content: string;
 };
 
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 async function callMistral(
   systemPrompt: string,
   userMessage: string,
   memory: MemoryMessage[] = [],
-  temperature = 0.55
+  temperature = 0.55,
+  attempt = 0
 ): Promise<string> {
   if (!MISTRAL_API_KEY) {
     console.error('[Mistral/Bryan] ERRO: MISTRAL_API_KEY não definida!');
@@ -67,7 +72,14 @@ async function callMistral(
       }
 
       if (res.status === 429) {
-        return '⏳ Calma aí KKKK, a Mistral limitou as requisições.';
+        // 🔁 A Mistral (free tier) limita requisições/s. Antes de desistir,
+        // tenta de novo com um pequeno atraso — resolve a maioria dos picos
+        // de uso simultâneo (texto + Callia por voz + dashboard web).
+        if (attempt < 2) {
+          await sleep(800 * (attempt + 1));
+          return callMistral(systemPrompt, userMessage, memory, temperature, attempt + 1);
+        }
+        return '⏳ Calma aí KKKK, a Mistral limitou as requisições. Tenta de novo em alguns segundos.';
       }
 
       if (res.status === 402) {

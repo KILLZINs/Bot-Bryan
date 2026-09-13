@@ -7,11 +7,16 @@ type MemoryMessage = {
   content: string;
 };
 
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 async function callMistral(
   systemPrompt: string,
   userMessage: string,
   memory: MemoryMessage[] = [],
-  temperature = 0.60
+  temperature = 0.60,
+  attempt = 0
 ): Promise<string> {
   if (!MISTRAL_API_KEY) {
     return '🔑 Chave da Mistral não configurada no servidor.';
@@ -43,6 +48,10 @@ async function callMistral(
     let data: any = null;
     try { data = body ? JSON.parse(body) : null; } catch { data = null; }
 
+    if (res.status === 429 && attempt < 2) {
+      await sleep(800 * (attempt + 1));
+      return callMistral(systemPrompt, userMessage, memory, temperature, attempt + 1);
+    }
     if (!res.ok) return `❌ Erro na Mistral: ${res.status}`;
     const content = data?.choices?.[0]?.message?.content;
     return typeof content === 'string' && content.trim() ? content.trim() : 'Deu branco aqui, desculpa.';

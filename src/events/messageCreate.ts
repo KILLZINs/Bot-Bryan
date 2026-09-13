@@ -34,6 +34,7 @@ const SUKI_BANNER_URL = process.env.SUKI_BANNER_URL ?? '';
 
 const PREFIX = 'b ';
 const BRYAN_REGEX = /^bryan[,!.?:\s]/i;
+const BRYAN_REGEX_ANYWHERE = /\bbryan\b/i;
 const SUKI_REGEX = /\bsuki\b/i;
 const CREATE_SUKI_WEBHOOK_REGEX = /\b(?:cria|criar|configure|configurar|ativa|ativar)\b[\s\S]*\b(?:suki|webhook)\b/i;
 
@@ -471,6 +472,37 @@ export default {
           allowedMentions: { parse: [] },
         }).catch(() => message.reply('Deu erro pra eu aparecer como Suki 😭').catch(() => null));
 
+        return;
+      }
+    }
+
+    // ========================================================
+    // 5. BRYAN MENCIONADO NO MEIO DA FRASE (mesmo fallback que a Suki já
+    // tinha — antes o Bryan SÓ respondia se a mensagem começasse com
+    // "bryan". Agora "oi bryan", "cade o bryan", "@Bot bryan tá ai?" etc
+    // também disparam, igual já funcionava pra Suki.)
+    // ========================================================
+    {
+      const bryanMentioned = message.mentions.users.has(message.client.user.id);
+      const bryanCalledAnywhere = BRYAN_REGEX_ANYWHERE.test(content);
+
+      if (bryanCalledAnywhere || bryanMentioned) {
+        const bryanKey = `${guildId}:${authorId}`;
+        const now = Date.now();
+
+        if (now - (bryanCooldowns.get(bryanKey) ?? 0) < 8000) return;
+        bryanCooldowns.set(bryanKey, now);
+
+        let userMessage = content.replace(/<@!?\d+>/g, '').replace(/\bbryan\b/gi, '').trim();
+        if (!userMessage) userMessage = 'Oi Bryan, você tá aí?';
+
+        await (message.channel as TextChannel).sendTyping().catch(() => null);
+
+        const displayName = message.member?.displayName ?? message.author.username;
+        const memory = await fetchChannelMemory(message);
+        const response = await askBryan(userMessage, displayName, memory);
+
+        await message.reply(response).catch(() => null);
         return;
       }
     }

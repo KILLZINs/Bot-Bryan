@@ -1,5 +1,7 @@
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
-const GEMINI_MODEL = 'gemini-flash-latest';
+// Flash-Lite: RPM/RPD bem mais generosos que o Flash normal no free tier
+// (mesma lógica do bryan.ts). Ver: https://ai.google.dev/gemini-api/docs/rate-limits
+const GEMINI_MODEL = 'gemini-flash-lite-latest';
 
 const SUKI_ALLOWED_GUILDS = new Set(
   (

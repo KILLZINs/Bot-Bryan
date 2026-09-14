@@ -149,7 +149,7 @@ async function askLocalAI(message: string, userName: string, memory: any[], syst
         body: JSON.stringify({
           system_instruction: { parts: [{ text: finalPrompt }] },
           contents,
-          generationConfig: { temperature: 0.7, maxOutputTokens: 300 },
+          generationConfig: { temperature: 0.7, maxOutputTokens: 800 },
         }),
       }
     );

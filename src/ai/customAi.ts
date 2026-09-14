@@ -1,7 +1,8 @@
 import { prisma } from '../database/client';
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
-const GEMINI_MODEL = 'gemini-flash-latest';
+// Flash-Lite: RPM/RPD bem mais generosos que o Flash normal no free tier.
+const GEMINI_MODEL = 'gemini-flash-lite-latest';
 
 type MemoryMessage = {
   role: 'user' | 'assistant';

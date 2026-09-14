@@ -29,7 +29,8 @@ async function callGemini(
   userMessage: string,
   memory: MemoryMessage[] = [],
   temperature = 0.55,
-  attempt = 0
+  attempt = 0,
+  skipThinkingConfig = false
 ): Promise<string> {
   if (!GEMINI_API_KEY) {
     console.error('[Gemini/Suki] ERRO: GEMINI_API_KEY não definida!');
@@ -47,6 +48,14 @@ async function callGemini(
     },
   ];
 
+  const generationConfig: Record<string, unknown> = {
+    temperature,
+    maxOutputTokens: skipThinkingConfig ? 800 : 250,
+  };
+  if (!skipThinkingConfig) {
+    generationConfig.thinkingConfig = { thinkingBudget: 0 };
+  }
+
   try {
     const res = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`,
@@ -60,7 +69,7 @@ async function callGemini(
         body: JSON.stringify({
           system_instruction: { parts: [{ text: systemPrompt }] },
           contents,
-          generationConfig: { temperature, maxOutputTokens: 250 },
+          generationConfig,
         }),
       }
     );
@@ -80,6 +89,10 @@ async function callGemini(
         body.slice(0, 1000)
       );
 
+      if (res.status === 400 && !skipThinkingConfig && /thinking/i.test(body)) {
+        return callGemini(systemPrompt, userMessage, memory, temperature, attempt, true);
+      }
+
       if (res.status === 400 || res.status === 403) {
         return '🔑 A chave da Gemini é inválida ou sem permissão. Verifique GEMINI_API_KEY no Railway/AI Studio.';
       }
@@ -87,14 +100,14 @@ async function callGemini(
       if (res.status === 429) {
         if (attempt < 2) {
           await sleep(1000 * (attempt + 1));
-          return callGemini(systemPrompt, userMessage, memory, temperature, attempt + 1);
+          return callGemini(systemPrompt, userMessage, memory, temperature, attempt + 1, skipThinkingConfig);
         }
         return '⏳ Calma aí KKKK, a Gemini limitou as requisições. Tenta de novo em alguns segundos.';
       }
 
       if (res.status >= 500 && attempt < 1) {
         await sleep(800);
-        return callGemini(systemPrompt, userMessage, memory, temperature, attempt + 1);
+        return callGemini(systemPrompt, userMessage, memory, temperature, attempt + 1, skipThinkingConfig);
       }
 
       return `❌ Erro ${res.status} ao contactar a IA.`;
@@ -106,10 +119,15 @@ async function callGemini(
       return 'Prefiro não falar disso agora KKKK, muda de assunto?';
     }
 
+    const finishReason = data?.candidates?.[0]?.finishReason;
     const parts = data?.candidates?.[0]?.content?.parts;
     const content = Array.isArray(parts)
       ? parts.map((p: any) => p?.text || '').join('').trim()
       : '';
+
+    if (finishReason === 'MAX_TOKENS' && !skipThinkingConfig) {
+      return callGemini(systemPrompt, userMessage, memory, temperature, attempt, true);
+    }
 
     if (content) {
       return content;

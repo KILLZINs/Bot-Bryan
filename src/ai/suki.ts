@@ -1,7 +1,5 @@
-const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
-// Flash-Lite: RPM/RPD bem mais generosos que o Flash normal no free tier
-// (mesma lógica do bryan.ts). Ver: https://ai.google.dev/gemini-api/docs/rate-limits
-const GEMINI_MODEL = 'gemini-flash-lite-latest';
+const GROQ_API_KEY = process.env.GROQ_API_KEY;
+const GROQ_MODEL = 'openai/gpt-oss-120b';
 
 const SUKI_ALLOWED_GUILDS = new Set(
   (
@@ -26,55 +24,39 @@ function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-async function callGemini(
+async function callGroq(
   systemPrompt: string,
   userMessage: string,
   memory: MemoryMessage[] = [],
   temperature = 0.55,
-  attempt = 0,
-  skipThinkingConfig = false
+  attempt = 0
 ): Promise<string> {
-  if (!GEMINI_API_KEY) {
-    console.error('[Gemini/Suki] ERRO: GEMINI_API_KEY não definida!');
-    return '🔑 Chave da Gemini não configurada. Adicione GEMINI_API_KEY no Railway.';
+  if (!GROQ_API_KEY) {
+    console.error('[Groq/Suki] ERRO: GROQ_API_KEY não definida!');
+    return '🔑 Chave da Groq não configurada. Adicione GROQ_API_KEY no Railway.';
   }
 
-  const contents = [
-    ...memory.map((msg) => ({
-      role: msg.role === 'assistant' ? 'model' as const : 'user' as const,
-      parts: [{ text: msg.content }],
-    })),
-    {
-      role: 'user' as const,
-      parts: [{ text: userMessage }],
-    },
+  const messages = [
+    { role: 'system' as const, content: systemPrompt },
+    ...memory.map((msg) => ({ role: msg.role, content: msg.content })),
+    { role: 'user' as const, content: userMessage },
   ];
 
-  const generationConfig: Record<string, unknown> = {
-    temperature,
-    maxOutputTokens: skipThinkingConfig ? 800 : 250,
-  };
-  if (!skipThinkingConfig) {
-    generationConfig.thinkingConfig = { thinkingBudget: 0 };
-  }
-
   try {
-    const res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`,
-      {
-        method: 'POST',
-        headers: {
-          'x-goog-api-key': GEMINI_API_KEY.trim(),
-          'Content-Type': 'application/json',
-          Accept: 'application/json',
-        },
-        body: JSON.stringify({
-          system_instruction: { parts: [{ text: systemPrompt }] },
-          contents,
-          generationConfig,
-        }),
-      }
-    );
+    const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${GROQ_API_KEY.trim()}`,
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+      },
+      body: JSON.stringify({
+        model: GROQ_MODEL,
+        messages,
+        max_tokens: 300,
+        temperature,
+      }),
+    });
 
     const body = await res.text();
     let data: any = null;
@@ -86,63 +68,43 @@ async function callGemini(
     }
 
     if (!res.ok) {
-      console.error(
-        `[Gemini/Suki] HTTP ${res.status}:`,
-        body.slice(0, 1000)
-      );
+      console.error(`[Groq/Suki] HTTP ${res.status}:`, body.slice(0, 1000));
 
-      if (res.status === 400 && !skipThinkingConfig && /thinking/i.test(body)) {
-        return callGemini(systemPrompt, userMessage, memory, temperature, attempt, true);
-      }
-
-      if (res.status === 400 || res.status === 403) {
-        return '🔑 A chave da Gemini é inválida ou sem permissão. Verifique GEMINI_API_KEY no Railway/AI Studio.';
+      if (res.status === 401 || res.status === 403) {
+        return '🔑 A chave da Groq é inválida ou sem permissão. Verifique GROQ_API_KEY em console.groq.com/keys.';
       }
 
       if (res.status === 429) {
         if (attempt < 2) {
           await sleep(1000 * (attempt + 1));
-          return callGemini(systemPrompt, userMessage, memory, temperature, attempt + 1, skipThinkingConfig);
+          return callGroq(systemPrompt, userMessage, memory, temperature, attempt + 1);
         }
-        return '⏳ Calma aí KKKK, a Gemini limitou as requisições. Tenta de novo em alguns segundos.';
+        return '⏳ Calma aí KKKK, a Groq limitou as requisições. Tenta de novo em alguns segundos.';
+      }
+
+      if (res.status === 400) {
+        return `❌ O modelo da IA (${GROQ_MODEL}) parece ter sido descontinuado pela Groq. Confira em console.groq.com/docs/deprecations.`;
       }
 
       if (res.status >= 500 && attempt < 1) {
         await sleep(800);
-        return callGemini(systemPrompt, userMessage, memory, temperature, attempt + 1, skipThinkingConfig);
+        return callGroq(systemPrompt, userMessage, memory, temperature, attempt + 1);
       }
 
       return `❌ Erro ${res.status} ao contactar a IA.`;
     }
 
-    const blockReason = data?.promptFeedback?.blockReason;
-    if (blockReason) {
-      console.error('[Gemini/Suki] Bloqueado por segurança:', blockReason);
-      return 'Prefiro não falar disso agora KKKK, muda de assunto?';
+    const content = data?.choices?.[0]?.message?.content;
+
+    if (typeof content === 'string' && content.trim()) {
+      return content.trim();
     }
 
-    const finishReason = data?.candidates?.[0]?.finishReason;
-    const parts = data?.candidates?.[0]?.content?.parts;
-    const content = Array.isArray(parts)
-      ? parts.map((p: any) => p?.text || '').join('').trim()
-      : '';
-
-    if (finishReason === 'MAX_TOKENS' && !skipThinkingConfig) {
-      return callGemini(systemPrompt, userMessage, memory, temperature, attempt, true);
-    }
-
-    if (content) {
-      return content;
-    }
-
-    console.error(
-      '[Gemini/Suki] Resposta inesperada:',
-      body.slice(0, 1000)
-    );
+    console.error('[Groq/Suki] Resposta inesperada:', body.slice(0, 1000));
 
     return 'Ué... fiquei sem resposta KKKK';
   } catch (err) {
-    console.error('[Gemini/Suki] Erro de conexão/fetch:', err);
+    console.error('[Groq/Suki] Erro de conexão/fetch:', err);
     return '❌ Erro de conexão com a IA. Tenta novamente.';
   }
 }
@@ -204,7 +166,7 @@ NÃO interaja com os outros nomes do histórico. Responda APENAS e DIRETAMENTE �
 
 Mensagem de ${safeUsername}: "${safeMessage}"`;
 
-  return callGemini(
+  return callGroq(
     prompt,
     safeMessage,
     [], // 💡 Passamos Array Vazio aqui porque o histórico já está injetado no Prompt de forma segura!

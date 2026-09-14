@@ -122,7 +122,7 @@ async function getOrCreateWebhook(channel: TextChannel, name: string, avatarUrl:
 
 async function askLocalAI(message: string, userName: string, memory: any[], systemPrompt: string): Promise<string> {
   const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
-  const GEMINI_MODEL = 'gemini-flash-latest';
+  const GEMINI_MODEL = 'gemini-flash-lite-latest'; // RPM/RPD maiores no free tier
   if (!GEMINI_API_KEY) return 'Opa, o dono do bot esqueceu de colocar a chave da API!';
 
   const finalPrompt = systemPrompt || 'Você é um assistente virtual amigável em um servidor do Discord. Responda de forma natural e casual.';

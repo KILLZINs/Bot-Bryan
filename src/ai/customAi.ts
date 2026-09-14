@@ -17,7 +17,8 @@ async function callGemini(
   userMessage: string,
   memory: MemoryMessage[] = [],
   temperature = 0.60,
-  attempt = 0
+  attempt = 0,
+  skipThinkingConfig = false
 ): Promise<string> {
   if (!GEMINI_API_KEY) {
     return '🔑 Chave da Gemini não configurada no servidor.';
@@ -30,6 +31,14 @@ async function callGemini(
     })),
     { role: 'user' as const, parts: [{ text: userMessage }] },
   ];
+
+  const generationConfig: Record<string, unknown> = {
+    temperature,
+    maxOutputTokens: skipThinkingConfig ? 800 : 250,
+  };
+  if (!skipThinkingConfig) {
+    generationConfig.thinkingConfig = { thinkingBudget: 0 };
+  }
 
   try {
     const res = await fetch(
@@ -44,7 +53,7 @@ async function callGemini(
         body: JSON.stringify({
           system_instruction: { parts: [{ text: systemPrompt }] },
           contents,
-          generationConfig: { temperature, maxOutputTokens: 250 },
+          generationConfig,
         }),
       }
     );
@@ -53,9 +62,12 @@ async function callGemini(
     let data: any = null;
     try { data = body ? JSON.parse(body) : null; } catch { data = null; }
 
+    if (res.status === 400 && !skipThinkingConfig && /thinking/i.test(body)) {
+      return callGemini(systemPrompt, userMessage, memory, temperature, attempt, true);
+    }
     if (res.status === 429 && attempt < 2) {
       await sleep(1000 * (attempt + 1));
-      return callGemini(systemPrompt, userMessage, memory, temperature, attempt + 1);
+      return callGemini(systemPrompt, userMessage, memory, temperature, attempt + 1, skipThinkingConfig);
     }
     if (res.status === 400 || res.status === 403) {
       return '🔑 A chave da Gemini é inválida ou sem permissão. Verifique GEMINI_API_KEY.';
@@ -66,8 +78,14 @@ async function callGemini(
       return 'Prefiro não responder isso agora, muda de assunto?';
     }
 
+    const finishReason = data?.candidates?.[0]?.finishReason;
     const parts = data?.candidates?.[0]?.content?.parts;
     const content = Array.isArray(parts) ? parts.map((p: any) => p?.text || '').join('').trim() : '';
+
+    if (finishReason === 'MAX_TOKENS' && !skipThinkingConfig) {
+      return callGemini(systemPrompt, userMessage, memory, temperature, attempt, true);
+    }
+
     return content || 'Deu branco aqui, desculpa.';
   } catch (err) {
     return '❌ Erro de conexão com a IA. Tenta novamente.';

@@ -27,7 +27,7 @@ TEMA: "${promptConfig || 'Faça uma pergunta divertida sobre jogos ou animes.'}"
         body: JSON.stringify({
           system_instruction: { parts: [{ text: systemPrompt }] },
           contents: [{ role: 'user', parts: [{ text: 'Gere a pergunta agora.' }] }],
-          generationConfig: { temperature: 0.8, maxOutputTokens: 100 },
+          generationConfig: { temperature: 0.8, maxOutputTokens: 500 },
         }),
       }
     );

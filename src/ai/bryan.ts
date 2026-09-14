@@ -1,13 +1,8 @@
-const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
-// Alias "latest" da Google — aponta sempre para o Flash atual, evitando que o
-// bot quebre quando a Google desativa uma versão específica (ex: gemini-2.5-flash
-// será desligado em out/2026). Ver: https://ai.google.dev/gemini-api/docs/models
-// Flash-Lite tem RPM/RPD bem mais generosos que o Flash "normal" no free
-// tier (na faixa de 2x+ em requisições por minuto e por dia, dependendo do
-// snapshot da Google), além de já vir com "thinking" desligado por padrão
-// na maioria das versões — o que também ajuda a evitar respostas cortadas.
-// Ver: https://ai.google.dev/gemini-api/docs/rate-limits
-const GEMINI_MODEL = 'gemini-flash-lite-latest';
+const GROQ_API_KEY = process.env.GROQ_API_KEY;
+// GPT-OSS 120B é o modelo recomendado pela própria Groq (o antigo
+// llama-3.3-70b-versatile foi desativado em 16/ago/2026). Ver:
+// https://console.groq.com/docs/deprecations
+const GROQ_MODEL = 'openai/gpt-oss-120b';
 
 type MemoryMessage = {
   role: 'user' | 'assistant';
@@ -18,64 +13,40 @@ function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-async function callGemini(
+async function callGroq(
   systemPrompt: string,
   userMessage: string,
   memory: MemoryMessage[] = [],
   temperature = 0.55,
-  attempt = 0,
-  skipThinkingConfig = false
+  attempt = 0
 ): Promise<string> {
-  if (!GEMINI_API_KEY) {
-    console.error('[Gemini/Bryan] ERRO: GEMINI_API_KEY não definida!');
-    return '🔑 Chave da Gemini não configurada. Adicione GEMINI_API_KEY no Railway.';
+  if (!GROQ_API_KEY) {
+    console.error('[Groq/Bryan] ERRO: GROQ_API_KEY não definida!');
+    return '🔑 Chave da Groq não configurada. Adicione GROQ_API_KEY no Railway.';
   }
 
-  // A Gemini usa roles "user" e "model" (não "assistant"), e o histórico vai
-  // dentro de "contents" — o prompt de sistema fica separado em system_instruction.
-  const contents = [
-    ...memory.map((msg) => ({
-      role: msg.role === 'assistant' ? 'model' as const : 'user' as const,
-      parts: [{ text: msg.content }],
-    })),
-    {
-      role: 'user' as const,
-      parts: [{ text: userMessage }],
-    },
+  // Formato OpenAI-compatible: messages com role "system"/"user"/"assistant".
+  const messages = [
+    { role: 'system' as const, content: systemPrompt },
+    ...memory.map((msg) => ({ role: msg.role, content: msg.content })),
+    { role: 'user' as const, content: userMessage },
   ];
 
-  // 🧠 Modelos Gemini 2.5+ "pensam" antes de responder por padrão, e esses
-  // tokens de raciocínio saem do MESMO orçamento do maxOutputTokens — se ele
-  // for baixo, o "pensamento" consome tudo e a resposta visível sai cortada
-  // no meio da frase. thinkingBudget:0 desliga isso (funciona no Flash 2.5).
-  // Alguns modelos mais novos rejeitam esse campo (HTTP 400) — nesse caso a
-  // gente detecta e refaz a chamada sem ele, com maxOutputTokens bem maior
-  // como rede de segurança pra não truncar de novo.
-  const generationConfig: Record<string, unknown> = {
-    temperature,
-    maxOutputTokens: skipThinkingConfig ? 800 : 250,
-  };
-  if (!skipThinkingConfig) {
-    generationConfig.thinkingConfig = { thinkingBudget: 0 };
-  }
-
   try {
-    const res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`,
-      {
-        method: 'POST',
-        headers: {
-          'x-goog-api-key': GEMINI_API_KEY.trim(),
-          'Content-Type': 'application/json',
-          Accept: 'application/json',
-        },
-        body: JSON.stringify({
-          system_instruction: { parts: [{ text: systemPrompt }] },
-          contents,
-          generationConfig,
-        }),
-      }
-    );
+    const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${GROQ_API_KEY.trim()}`,
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+      },
+      body: JSON.stringify({
+        model: GROQ_MODEL,
+        messages,
+        max_tokens: 300,
+        temperature,
+      }),
+    });
 
     const body = await res.text();
     let data: any = null;
@@ -87,71 +58,47 @@ async function callGemini(
     }
 
     if (!res.ok) {
-      console.error(
-        `[Gemini/Bryan] HTTP ${res.status}:`,
-        body.slice(0, 1000)
-      );
+      console.error(`[Groq/Bryan] HTTP ${res.status}:`, body.slice(0, 1000));
 
-      // Alguns modelos (ex: gemini-3.6-flash+) rejeitam thinkingConfig com
-      // HTTP 400 "Thinking can't be disabled" — refaz sem esse campo.
-      if (res.status === 400 && !skipThinkingConfig && /thinking/i.test(body)) {
-        return callGemini(systemPrompt, userMessage, memory, temperature, attempt, true);
-      }
-
-      if (res.status === 400 || res.status === 403) {
-        return '🔑 A chave da Gemini é inválida ou sem permissão. Verifique GEMINI_API_KEY no Railway/AI Studio.';
+      if (res.status === 401 || res.status === 403) {
+        return '🔑 A chave da Groq é inválida ou sem permissão. Verifique GROQ_API_KEY em console.groq.com/keys.';
       }
 
       if (res.status === 429) {
-        // 🔁 O free tier da Gemini limita requisições por minuto. Antes de
-        // desistir, tenta de novo com um pequeno atraso — resolve a maioria
-        // dos picos de uso simultâneo (texto + Callia por voz + dashboard web).
+        // 🔁 30 req/min no free tier — antes de desistir, tenta de novo com
+        // um pequeno atraso (resolve picos de uso simultâneo).
         if (attempt < 2) {
           await sleep(1000 * (attempt + 1));
-          return callGemini(systemPrompt, userMessage, memory, temperature, attempt + 1, skipThinkingConfig);
+          return callGroq(systemPrompt, userMessage, memory, temperature, attempt + 1);
         }
-        return '⏳ Calma aí KKKK, a Gemini limitou as requisições. Tenta de novo em alguns segundos.';
+        return '⏳ Calma aí KKKK, a Groq limitou as requisições. Tenta de novo em alguns segundos.';
+      }
+
+      if (res.status === 400) {
+        // Modelo removido/renomeado pela Groq — acontece de vez em quando,
+        // eles avisam por e-mail com bastante antecedência quando muda.
+        return `❌ O modelo da IA (${GROQ_MODEL}) parece ter sido descontinuado pela Groq. Confira em console.groq.com/docs/deprecations.`;
       }
 
       if (res.status >= 500 && attempt < 1) {
         await sleep(800);
-        return callGemini(systemPrompt, userMessage, memory, temperature, attempt + 1, skipThinkingConfig);
+        return callGroq(systemPrompt, userMessage, memory, temperature, attempt + 1);
       }
 
       return `❌ Erro ${res.status} ao contactar a IA.`;
     }
 
-    const blockReason = data?.promptFeedback?.blockReason;
-    if (blockReason) {
-      console.error('[Gemini/Bryan] Bloqueado por segurança:', blockReason);
-      return 'Prefiro não responder isso KKKK, bora falar de outra coisa?';
+    const content = data?.choices?.[0]?.message?.content;
+
+    if (typeof content === 'string' && content.trim()) {
+      return content.trim();
     }
 
-    const finishReason = data?.candidates?.[0]?.finishReason;
-    const parts = data?.candidates?.[0]?.content?.parts;
-    const content = Array.isArray(parts)
-      ? parts.map((p: any) => p?.text || '').join('').trim()
-      : '';
-
-    // 🧠 Resposta cortada porque o "pensamento" consumiu o orçamento de
-    // tokens (MAX_TOKENS com pouco ou nenhum texto visível). Refaz sem
-    // thinkingConfig e com um teto de tokens maior.
-    if (finishReason === 'MAX_TOKENS' && !skipThinkingConfig) {
-      return callGemini(systemPrompt, userMessage, memory, temperature, attempt, true);
-    }
-
-    if (content) {
-      return content;
-    }
-
-    console.error(
-      '[Gemini/Bryan] Resposta inesperada:',
-      body.slice(0, 1000)
-    );
+    console.error('[Groq/Bryan] Resposta inesperada:', body.slice(0, 1000));
 
     return 'Ué... fiquei sem resposta KKKK';
   } catch (err) {
-    console.error('[Gemini/Bryan] Erro de conexão/fetch:', err);
+    console.error('[Groq/Bryan] Erro de conexão/fetch:', err);
     return '❌ Erro de conexão com a IA. Tenta novamente.';
   }
 }
@@ -200,7 +147,7 @@ export async function askBryan(
 
   const prompt = `${BRYAN_SYSTEM_PROMPT}\n\nO usuário que está falando com você se chama ${safeUsername}.\nResponda à mensagem dele naturalmente como Bryan.`;
 
-  return callGemini(
+  return callGroq(
     prompt,
     safeMessage,
     memory,

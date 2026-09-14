@@ -18,7 +18,8 @@ async function callGemini(
   userMessage: string,
   memory: MemoryMessage[] = [],
   temperature = 0.55,
-  attempt = 0
+  attempt = 0,
+  skipThinkingConfig = false
 ): Promise<string> {
   if (!GEMINI_API_KEY) {
     console.error('[Gemini/Bryan] ERRO: GEMINI_API_KEY não definida!');
@@ -38,6 +39,21 @@ async function callGemini(
     },
   ];
 
+  // 🧠 Modelos Gemini 2.5+ "pensam" antes de responder por padrão, e esses
+  // tokens de raciocínio saem do MESMO orçamento do maxOutputTokens — se ele
+  // for baixo, o "pensamento" consome tudo e a resposta visível sai cortada
+  // no meio da frase. thinkingBudget:0 desliga isso (funciona no Flash 2.5).
+  // Alguns modelos mais novos rejeitam esse campo (HTTP 400) — nesse caso a
+  // gente detecta e refaz a chamada sem ele, com maxOutputTokens bem maior
+  // como rede de segurança pra não truncar de novo.
+  const generationConfig: Record<string, unknown> = {
+    temperature,
+    maxOutputTokens: skipThinkingConfig ? 800 : 250,
+  };
+  if (!skipThinkingConfig) {
+    generationConfig.thinkingConfig = { thinkingBudget: 0 };
+  }
+
   try {
     const res = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`,
@@ -51,10 +67,7 @@ async function callGemini(
         body: JSON.stringify({
           system_instruction: { parts: [{ text: systemPrompt }] },
           contents,
-          generationConfig: {
-            temperature,
-            maxOutputTokens: 250,
-          },
+          generationConfig,
         }),
       }
     );
@@ -74,6 +87,12 @@ async function callGemini(
         body.slice(0, 1000)
       );
 
+      // Alguns modelos (ex: gemini-3.6-flash+) rejeitam thinkingConfig com
+      // HTTP 400 "Thinking can't be disabled" — refaz sem esse campo.
+      if (res.status === 400 && !skipThinkingConfig && /thinking/i.test(body)) {
+        return callGemini(systemPrompt, userMessage, memory, temperature, attempt, true);
+      }
+
       if (res.status === 400 || res.status === 403) {
         return '🔑 A chave da Gemini é inválida ou sem permissão. Verifique GEMINI_API_KEY no Railway/AI Studio.';
       }
@@ -84,14 +103,14 @@ async function callGemini(
         // dos picos de uso simultâneo (texto + Callia por voz + dashboard web).
         if (attempt < 2) {
           await sleep(1000 * (attempt + 1));
-          return callGemini(systemPrompt, userMessage, memory, temperature, attempt + 1);
+          return callGemini(systemPrompt, userMessage, memory, temperature, attempt + 1, skipThinkingConfig);
         }
         return '⏳ Calma aí KKKK, a Gemini limitou as requisições. Tenta de novo em alguns segundos.';
       }
 
       if (res.status >= 500 && attempt < 1) {
         await sleep(800);
-        return callGemini(systemPrompt, userMessage, memory, temperature, attempt + 1);
+        return callGemini(systemPrompt, userMessage, memory, temperature, attempt + 1, skipThinkingConfig);
       }
 
       return `❌ Erro ${res.status} ao contactar a IA.`;
@@ -103,10 +122,18 @@ async function callGemini(
       return 'Prefiro não responder isso KKKK, bora falar de outra coisa?';
     }
 
+    const finishReason = data?.candidates?.[0]?.finishReason;
     const parts = data?.candidates?.[0]?.content?.parts;
     const content = Array.isArray(parts)
       ? parts.map((p: any) => p?.text || '').join('').trim()
       : '';
+
+    // 🧠 Resposta cortada porque o "pensamento" consumiu o orçamento de
+    // tokens (MAX_TOKENS com pouco ou nenhum texto visível). Refaz sem
+    // thinkingConfig e com um teto de tokens maior.
+    if (finishReason === 'MAX_TOKENS' && !skipThinkingConfig) {
+      return callGemini(systemPrompt, userMessage, memory, temperature, attempt, true);
+    }
 
     if (content) {
       return content;

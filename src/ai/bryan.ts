@@ -2,7 +2,12 @@ const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 // Alias "latest" da Google — aponta sempre para o Flash atual, evitando que o
 // bot quebre quando a Google desativa uma versão específica (ex: gemini-2.5-flash
 // será desligado em out/2026). Ver: https://ai.google.dev/gemini-api/docs/models
-const GEMINI_MODEL = 'gemini-flash-latest';
+// Flash-Lite tem RPM/RPD bem mais generosos que o Flash "normal" no free
+// tier (na faixa de 2x+ em requisições por minuto e por dia, dependendo do
+// snapshot da Google), além de já vir com "thinking" desligado por padrão
+// na maioria das versões — o que também ajuda a evitar respostas cortadas.
+// Ver: https://ai.google.dev/gemini-api/docs/rate-limits
+const GEMINI_MODEL = 'gemini-flash-lite-latest';
 
 type MemoryMessage = {
   role: 'user' | 'assistant';

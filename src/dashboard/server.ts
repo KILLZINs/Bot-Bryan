@@ -101,7 +101,7 @@ const SERVER_SETTINGS = [
 ];
 
 const GLOBAL_SETTINGS = [
-  { category: "🤖 Perfil do Bryan", desc: "Altere a aparência, bio e status dinâmicos do Bryan diretamente no Discord.", items: [{ id: 'botAvatarUrl', name: 'Foto de Perfil (URL)', type: 'text', placeholder: 'Link da imagem (terminada em .png ou .jpg)' }, { id: 'botBannerUrl', name: 'Banner do Perfil (URL)', type: 'text', placeholder: 'Link do banner' }, { id: 'botPronouns', name: 'Pronomes', type: 'text', placeholder: 'Ex: Ele/Dele' }, { id: 'botBio', name: 'Biografia do Perfil', type: 'textarea', placeholder: 'Escreva a bio que aparecerá no perfil do bot' }, { id: 'botStatusRotation', name: 'Status Rotativo (1 por linha)', type: 'textarea', placeholder: 'Ex:\nJogando Roblox\nAssistindo Netflix\nOuvindo Spotify' }] },
+  { category: "🤖 Perfil do Bryan", desc: "Altere a aparência, bio e status dinâmicos do Bryan diretamente no Discord.", items: [{ id: 'botAvatarUrl', name: 'Foto de Perfil (URL)', type: 'text', placeholder: 'Link da imagem (terminada em .png ou .jpg)' }, { id: 'botBannerUrl', name: 'Banner do Perfil (URL)', type: 'text', placeholder: 'Link do banner' }, { id: 'botPronouns', name: 'Pronomes', type: 'text', placeholder: 'Ex: Ele/Dele' }, { id: 'botBio', name: 'Biografia do Perfil', type: 'textarea', placeholder: 'Escreva a bio que aparecerá no perfil do bot' }, { id: 'botStatusRotation', name: 'Status Rotativo (1 por linha)', type: 'textarea', placeholder: 'Ex:\nJogando Roblox\nAssistindo Netflix\nOuvindo Spotify' }, { id: 'botStatusInterval', name: 'Intervalo de Troca (segundos)', type: 'number', placeholder: 'Ex: 30 (mínimo 10)' }] },
   { category: "🎨 Visual Global", desc: "Personalização de rodapés e cores em todos os servidores", items: [{ id: 'footerText', name: 'Texto de Rodapé Padrão', type: 'text', placeholder: 'Aparece nos embeds gerais' }, { id: 'rpFooterText', name: 'Rodapé Roleplay', type: 'text', placeholder: 'Aparece nos comandos de /rp' }, { id: 'botIconUrl', name: 'URL do Ícone do Bot', type: 'text', placeholder: 'Link direto da imagem do ícone para Embeds' }, { id: 'primaryColor', name: 'Cor Primária dos Embeds', type: 'color', placeholder: '#8B5CF6' }] }
 ];
 
@@ -1306,6 +1306,9 @@ export function startDashboard() {
       }
     } else if (valueType === 'number') {
       finalValue = parseInt(value, 10) || 0;
+      // Trava de segurança: um intervalo baixo/zero faria o bot atualizar a
+      // presença rápido demais e levar rate limit do Discord.
+      if (feature === 'botStatusInterval' && finalValue < 10) finalValue = 10;
     } else if (value === "" || value === null) {
       finalValue = null;
     }

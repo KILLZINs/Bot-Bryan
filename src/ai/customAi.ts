@@ -1,8 +1,7 @@
 import { prisma } from '../database/client';
 
-const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
-// Flash-Lite: RPM/RPD bem mais generosos que o Flash normal no free tier.
-const GEMINI_MODEL = 'gemini-flash-lite-latest';
+const GROQ_API_KEY = process.env.GROQ_API_KEY;
+const GROQ_MODEL = 'openai/gpt-oss-120b';
 
 type MemoryMessage = {
   role: 'user' | 'assistant';
@@ -13,81 +12,54 @@ function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-async function callGemini(
+async function callGroq(
   systemPrompt: string,
   userMessage: string,
   memory: MemoryMessage[] = [],
   temperature = 0.60,
-  attempt = 0,
-  skipThinkingConfig = false
+  attempt = 0
 ): Promise<string> {
-  if (!GEMINI_API_KEY) {
-    return '🔑 Chave da Gemini não configurada no servidor.';
+  if (!GROQ_API_KEY) {
+    return '🔑 Chave da Groq não configurada no servidor.';
   }
 
-  const contents = [
-    ...memory.map((msg) => ({
-      role: msg.role === 'assistant' ? 'model' as const : 'user' as const,
-      parts: [{ text: msg.content }],
-    })),
-    { role: 'user' as const, parts: [{ text: userMessage }] },
+  const messages = [
+    { role: 'system' as const, content: systemPrompt },
+    ...memory.map((msg) => ({ role: msg.role, content: msg.content })),
+    { role: 'user' as const, content: userMessage },
   ];
 
-  const generationConfig: Record<string, unknown> = {
-    temperature,
-    maxOutputTokens: skipThinkingConfig ? 800 : 250,
-  };
-  if (!skipThinkingConfig) {
-    generationConfig.thinkingConfig = { thinkingBudget: 0 };
-  }
-
   try {
-    const res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`,
-      {
-        method: 'POST',
-        headers: {
-          'x-goog-api-key': GEMINI_API_KEY.trim(),
-          'Content-Type': 'application/json',
-          Accept: 'application/json',
-        },
-        body: JSON.stringify({
-          system_instruction: { parts: [{ text: systemPrompt }] },
-          contents,
-          generationConfig,
-        }),
-      }
-    );
+    const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${GROQ_API_KEY.trim()}`,
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+      },
+      body: JSON.stringify({
+        model: GROQ_MODEL,
+        messages,
+        max_tokens: 300,
+        temperature,
+      }),
+    });
 
     const body = await res.text();
     let data: any = null;
     try { data = body ? JSON.parse(body) : null; } catch { data = null; }
 
-    if (res.status === 400 && !skipThinkingConfig && /thinking/i.test(body)) {
-      return callGemini(systemPrompt, userMessage, memory, temperature, attempt, true);
-    }
     if (res.status === 429 && attempt < 2) {
       await sleep(1000 * (attempt + 1));
-      return callGemini(systemPrompt, userMessage, memory, temperature, attempt + 1, skipThinkingConfig);
+      return callGroq(systemPrompt, userMessage, memory, temperature, attempt + 1);
     }
-    if (res.status === 400 || res.status === 403) {
-      return '🔑 A chave da Gemini é inválida ou sem permissão. Verifique GEMINI_API_KEY.';
+    if (res.status === 401 || res.status === 403) {
+      return '🔑 A chave da Groq é inválida ou sem permissão. Verifique GROQ_API_KEY.';
     }
-    if (!res.ok) return `❌ Erro na Gemini: ${res.status}`;
+    if (!res.ok) return `❌ Erro na Groq: ${res.status}`;
 
-    if (data?.promptFeedback?.blockReason) {
-      return 'Prefiro não responder isso agora, muda de assunto?';
-    }
-
-    const finishReason = data?.candidates?.[0]?.finishReason;
-    const parts = data?.candidates?.[0]?.content?.parts;
-    const content = Array.isArray(parts) ? parts.map((p: any) => p?.text || '').join('').trim() : '';
-
-    if (finishReason === 'MAX_TOKENS' && !skipThinkingConfig) {
-      return callGemini(systemPrompt, userMessage, memory, temperature, attempt, true);
-    }
-
-    return content || 'Deu branco aqui, desculpa.';
+    const content = data?.choices?.[0]?.message?.content;
+    return (typeof content === 'string' && content.trim()) ? content.trim() : 'Deu branco aqui, desculpa.';
   } catch (err) {
     return '❌ Erro de conexão com a IA. Tenta novamente.';
   }
@@ -135,5 +107,5 @@ ${chatLog}
 ATENÇÃO: QUEM ESTÁ FALANDO COM VOCÊ AGORA É: ${safeUsername}.
 NÃO interaja com o histórico, foque em ${safeUsername}. Responda diretamente e de forma curta (1 a 3 frases no máximo):`;
 
-  return callGemini(finalPrompt, safeMessage, [], 0.60);
+  return callGroq(finalPrompt, safeMessage, [], 0.60);
 }

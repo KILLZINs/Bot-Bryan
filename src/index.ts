@@ -628,29 +628,62 @@ process.on('uncaughtException', (error) => {
 });
 
 // 🔄 MOTOR DE STATUS E PERFIL DO BOT
-// 🔄 MOTOR DE STATUS ROTATIVO (Liberado pela API)
-async function updateBotPresence(client: Client) {
-  try {
-    const globalCfg = await prisma.botConfig.findUnique({ where: { id: 'global' }});
-    if (!globalCfg || !globalCfg.botStatusRotation || !client.user) return;
+// 🔄 MOTOR DE STATUS ROTATIVO (Configurável pelo dono no /painel)
+// Único responsável pela presença do bot — NÃO existe outro setInterval de
+// presença em nenhum outro arquivo (isso é o que causava o "bagui alternando"
+// estranho antes: dois motores diferentes brigando pra trocar o status).
+const DEFAULT_STATUSES = [
+  'Aliança Skyline ⚔️',
+  'com os membros da aliança',
+  '/painel para começar',
+  '🐉 Boss Mundial ativo!',
+];
 
-    // Separa os status criados no painel e sorteia um
-    const statuses = globalCfg.botStatusRotation.split('\n').map(s => s.trim()).filter(Boolean);
-    if (statuses.length > 0) {
-      const randomStatus = statuses[Math.floor(Math.random() * statuses.length)];
-      
-      client.user.setActivity({
-        name: randomStatus,
-        type: 0 // 0 = Jogando, 2 = Ouvindo, 3 = Assistindo
-      });
-    }
+let statusRotationIndex = 0;
+
+async function updateBotPresence(client: Client) {
+  if (!client.user) return 30; // client ainda não logou — tenta de novo em 30s
+
+  try {
+    const globalCfg = await prisma.botConfig.findUnique({ where: { id: 'global' } });
+
+    const customList = (globalCfg?.botStatusRotation ?? '')
+      .split('\n')
+      .map((s) => s.trim())
+      .filter(Boolean);
+
+    const statuses = customList.length > 0 ? customList : DEFAULT_STATUSES;
+
+    // Rotação SEQUENCIAL (não sorteada) — troca em ordem, uma de cada vez,
+    // reiniciando do início quando chega no fim da lista.
+    statusRotationIndex = statusRotationIndex % statuses.length;
+    const nextStatus = statuses[statusRotationIndex];
+    statusRotationIndex++;
+
+    client.user.setActivity({ name: nextStatus, type: 0 }); // 0 = Jogando
+
+    // Trava de segurança: nunca deixa rodar mais rápido que 10s, mesmo que
+    // alguém salve um valor inválido direto no banco — evita rate limit do
+    // Discord por atualizar presença rápido demais.
+    const configuredSeconds = globalCfg?.botStatusInterval ?? 30;
+    return Math.max(10, configuredSeconds);
   } catch (error) {
     console.error('[STATUS] Erro ao rotacionar:', error);
+    return 30;
   }
 }
 
-// Roda a cada 5 minutos
-setInterval(() => updateBotPresence(client), 5 * 60 * 1000);
+// Auto-agendamento: cada execução já agenda a próxima, lendo o intervalo mais
+// recente do banco — assim, mudar o valor no /painel reflete na próxima troca
+// sem precisar reiniciar o bot.
+(function startStatusEngine() {
+  let timer: NodeJS.Timeout;
+  const tick = async () => {
+    const seconds = await updateBotPresence(client);
+    timer = setTimeout(tick, seconds * 1000);
+  };
+  timer = setTimeout(tick, 5000); // espera o client logar antes da 1ª tentativa
+})();
 
 async function start() {
   try {

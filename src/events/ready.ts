@@ -211,3 +211,4 @@ export default {
     console.log(`📋 ${client.guilds.cache.size} servidor(es) | 👥 ${client.users.cache.size} usuário(s)`);
   },
 };
+// reset

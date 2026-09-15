@@ -121,43 +121,38 @@ async function getOrCreateWebhook(channel: TextChannel, name: string, avatarUrl:
 // ============================================================
 
 async function askLocalAI(message: string, userName: string, memory: any[], systemPrompt: string): Promise<string> {
-  const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
-  const GEMINI_MODEL = 'gemini-flash-lite-latest'; // RPM/RPD maiores no free tier
-  if (!GEMINI_API_KEY) return 'Opa, o dono do bot esqueceu de colocar a chave da API!';
+  const GROQ_API_KEY = process.env.GROQ_API_KEY;
+  const GROQ_MODEL = 'openai/gpt-oss-120b';
+  if (!GROQ_API_KEY) return 'Opa, o dono do bot esqueceu de colocar a chave da API!';
 
   const finalPrompt = systemPrompt || 'Você é um assistente virtual amigável em um servidor do Discord. Responda de forma natural e casual.';
 
-  // "memory" aqui chega no formato {role: 'user'|'assistant', content}; a Gemini
-  // usa 'user'/'model' e o formato "contents/parts" em vez de "messages".
-  const contents = [
-    ...(Array.isArray(memory) ? memory : []).map((m: any) => ({
-      role: m.role === 'assistant' ? 'model' : 'user',
-      parts: [{ text: m.content }],
-    })),
-    { role: 'user', parts: [{ text: `[${userName}]: ${message}` }] },
+  // "memory" chega no formato {role: 'user'|'assistant', content} — a Groq
+  // é OpenAI-compatible, então isso já bate direto com "messages".
+  const messages = [
+    { role: 'system', content: finalPrompt },
+    ...(Array.isArray(memory) ? memory : []),
+    { role: 'user', content: `[${userName}]: ${message}` },
   ];
 
   try {
-    const res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`,
-      {
-        method: 'POST',
-        headers: {
-          'x-goog-api-key': GEMINI_API_KEY.trim(),
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          system_instruction: { parts: [{ text: finalPrompt }] },
-          contents,
-          generationConfig: { temperature: 0.7, maxOutputTokens: 800 },
-        }),
-      }
-    );
+    const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${GROQ_API_KEY.trim()}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: GROQ_MODEL,
+        messages,
+        max_tokens: 400,
+        temperature: 0.7,
+      }),
+    });
 
     const data = (await res.json()) as any;
-    const parts = data?.candidates?.[0]?.content?.parts;
-    const content = Array.isArray(parts) ? parts.map((p: any) => p?.text || '').join('').trim() : '';
-    return content || 'Deu um branco aqui, desculpa!';
+    const content = data?.choices?.[0]?.message?.content;
+    return (typeof content === 'string' && content.trim()) ? content.trim() : 'Deu um branco aqui, desculpa!';
   } catch (error) {
     return 'Tô meio tonto agora, a conexão falhou...';
   }

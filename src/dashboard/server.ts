@@ -4,12 +4,15 @@ import cookieParser from 'cookie-parser';
 import path from 'path';
 import { prisma } from '../database/client';
 import { askBryan } from '../ai/bryan';
-import { getCharacter, computeStats, type FullCharacter } from '../rpg/services/character';
+import { getCharacter, computeStats, distributeStatPoints, type FullCharacter } from '../rpg/services/character';
 import { getEnemiesForLocation, getEnemy } from '../rpg/constants/enemies';
-import { getLocation } from '../rpg/constants/locations';
+import { getLocation, LOCATION_LIST } from '../rpg/constants/locations';
 import { getClass } from '../rpg/constants/classes';
 import { startInteractiveCombat, takeCombatAction, CombatBlockedError, type CombatAction } from '../rpg/services/combat';
-import { getItem } from '../rpg/constants/items';
+import { getItem, ITEMS } from '../rpg/constants/items';
+import { equipItem, useConsumable, sellItem, buyItem } from '../rpg/services/inventory';
+import { travelTo } from '../rpg/panels/travel';
+import { SHOP_CATEGORIES } from '../rpg/panels/shop';
 
 const BOT_OWNER_ID = '1195254699943796791';
 const TMDB_KEY = '3fd2be6f0c70a2a598f084ddfb75487c'; 
@@ -57,8 +60,10 @@ function isCombatBlockedMessage(msg: string) {
 }
 
 function enrichItem(itemId: string) {
-  const item = getItem(itemId);
-  return item ? { id: itemId, name: item.name, emoji: item.emoji, rarity: item.rarity } : { id: itemId, name: itemId, emoji: '📦', rarity: null };
+  const item: any = getItem(itemId);
+  return item
+    ? { id: itemId, name: item.name, emoji: item.emoji, rarity: item.rarity, slot: item.slot, type: item.type, maxStack: item.maxStack, sellPrice: item.sellPrice }
+    : { id: itemId, name: itemId, emoji: '📦', rarity: null, slot: null, type: null, maxStack: 99, sellPrice: 0 };
 }
 
 // Middleware: exige login de JOGADOR (qualquer conta do Discord — não precisa
@@ -796,8 +801,53 @@ export function startDashboard() {
 
   .section-title { font-size: 1.05rem; font-weight: 700; margin: 30px 0 14px; display:flex; align-items:center; gap:8px; }
   .item-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 12px; }
-  .item-card { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 14px; font-size: 0.85rem; display: flex; align-items: center; gap: 8px; }
+  .item-card { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 14px; font-size: 0.85rem; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
   .item-card .qty { color: var(--primary); font-weight: 700; margin-left: auto; }
+  .item-actions { display: flex; gap: 6px; width: 100%; margin-top: 6px; }
+  .item-actions button { flex: 1; background: var(--card2); border: 1px solid var(--border); color: white; padding: 6px 8px; border-radius: 6px; font-size: 0.72rem; font-weight: 700; cursor: pointer; }
+  .item-actions button:hover { border-color: var(--primary); }
+  .item-actions button.sell:hover { border-color: var(--gold); }
+
+  .equip-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; margin-bottom: 24px; }
+  .equip-slot { background: var(--card); border: 1px dashed var(--border); border-radius: 10px; padding: 12px; font-size: 0.8rem; text-align: center; }
+  .equip-slot .slot-name { color: var(--text-muted); font-size: 0.68rem; text-transform: uppercase; margin-bottom: 4px; }
+  .equip-slot.filled { border-style: solid; border-color: var(--primary); }
+
+  .tab-nav { display: flex; gap: 8px; margin: 24px 0 18px; flex-wrap: wrap; border-bottom: 1px solid var(--border); padding-bottom: 12px; }
+  .tab-btn { background: transparent; border: 1px solid var(--border); color: var(--text-muted); padding: 9px 18px; border-radius: 10px; font-weight: 700; font-size: 0.85rem; cursor: pointer; }
+  .tab-btn:hover { color: white; border-color: var(--primary); }
+  .tab-btn.active { background: linear-gradient(120deg, var(--primary), var(--primary2)); color: white; border-color: transparent; }
+
+  .action-feedback { padding: 10px 14px; border-radius: 8px; font-size: 0.85rem; font-weight: 600; margin-bottom: 14px; }
+  .action-feedback.ok { background: rgba(46,204,113,0.12); border: 1px solid var(--green); color: var(--green); }
+  .action-feedback.fail { background: rgba(231,76,60,0.12); border: 1px solid var(--red); color: var(--red); }
+
+  .cat-pills { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 18px; }
+  .cat-pill { background: var(--card); border: 1px solid var(--border); color: var(--text-muted); padding: 8px 14px; border-radius: 999px; font-size: 0.8rem; font-weight: 700; cursor: pointer; }
+  .cat-pill:hover, .cat-pill.active { border-color: var(--primary); color: white; }
+  .shop-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 14px; }
+  .shop-card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 16px; }
+  .shop-card .name { font-weight: 700; margin-bottom: 4px; }
+  .shop-card .desc { color: var(--text-muted); font-size: 0.78rem; margin-bottom: 10px; min-height: 32px; }
+  .shop-card .buy-row { display: flex; justify-content: space-between; align-items: center; }
+  .shop-card .price { color: var(--gold); font-weight: 800; }
+  .shop-card button { background: var(--primary); color: white; border: none; padding: 7px 14px; border-radius: 8px; font-weight: 700; cursor: pointer; font-size: 0.8rem; }
+
+  .loc-list { display: flex; flex-direction: column; gap: 10px; }
+  .loc-card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 16px; display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .loc-card.current { border-color: var(--green); }
+  .loc-card.locked { opacity: 0.5; }
+  .loc-card .info b { font-size: 1rem; }
+  .loc-card .info div { color: var(--text-muted); font-size: 0.78rem; margin-top: 3px; }
+  .loc-card button { background: var(--primary); color: white; border: none; padding: 8px 18px; border-radius: 8px; font-weight: 700; cursor: pointer; }
+
+  .points-banner { background: var(--card); border: 1px solid var(--primary); border-radius: 12px; padding: 16px 20px; margin-bottom: 18px; font-weight: 700; text-align: center; }
+  .point-row { display: flex; align-items: center; justify-content: space-between; background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 12px 16px; margin-bottom: 10px; }
+  .point-row .btns { display: flex; gap: 6px; }
+  .point-row button { background: var(--card2); border: 1px solid var(--border); color: white; padding: 6px 12px; border-radius: 6px; font-weight: 700; cursor: pointer; }
+  .point-row button:hover { border-color: var(--primary); }
+
+  .btn-again { display: block; margin: 18px auto 0; background: var(--primary); color: white; border: none; padding: 12px 26px; border-radius: 10px; font-weight: 700; cursor: pointer; }
 
   /* ===== Arena de Batalha ===== */
   .battle-setup { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 18px; margin-bottom: 20px; }
@@ -853,7 +903,7 @@ export function startDashboard() {
   <div id="wrap"><p class="empty">⏳ Carregando sua ficha...</p></div>
 
   <script>
-    const state = { stats: null, cls: null, inCombat: false };
+    const state = { stats: null, cls: null, inCombat: false, activeTab: 'batalha', profileData: null };
 
     async function loadProfile() {
       const wrap = document.getElementById('wrap');
@@ -869,22 +919,19 @@ export function startDashboard() {
     }
 
     function renderProfile(data) {
+      state.profileData = data;
       const c = data.character, s = data.stats, cls = data.class, loc = data.location;
       state.stats = s; state.cls = cls;
 
       const hpPct = Math.max(0, Math.min(100, (c.currentHp / s.maxHp) * 100));
       const enPct = Math.max(0, Math.min(100, (c.currentEnergy / s.maxEnergy) * 100));
 
-      const itemsHtml = (data.inventory || []).length
-        ? data.inventory.map(i => \`<div class="item-card">\${i.emoji} \${i.name} <span class="qty">x\${i.quantity}</span></div>\`).join('')
-        : '<p class="empty">Inventário vazio.</p>';
-
       document.getElementById('wrap').innerHTML = \`
         <div class="profile-header">
           <div class="avatar-ring">\${cls ? cls.emoji : '⚔️'}</div>
           <div style="flex:1;">
             <h2>\${c.username} <span style="color:var(--text-muted); font-weight:600; font-size:0.9rem;">— \${cls ? cls.name : c.class} · Nv. \${c.level}</span></h2>
-            <div class="sub">🪙 \${c.gold} de ouro · \${loc ? loc.emoji + ' ' + loc.name : c.currentLocation}</div>
+            <div class="sub">🪙 \${c.gold} de ouro · \${loc ? loc.emoji + ' ' + loc.name : c.currentLocation}\${c.statPoints > 0 ? ' · ✨ ' + c.statPoints + ' ponto(s) livre(s)' : ''}</div>
             <div class="bars">
               <div class="bar-row"><span class="tag">HP</span><div class="bar-track"><div class="bar-fill" style="width:\${hpPct}%; background:var(--red);"></div></div> \${c.currentHp}/\${s.maxHp}</div>
               <div class="bar-row"><span class="tag">EN</span><div class="bar-track"><div class="bar-fill" style="width:\${enPct}%; background:var(--green);"></div></div> \${c.currentEnergy}/\${s.maxEnergy}</div>
@@ -898,26 +945,48 @@ export function startDashboard() {
           <div class="stat-card"><div class="label">Esquiva</div><div class="value">\${s.dodgeChance}%</div></div>
           <div class="stat-card"><div class="label">Poder</div><div class="value">\${s.combatPower}</div></div>
         </div>
-        <div class="grid">
-          <div class="stat-card"><div class="label">Força</div><div class="value">\${s.str}</div></div>
-          <div class="stat-card"><div class="label">Agilidade</div><div class="value">\${s.agi}</div></div>
-          <div class="stat-card"><div class="label">Inteligência</div><div class="value">\${s.int}</div></div>
-          <div class="stat-card"><div class="label">Vitalidade</div><div class="value">\${s.vit}</div></div>
-          <div class="stat-card"><div class="label">Sorte</div><div class="value">\${s.lck}</div></div>
-        </div>
 
-        <div class="section-title">⚔️ Batalha</div>
+        <div class="tab-nav" id="tabNav">
+          \${['batalha','inventario','loja','viajar','pontos'].map(t => \`<button class="tab-btn \${state.activeTab === t ? 'active' : ''}" onclick="switchTab('\${t}')">\${tabLabel(t)}</button>\`).join('')}
+        </div>
+        <div id="tabBody"></div>
+      \`;
+
+      renderTab(state.activeTab);
+    }
+
+    function tabLabel(t) {
+      return { batalha: '⚔️ Batalha', inventario: '🎒 Inventário', loja: '🛒 Loja', viajar: '🗺️ Viajar', pontos: '📊 Pontos' }[t];
+    }
+
+    function switchTab(t) {
+      state.activeTab = t;
+      document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+      renderProfile(state.profileData);
+    }
+
+    function renderTab(t) {
+      if (t === 'batalha') return renderBatalhaTab();
+      if (t === 'inventario') return renderInventarioTab();
+      if (t === 'loja') return renderLojaTab();
+      if (t === 'viajar') return renderViajarTab();
+      if (t === 'pontos') return renderPontosTab();
+    }
+
+    function actionFeedback(result) {
+      return \`<div class="action-feedback \${result.success ? 'ok' : 'fail'}">\${result.message}</div>\`;
+    }
+
+    // ───────────────────────── ABA: BATALHA ─────────────────────────
+    function renderBatalhaTab() {
+      document.getElementById('tabBody').innerHTML = \`
         <div class="battle-setup">
           <select id="enemySelect"><option value="">Carregando inimigos da região...</option></select>
           <button class="btn-fight" onclick="startCombat(document.getElementById('enemySelect').value)">▶ Lutar</button>
           <button class="btn-random" onclick="startCombat(null)">🎲 Caçar Aleatório</button>
         </div>
         <div class="arena" id="arena"></div>
-
-        <div class="section-title">🎒 Inventário</div>
-        <div class="item-list">\${itemsHtml}</div>
       \`;
-
       loadEnemies();
     }
 
@@ -931,6 +1000,191 @@ export function startDashboard() {
       } catch (e) {
         sel.innerHTML = '<option value="">Erro ao carregar inimigos</option>';
       }
+    }
+
+    // ───────────────────────── ABA: INVENTÁRIO ─────────────────────────
+    const EQUIP_SLOT_LABEL = { weapon: 'Arma', helmet: 'Elmo', chest: 'Peitoral', pants: 'Calça', boots: 'Botas', gloves: 'Luvas', shield: 'Escudo', ring: 'Anel', amulet: 'Amuleto', backpack: 'Mochila', pet: 'Pet' };
+    const EQUIPABLE_SLOTS = Object.keys(EQUIP_SLOT_LABEL);
+
+    function renderInventarioTab() {
+      const data = state.profileData;
+      const eq = data.equipment || {};
+
+      const equipHtml = EQUIPABLE_SLOTS.map(slot => {
+        const item = eq[slot];
+        return \`<div class="equip-slot \${item ? 'filled' : ''}"><div class="slot-name">\${EQUIP_SLOT_LABEL[slot]}</div>\${item ? item.emoji + ' ' + item.name : '<span style="color:var(--text-muted);">Vazio</span>'}</div>\`;
+      }).join('');
+
+      const items = data.inventory || [];
+      const itemsHtml = items.length ? items.map(i => {
+        const canEquip = i.maxStack === 1 && EQUIPABLE_SLOTS.includes(i.slot);
+        const canUse = i.slot === 'consumable';
+        const canSell = i.sellPrice > 0;
+        return \`
+          <div class="item-card">
+            \${i.emoji} \${i.name} <span class="qty">x\${i.quantity}</span>
+            <div class="item-actions">
+              \${canEquip ? \`<button onclick="doItemAction('equip','\${i.id}')">Equipar</button>\` : ''}
+              \${canUse ? \`<button onclick="doItemAction('use','\${i.id}')">Usar</button>\` : ''}
+              \${canSell ? \`<button class="sell" onclick="doItemAction('sell','\${i.id}')">Vender \${i.sellPrice}🪙</button>\` : ''}
+            </div>
+          </div>\`;
+      }).join('') : '<p class="empty">Inventário vazio.</p>';
+
+      document.getElementById('tabBody').innerHTML = \`
+        <div id="invFeedback"></div>
+        <div class="section-title" style="margin-top:0;">🛡️ Equipamento</div>
+        <div class="equip-grid">\${equipHtml}</div>
+        <div class="section-title">🎒 Itens</div>
+        <div class="item-list">\${itemsHtml}</div>
+      \`;
+    }
+
+    async function doItemAction(action, itemId) {
+      try {
+        const res = await fetch('/api/activities/rpg/inventory/' + action, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ itemId, qty: 1 })
+        });
+        const result = await res.json();
+        document.getElementById('invFeedback').innerHTML = actionFeedback(result);
+        if (result.success) {
+          const p = await (await fetch('/api/activities/rpg/profile')).json();
+          state.profileData = p;
+          renderInventarioTab();
+          document.getElementById('invFeedback').innerHTML = actionFeedback(result);
+        }
+      } catch (e) {}
+    }
+
+    // ───────────────────────── ABA: LOJA ─────────────────────────
+    let shopCategories = null;
+    let shopActiveCat = null;
+
+    async function renderLojaTab() {
+      document.getElementById('tabBody').innerHTML = '<p class="empty">⏳ Carregando loja...</p>';
+      try {
+        const res = await fetch('/api/activities/rpg/shop');
+        const data = await res.json();
+        shopCategories = data.categories;
+        if (!shopActiveCat) shopActiveCat = shopCategories[0].id;
+        renderShopCategory(shopActiveCat);
+      } catch (e) {
+        document.getElementById('tabBody').innerHTML = '<p class="error">Erro ao carregar loja.</p>';
+      }
+    }
+
+    async function renderShopCategory(catId) {
+      shopActiveCat = catId;
+      const pillsHtml = shopCategories.map(c => \`<button class="cat-pill \${c.id === catId ? 'active' : ''}" onclick="renderShopCategory('\${c.id}')">\${c.label}</button>\`).join('');
+
+      document.getElementById('tabBody').innerHTML = \`
+        <div id="shopFeedback"></div>
+        <div class="cat-pills">\${pillsHtml}</div>
+        <div class="shop-grid" id="shopGrid"><p class="empty">⏳ Carregando itens...</p></div>
+      \`;
+
+      try {
+        const res = await fetch('/api/activities/rpg/shop?category=' + catId);
+        const data = await res.json();
+        const grid = document.getElementById('shopGrid');
+        if (!data.items.length) { grid.innerHTML = '<p class="empty">Nenhum item nessa categoria.</p>'; return; }
+        grid.innerHTML = data.items.map(i => \`
+          <div class="shop-card">
+            <div class="name">\${i.emoji} \${i.name}</div>
+            <div class="desc">\${i.description || ''}</div>
+            <div class="buy-row"><span class="price">💰 \${i.price}</span><button onclick="doBuy('\${i.id}')">Comprar</button></div>
+          </div>\`).join('');
+      } catch (e) {}
+    }
+
+    async function doBuy(itemId) {
+      try {
+        const res = await fetch('/api/activities/rpg/shop/buy', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ itemId, qty: 1 })
+        });
+        const result = await res.json();
+        document.getElementById('shopFeedback').innerHTML = actionFeedback(result);
+        if (result.success) {
+          const p = await (await fetch('/api/activities/rpg/profile')).json();
+          state.profileData = p;
+        }
+      } catch (e) {}
+    }
+
+    // ───────────────────────── ABA: VIAJAR ─────────────────────────
+    async function renderViajarTab() {
+      document.getElementById('tabBody').innerHTML = '<p class="empty">⏳ Carregando mapa...</p>';
+      try {
+        const res = await fetch('/api/activities/rpg/locations');
+        const data = await res.json();
+        const html = data.locations.map(l => \`
+          <div class="loc-card \${l.isCurrent ? 'current' : ''} \${l.locked ? 'locked' : ''}">
+            <div class="info">
+              <b>\${l.emoji} \${l.name}</b>
+              <div>Nv.\${l.minLevel}+ · ⚡\${l.travelCostEnergy} energia \${l.hasDungeon ? '· 🏰 Dungeon' : ''}</div>
+            </div>
+            \${l.isCurrent ? '<span style="color:var(--green); font-weight:700;">📍 Aqui</span>' : (l.locked ? '<span style="color:var(--text-muted);">🔒 Bloqueado</span>' : \`<button onclick="doTravel('\${l.id}')">Viajar</button>\`)}
+          </div>\`).join('');
+        document.getElementById('tabBody').innerHTML = '<div id="travelFeedback"></div><div class="loc-list">' + html + '</div>';
+      } catch (e) {
+        document.getElementById('tabBody').innerHTML = '<p class="error">Erro ao carregar mapa.</p>';
+      }
+    }
+
+    async function doTravel(destinationId) {
+      try {
+        const res = await fetch('/api/activities/rpg/travel', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ destinationId })
+        });
+        const result = await res.json();
+        if (result.success) {
+          const p = await (await fetch('/api/activities/rpg/profile')).json();
+          state.profileData = p;
+          renderProfile(p);
+        } else {
+          document.getElementById('travelFeedback').innerHTML = actionFeedback(result);
+        }
+      } catch (e) {}
+    }
+
+    // ───────────────────────── ABA: PONTOS DE ATRIBUTO ─────────────────────────
+    const STAT_LABELS = { strength: 'Força 💪', agility: 'Agilidade 🏃', intelligence: 'Inteligência 🧠', vitality: 'Vitalidade ❤️', luck: 'Sorte 🍀' };
+
+    function renderPontosTab() {
+      const c = state.profileData.character;
+      const rows = Object.keys(STAT_LABELS).map(stat => \`
+        <div class="point-row">
+          <span>\${STAT_LABELS[stat]}</span>
+          <div class="btns">
+            <button \${c.statPoints < 1 ? 'disabled' : ''} onclick="doAddPoint('\${stat}',1)">+1</button>
+            <button \${c.statPoints < 5 ? 'disabled' : ''} onclick="doAddPoint('\${stat}',5)">+5</button>
+          </div>
+        </div>\`).join('');
+
+      document.getElementById('tabBody').innerHTML = \`
+        <div id="pointsFeedback"></div>
+        <div class="points-banner">✨ Você tem <b>\${c.statPoints}</b> ponto(s) de atributo livre(s)</div>
+        \${rows}
+      \`;
+    }
+
+    async function doAddPoint(stat, points) {
+      try {
+        const res = await fetch('/api/activities/rpg/points', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ stat, points })
+        });
+        const result = await res.json();
+        document.getElementById('pointsFeedback').innerHTML = actionFeedback(result);
+        if (result.success) {
+          const p = await (await fetch('/api/activities/rpg/profile')).json();
+          state.profileData = p;
+          renderPontosTab();
+        }
+      } catch (e) {}
     }
 
     async function startCombat(enemyId) {
@@ -1069,7 +1323,16 @@ export function startDashboard() {
       const rawInventory = await prisma.rpgInventoryItem.findMany({ where: { characterId: discordId } });
       const inventory = rawInventory.map(i => ({ ...enrichItem(i.itemId), quantity: i.quantity }));
 
-      res.json({ character, stats, class: cls, location: loc, inventory });
+      const EQUIP_SLOTS = ['weapon', 'helmet', 'chest', 'pants', 'boots', 'gloves', 'shield', 'ring', 'amulet', 'backpack', 'pet'];
+      const equipment: Record<string, any> = {};
+      if (character.equipment) {
+        for (const slot of EQUIP_SLOTS) {
+          const itemId = (character.equipment as any)[slot];
+          equipment[slot] = itemId ? enrichItem(itemId) : null;
+        }
+      }
+
+      res.json({ character, stats, class: cls, location: loc, inventory, equipment });
     } catch (e) {
       console.error('[Atividades/RPG] Erro ao buscar personagem:', e);
       res.status(500).json({ error: 'Erro ao buscar personagem' });
@@ -1146,6 +1409,94 @@ export function startDashboard() {
       console.error('[Atividades/RPG] Erro na ação de combate:', err);
       res.status(500).json({ error: 'Erro ao processar ação' });
     }
+  });
+
+  // ── Inventário: equipar / usar / vender — usa EXATAMENTE as mesmas
+  // funções de src/rpg/services/inventory.ts que os botões do Discord chamam
+  // (rpgSelectHandler.ts). Nada de lógica duplicada aqui.
+  app.post('/api/activities/rpg/inventory/equip', requirePlayerAuth, async (req, res) => {
+    const discordId = req.cookies.player_userid as string;
+    const { itemId } = req.body || {};
+    if (!itemId) return res.status(400).json({ error: 'itemId é obrigatório' });
+    const result = await equipItem(discordId, itemId);
+    res.json(result);
+  });
+
+  app.post('/api/activities/rpg/inventory/use', requirePlayerAuth, async (req, res) => {
+    const discordId = req.cookies.player_userid as string;
+    const { itemId } = req.body || {};
+    if (!itemId) return res.status(400).json({ error: 'itemId é obrigatório' });
+    const result = await useConsumable(discordId, itemId);
+    res.json(result);
+  });
+
+  app.post('/api/activities/rpg/inventory/sell', requirePlayerAuth, async (req, res) => {
+    const discordId = req.cookies.player_userid as string;
+    const { itemId, qty } = req.body || {};
+    if (!itemId) return res.status(400).json({ error: 'itemId é obrigatório' });
+    const result = await sellItem(discordId, itemId, Number(qty) || 1);
+    res.json(result);
+  });
+
+  // ── Loja: mesmo catálogo (SHOP_CATEGORIES + ITEMS com price > 0) e mesma
+  // função de compra (buyItem) usada em src/rpg/panels/shop.ts no Discord.
+  app.get('/api/activities/rpg/shop', requirePlayerAuth, async (req, res) => {
+    const category = req.query.category as string | undefined;
+    if (!category) return res.json({ categories: SHOP_CATEGORIES, items: [] });
+
+    const items = Object.values(ITEMS)
+      .filter((i: any) => (i.type === category || i.slot === category) && i.price > 0)
+      .map((i: any) => ({ id: i.id, name: i.name, emoji: i.emoji, price: i.price, rarity: i.rarity, description: i.description }));
+
+    res.json({ categories: SHOP_CATEGORIES, items });
+  });
+
+  app.post('/api/activities/rpg/shop/buy', requirePlayerAuth, async (req, res) => {
+    const discordId = req.cookies.player_userid as string;
+    const { itemId, qty } = req.body || {};
+    if (!itemId) return res.status(400).json({ error: 'itemId é obrigatório' });
+    const result = await buyItem(discordId, itemId, Number(qty) || 1);
+    res.json(result);
+  });
+
+  // ── Viagem: mesma lista (LOCATION_LIST) e mesma função (travelTo) de
+  // src/rpg/panels/travel.ts — respeita custo de energia e cooldown reais.
+  app.get('/api/activities/rpg/locations', requirePlayerAuth, async (req, res) => {
+    const discordId = req.cookies.player_userid as string;
+    const character = await getCharacter(discordId);
+    if (!character) return res.status(404).json({ error: 'Personagem não encontrado' });
+
+    const locations = LOCATION_LIST.map(l => ({
+      id: l.id, name: l.name, emoji: l.emoji, minLevel: l.minLevel,
+      travelCostEnergy: l.travelCostEnergy, hasDungeon: l.hasDungeon,
+      isCurrent: l.id === character.currentLocation,
+      locked: character.level < l.minLevel,
+    }));
+
+    res.json({ locations });
+  });
+
+  app.post('/api/activities/rpg/travel', requirePlayerAuth, async (req, res) => {
+    const discordId = req.cookies.player_userid as string;
+    const { destinationId } = req.body || {};
+    if (!destinationId) return res.status(400).json({ error: 'destinationId é obrigatório' });
+
+    const character = await getCharacter(discordId);
+    if (!character) return res.status(404).json({ error: 'Personagem não encontrado' });
+
+    const result = await travelTo(character, destinationId);
+    res.json(result);
+  });
+
+  // ── Pontos de atributo: mesma função de src/rpg/services/character.ts.
+  app.post('/api/activities/rpg/points', requirePlayerAuth, async (req, res) => {
+    const discordId = req.cookies.player_userid as string;
+    const { stat, points } = req.body || {};
+    const validStats = ['strength', 'agility', 'intelligence', 'vitality', 'luck'];
+    if (!validStats.includes(stat)) return res.status(400).json({ error: 'Atributo inválido' });
+
+    const result = await distributeStatPoints(discordId, stat, Number(points) || 1);
+    res.json(result);
   });
 
   app.get('/api/discord-data', async (req, res) => {

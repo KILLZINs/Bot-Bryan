@@ -49,19 +49,10 @@ export default {
     }
 
     // ─── Presença do bot ──────────────────────────────────────────────────────
-    const activities = [
-      { name: 'Aliança Skyline ⚔️',         type: ActivityType.Watching },
-      { name: 'com os membros da aliança',    type: ActivityType.Playing },
-      { name: '/painel para começar',         type: ActivityType.Listening },
-      { name: '🐉 Boss Mundial ativo!',       type: ActivityType.Competing },
-    ];
-
-    let activityIdx = 0;
-    client.user?.setPresence({ activities: [activities[0]], status: 'online' });
-    setInterval(() => {
-      activityIdx = (activityIdx + 1) % activities.length;
-      client.user?.setPresence({ activities: [activities[activityIdx]], status: 'online' });
-    }, 30_000);
+    // O status rotativo de verdade (configurável no /painel) é controlado
+    // por um único motor em index.ts (startStatusEngine). Aqui só definimos
+    // um status inicial pra não ficar em branco no primeiro segundo online.
+    client.user?.setPresence({ activities: [{ name: 'iniciando...', type: ActivityType.Playing }], status: 'online' });
 
     // ─── Cron: Sorteios (a cada minuto) ──────────────────────────────────────
     cron.schedule('* * * * *', async () => {

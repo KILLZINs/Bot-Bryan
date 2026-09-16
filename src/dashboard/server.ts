@@ -59,6 +59,112 @@ function isCombatBlockedMessage(msg: string) {
   return { blocked: true, message: msg };
 }
 
+// =====================================================================
+// 🚀 DISCORD ACTIVITIES — autenticação embutida (sem sair da call)
+// =====================================================================
+// Gera o script que roda em TODAS as páginas de /atividades. Se a página
+// estiver rodando dentro do "foguetinho" do Discord (Activity), ele detecta
+// isso (frame_id/instance_id na URL), carrega o SDK oficial via CDN e troca
+// o "code" da Activity pelos MESMOS cookies (player_auth/player_userid) que
+// o /login/player normal já usa — assim toda a lógica existente (perfil,
+// inventário, loja, combate) funciona sem nenhuma mudança dentro da call.
+// window.activityReady é uma Promise: resolve `true` se autenticou dentro
+// da Activity, `false` se é navegador normal (aí o fluxo de login/cookie de
+// sempre continua valendo, sem mudanças).
+function activitySdkBootstrap(clientId: string): string {
+  return `
+<script type="module">
+  window.activityReady = (async () => {
+    const params = new URLSearchParams(window.location.search);
+    const isActivity = params.has('frame_id') || params.has('instance_id');
+    window.isDiscordActivity = isActivity;
+    if (!isActivity) return false;
+
+    try {
+      const { DiscordSDK } = await import('https://cdn.jsdelivr.net/npm/@discord/embedded-app-sdk@2.5.0/+esm');
+      const discordSdk = new DiscordSDK('${clientId}');
+      await discordSdk.ready();
+
+      const { code } = await discordSdk.commands.authorize({
+        client_id: '${clientId}',
+        response_type: 'code',
+        state: '',
+        prompt: 'none',
+        scope: ['identify'],
+      });
+
+      const res = await fetch('/api/activity/auth', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code }),
+      });
+
+      return res.ok;
+    } catch (err) {
+      console.error('[Discord Activity] Falha ao autenticar dentro da call:', err);
+      return false;
+    }
+  })();
+</script>`;
+}
+
+function renderAtividadesHub(res: express.Response, clientId: string) {
+  const cardsHtml = ACTIVITIES.map(a => {
+    const soon = a.status === 'soon';
+    return `
+      <a href="${soon ? '#' : a.href}" class="act-card ${soon ? 'soon' : ''}" ${soon ? 'onclick="return false;"' : ''}>
+        <div class="act-icon">${a.icon}</div>
+        <h3>${a.name}</h3>
+        <p>${a.tagline}</p>
+        <span class="act-badge">${soon ? '🔒 Em breve' : '▶ Abrir'}</span>
+      </a>`;
+  }).join('');
+
+  res.send(`<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Atividades — Bryan Bot</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
+${activitySdkBootstrap(clientId)}
+<style>
+  :root { --bg: #05050A; --primary: #8B5CF6; --primary2: #C084FC; --card: #12131F; --border: #262A40; --text: #F2F3F5; --text-muted: #9CA3AF; }
+  * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Inter', sans-serif; }
+  body { background: radial-gradient(circle at 20% -10%, rgba(139,92,246,0.18), transparent 40%), radial-gradient(circle at 90% 10%, rgba(192,132,252,0.12), transparent 35%), var(--bg); color: var(--text); min-height: 100vh; }
+  nav { display: flex; justify-content: space-between; align-items: center; padding: 20px 5%; }
+  .brand { font-weight: 800; font-size: 1.3rem; color: white; text-decoration: none; display:flex; align-items:center; gap:10px; }
+  nav a.back { color: var(--text-muted); text-decoration: none; font-weight: 600; font-size: 0.9rem; border: 1px solid var(--border); padding: 8px 16px; border-radius: 8px; transition: .2s; }
+  nav a.back:hover { border-color: var(--primary); color: white; }
+  header.hub-hero { text-align: center; padding: 60px 20px 40px; }
+  header.hub-hero h1 { font-size: clamp(2.2rem, 5vw, 3.2rem); font-weight: 800; letter-spacing: -1px; background: linear-gradient(to right, #fff, var(--primary2)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; margin-bottom: 12px; }
+  header.hub-hero p { color: var(--text-muted); font-size: 1.05rem; max-width: 560px; margin: 0 auto; }
+  .act-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 24px; max-width: 1100px; margin: 0 auto; padding: 20px 5% 80px; }
+  .act-card { background: var(--card); border: 1px solid var(--border); border-radius: 18px; padding: 32px 26px; text-decoration: none; color: var(--text); position: relative; overflow: hidden; transition: .25s; }
+  .act-card::before { content: ''; position: absolute; inset: 0; background: linear-gradient(135deg, rgba(139,92,246,0.12), transparent 60%); opacity: 0; transition: .25s; }
+  .act-card:not(.soon):hover { transform: translateY(-6px); border-color: var(--primary); box-shadow: 0 20px 40px rgba(139,92,246,0.25); }
+  .act-card:not(.soon):hover::before { opacity: 1; }
+  .act-card.soon { opacity: 0.55; cursor: not-allowed; }
+  .act-icon { font-size: 2.3rem; margin-bottom: 16px; }
+  .act-card h3 { font-size: 1.2rem; font-weight: 700; margin-bottom: 8px; }
+  .act-card p { color: var(--text-muted); font-size: 0.9rem; line-height: 1.5; margin-bottom: 18px; }
+  .act-badge { font-size: 0.8rem; font-weight: 700; color: var(--primary2); }
+</style>
+</head>
+<body>
+  <nav>
+    <a href="/" class="brand">🌌 Bryan Bot</a>
+    <a href="/painel" class="back">← Voltar ao Painel</a>
+  </nav>
+  <header class="hub-hero">
+    <h1>Atividades do Bryan</h1>
+    <p>Tudo o que você faria dentro do Discord, agora também aqui — direto do navegador ou sem sair da call.</p>
+  </header>
+  <div class="act-grid">${cardsHtml}</div>
+</body>
+</html>`);
+}
+
 function enrichItem(itemId: string) {
   const item: any = getItem(itemId);
   return item
@@ -418,8 +524,14 @@ export function startDashboard() {
   });
 
   app.get('/', async (req, res) => {
-    if (req.hostname.includes('bryanflix') || req.query.frame_id || req.query.instance_id) {
+    if (req.hostname.includes('bryanflix')) {
       await renderBryanflix(res);
+      return;
+    }
+
+    // 🚀 Aberto pelo foguetinho de Activities do Discord (dentro de uma call)
+    if (req.query.frame_id || req.query.instance_id) {
+      renderAtividadesHub(res, clientId!);
       return;
     }
     
@@ -547,59 +659,7 @@ export function startDashboard() {
   // 🕹️ HUB DE ATIVIDADES DO BRYAN
   // =====================================================================
   app.get('/atividades', (req, res) => {
-    const cardsHtml = ACTIVITIES.map(a => {
-      const soon = a.status === 'soon';
-      return `
-        <a href="${soon ? '#' : a.href}" class="act-card ${soon ? 'soon' : ''}" ${soon ? 'onclick="return false;"' : ''}>
-          <div class="act-icon">${a.icon}</div>
-          <h3>${a.name}</h3>
-          <p>${a.tagline}</p>
-          <span class="act-badge">${soon ? '🔒 Em breve' : '▶ Abrir'}</span>
-        </a>`;
-    }).join('');
-
-    res.send(`<!DOCTYPE html>
-<html lang="pt-BR">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Atividades — Bryan Bot</title>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
-<style>
-  :root { --bg: #05050A; --primary: #8B5CF6; --primary2: #C084FC; --card: #12131F; --border: #262A40; --text: #F2F3F5; --text-muted: #9CA3AF; }
-  * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Inter', sans-serif; }
-  body { background: radial-gradient(circle at 20% -10%, rgba(139,92,246,0.18), transparent 40%), radial-gradient(circle at 90% 10%, rgba(192,132,252,0.12), transparent 35%), var(--bg); color: var(--text); min-height: 100vh; }
-  nav { display: flex; justify-content: space-between; align-items: center; padding: 20px 5%; }
-  .brand { font-weight: 800; font-size: 1.3rem; color: white; text-decoration: none; display:flex; align-items:center; gap:10px; }
-  nav a.back { color: var(--text-muted); text-decoration: none; font-weight: 600; font-size: 0.9rem; border: 1px solid var(--border); padding: 8px 16px; border-radius: 8px; transition: .2s; }
-  nav a.back:hover { border-color: var(--primary); color: white; }
-  header.hub-hero { text-align: center; padding: 60px 20px 40px; }
-  header.hub-hero h1 { font-size: clamp(2.2rem, 5vw, 3.2rem); font-weight: 800; letter-spacing: -1px; background: linear-gradient(to right, #fff, var(--primary2)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; margin-bottom: 12px; }
-  header.hub-hero p { color: var(--text-muted); font-size: 1.05rem; max-width: 560px; margin: 0 auto; }
-  .act-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 24px; max-width: 1100px; margin: 0 auto; padding: 20px 5% 80px; }
-  .act-card { background: var(--card); border: 1px solid var(--border); border-radius: 18px; padding: 32px 26px; text-decoration: none; color: var(--text); position: relative; overflow: hidden; transition: .25s; }
-  .act-card::before { content: ''; position: absolute; inset: 0; background: linear-gradient(135deg, rgba(139,92,246,0.12), transparent 60%); opacity: 0; transition: .25s; }
-  .act-card:not(.soon):hover { transform: translateY(-6px); border-color: var(--primary); box-shadow: 0 20px 40px rgba(139,92,246,0.25); }
-  .act-card:not(.soon):hover::before { opacity: 1; }
-  .act-card.soon { opacity: 0.55; cursor: not-allowed; }
-  .act-icon { font-size: 2.3rem; margin-bottom: 16px; }
-  .act-card h3 { font-size: 1.2rem; font-weight: 700; margin-bottom: 8px; }
-  .act-card p { color: var(--text-muted); font-size: 0.9rem; line-height: 1.5; margin-bottom: 18px; }
-  .act-badge { font-size: 0.8rem; font-weight: 700; color: var(--primary2); }
-</style>
-</head>
-<body>
-  <nav>
-    <a href="/" class="brand">🌌 Bryan Bot</a>
-    <a href="/painel" class="back">← Voltar ao Painel</a>
-  </nav>
-  <header class="hub-hero">
-    <h1>Atividades do Bryan</h1>
-    <p>Tudo o que você faria dentro do Discord, agora também aqui — direto do navegador.</p>
-  </header>
-  <div class="act-grid">${cardsHtml}</div>
-</body>
-</html>`);
+    renderAtividadesHub(res, clientId!);
   });
 
   // ----- Chat com a IA (Bryan) -----
@@ -727,6 +787,7 @@ export function startDashboard() {
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>RPG Skyline — Login</title>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
+${activitySdkBootstrap(clientId!)}
 <style>
   :root { --bg: #05050A; --primary: #8B5CF6; --primary2: #C084FC; --card: #12131F; --border: #262A40; --text: #F2F3F5; --text-muted: #9CA3AF; }
   * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Inter', sans-serif; }
@@ -745,13 +806,31 @@ export function startDashboard() {
 </head>
 <body>
   <nav><span class="brand">⚔️ RPG Skyline</span><a href="/atividades">← Atividades</a></nav>
-  <div class="gate">
+  <div class="gate" id="gateBox">
     <div class="icon">🔒</div>
-    <h1>Entre com sua conta do Discord</h1>
-    <p>Sua ficha de RPG é pessoal — por isso pedimos login com o Discord em vez de um ID digitado, pra garantir que só você veja e jogue com o seu personagem.</p>
-    <a class="discord-btn" href="/login/player?next=/atividades/rpg">🎮 Entrar com Discord</a>
+    <h1 id="gateTitle">Entre com sua conta do Discord</h1>
+    <p id="gateDesc">Sua ficha de RPG é pessoal — por isso pedimos login com o Discord em vez de um ID digitado, pra garantir que só você veja e jogue com o seu personagem.</p>
+    <a class="discord-btn" id="gateBtn" href="/login/player?next=/atividades/rpg">🎮 Entrar com Discord</a>
     <p class="note">Isso não te dá acesso ao painel administrativo do bot — é só pra identificar seu personagem de RPG.</p>
   </div>
+  <script>
+    // Dentro de uma Discord Activity, não existe redirecionamento de página
+    // pro discord.com — a autenticação acontece no bootstrap acima (SDK).
+    // Se der certo, só recarrega a página: o servidor já vai ver os cookies.
+    window.activityReady.then((authed) => {
+      if (window.isDiscordActivity) {
+        document.getElementById('gateBtn').style.display = 'none';
+        if (authed) {
+          document.getElementById('gateTitle').innerText = '✅ Entrando...';
+          document.getElementById('gateDesc').innerText = 'Autenticado com sucesso, carregando sua ficha...';
+          window.location.reload();
+        } else {
+          document.getElementById('gateTitle').innerText = '⚠️ Não deu pra autenticar automaticamente';
+          document.getElementById('gateDesc').innerText = 'Tenta fechar e abrir a Activity de novo.';
+        }
+      }
+    });
+  </script>
 </body>
 </html>`);
     }
@@ -1593,6 +1672,37 @@ export function startDashboard() {
     res.clearCookie('player_username');
     res.clearCookie('player_avatar');
     res.redirect('/atividades');
+  });
+
+  // ── Autenticação dentro de uma Discord Activity (o "foguetinho" na call) ──
+  // O código vem do comando authorize() do Embedded App SDK, executado no
+  // navegador dentro do iframe da Activity. A troca por token AQUI não leva
+  // redirect_uri — é um fluxo diferente do OAuth por redirecionamento comum
+  // usado em /auth/callback/player. O resultado são os MESMOS cookies
+  // player_*, então tudo que já existe (perfil, loja, combate) funciona sem
+  // nenhuma mudança dentro da call.
+  app.post('/api/activity/auth', async (req, res) => {
+    const { code } = req.body || {};
+    if (!code) return res.status(400).json({ error: 'code é obrigatório' });
+
+    try {
+      const tokenRes = await axios.post('https://discord.com/api/oauth2/token', new URLSearchParams({
+        client_id: clientId!, client_secret: clientSecret!, grant_type: 'authorization_code', code,
+      }), { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } });
+
+      const userRes = await axios.get('https://discord.com/api/users/@me', { headers: { Authorization: `Bearer ${tokenRes.data.access_token}` } });
+      const { id: userId, username, avatar } = userRes.data;
+
+      res.cookie('player_auth', 'permitido', { maxAge: 86400000, httpOnly: false });
+      res.cookie('player_userid', userId, { maxAge: 86400000, httpOnly: false });
+      res.cookie('player_username', username, { maxAge: 86400000, httpOnly: false });
+      if (avatar) res.cookie('player_avatar', avatar, { maxAge: 86400000, httpOnly: false });
+
+      res.json({ success: true });
+    } catch (error: any) {
+      console.error('[Activity Auth] Erro ao autenticar:', error?.response?.data || error);
+      res.status(500).json({ error: 'Erro ao autenticar dentro da Activity.' });
+    }
   });
 
   app.get('/api/config', async (req, res) => {

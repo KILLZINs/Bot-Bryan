@@ -799,6 +799,7 @@ model BotConfig {
   botPronouns       String   @default("Ele/Dele")
   botBio            String?  @db.Text
   botStatusRotation String?  @db.Text
+  botStatusInterval Int      @default(30)
 
   updatedAt         DateTime @updatedAt @default(now())
 

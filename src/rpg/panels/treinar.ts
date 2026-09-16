@@ -25,7 +25,7 @@ interface TrainOption {
   description: string;
 }
 
-const TRAIN_OPTIONS: TrainOption[] = [
+export const TRAIN_OPTIONS: TrainOption[] = [
   { id: 'str', stat: 'FOR', label: 'Força',        emoji: '💪', buffType: 'atk_pct', buffValue: 0.12, durationMs: 45*60*1000, energyCost: 15, description: '+12% Ataque por 45min' },
   { id: 'agi', stat: 'AGI', label: 'Agilidade',    emoji: '🏃', buffType: 'agi_pct', buffValue: 0.12, durationMs: 45*60*1000, energyCost: 15, description: '+12% AGI → Esquiva/Crítico por 45min' },
   { id: 'int', stat: 'INT', label: 'Inteligência', emoji: '🧠', buffType: 'int_pct', buffValue: 0.12, durationMs: 45*60*1000, energyCost: 15, description: '+12% INT → Dano mágico por 45min' },

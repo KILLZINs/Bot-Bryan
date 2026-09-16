@@ -19,7 +19,7 @@ interface MeditationOption {
   buffChance: number;  // chance de buff de XP temporário (0–1)
 }
 
-const OPTIONS: MeditationOption[] = [
+export const MEDITATION_OPTIONS: MeditationOption[] = [
   { id: 'rapida',  label: '5 minutos',  emoji: '⏱️', durationMs: 5  * 60 * 1000, hpPercent: 0.25, energyFlat: 15, buffChance: 0    },
   { id: 'media',   label: '15 minutos', emoji: '⏰', durationMs: 15 * 60 * 1000, hpPercent: 0.55, energyFlat: 30, buffChance: 0.3  },
   { id: 'profunda',label: '30 minutos', emoji: '🕰️', durationMs: 30 * 60 * 1000, hpPercent: 1.0,  energyFlat: 99, buffChance: 0.7  },
@@ -59,7 +59,7 @@ export function buildMeditarEmbed(char: FullCharacter): EmbedBuilder {
       },
       {
         name: '📋 Opções',
-        value: OPTIONS.map(o => {
+        value: MEDITATION_OPTIONS.map(o => {
           const bonusMult = 1 + phaseInfo.meditaBonus;
           const hp = Math.round(o.hpPercent * 100 * bonusMult);
           const en = Math.round(o.energyFlat * bonusMult);
@@ -109,7 +109,7 @@ export async function startMeditation(char: FullCharacter, optionId: string): Pr
     return { success: false, message: 'Você já está meditando!' };
   }
 
-  const option = OPTIONS.find(o => o.id === optionId);
+  const option = MEDITATION_OPTIONS.find(o => o.id === optionId);
   if (!option) return { success: false, message: 'Opção inválida.' };
 
   await prisma.rpgCharacter.update({
@@ -133,9 +133,9 @@ export async function collectMeditation(char: FullCharacter): Promise<{
 
   // Determinar qual opção pelo tempo de meditação estimado
   const durMs = (char.meditatingUntil.getTime() - (char.lastRest?.getTime() ?? char.meditatingUntil.getTime() - 5 * 60 * 1000));
-  const option = OPTIONS.reduce((prev, cur) =>
+  const option = MEDITATION_OPTIONS.reduce((prev, cur) =>
     Math.abs(cur.durationMs - durMs) < Math.abs(prev.durationMs - durMs) ? cur : prev,
-  ) ?? OPTIONS[0];
+  ) ?? MEDITATION_OPTIONS[0];
 
   const phase = getDayPhase();
   const bonusMult = 1 + PHASE_INFO[phase].meditaBonus;

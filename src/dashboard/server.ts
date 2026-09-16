@@ -13,6 +13,10 @@ import { getItem, ITEMS } from '../rpg/constants/items';
 import { equipItem, useConsumable, sellItem, buyItem } from '../rpg/services/inventory';
 import { travelTo } from '../rpg/panels/travel';
 import { SHOP_CATEGORIES } from '../rpg/panels/shop';
+import { TRAIN_OPTIONS, doTrain } from '../rpg/panels/treinar';
+import { MEDITATION_OPTIONS, startMeditation, collectMeditation } from '../rpg/panels/meditar';
+import { getActiveBuffs, formatBuffList } from '../rpg/services/temp-buffs';
+import { getDayPhase, PHASE_INFO } from '../rpg/services/day-night';
 
 const BOT_OWNER_ID = '1195254699943796791';
 const TMDB_KEY = '3fd2be6f0c70a2a598f084ddfb75487c'; 
@@ -966,6 +970,23 @@ ${activitySdkBootstrap(clientId!)}
   .reward-fields { display: flex; gap: 10px; justify-content: center; margin-top: 10px; flex-wrap: wrap; }
   .reward-field { background: rgba(255,255,255,0.05); border-radius: 8px; padding: 6px 14px; font-size: 0.85rem; font-weight: 600; color: var(--text); }
   .drop-list { margin-top: 8px; font-size: 0.85rem; color: var(--text-muted); }
+
+  .buff-list { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 18px; }
+  .buff-chip { background: rgba(139,92,246,0.12); border: 1px solid var(--primary); color: var(--primary2); padding: 6px 12px; border-radius: 999px; font-size: 0.78rem; font-weight: 700; }
+
+  .train-grid, .med-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 14px; }
+  .train-card, .med-card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 18px; text-align: center; }
+  .train-card .icon, .med-card .icon { font-size: 1.8rem; margin-bottom: 8px; }
+  .train-card .name, .med-card .name { font-weight: 700; margin-bottom: 6px; }
+  .train-card .desc, .med-card .desc { color: var(--text-muted); font-size: 0.78rem; min-height: 34px; margin-bottom: 12px; }
+  .train-card button, .med-card button { width: 100%; background: var(--primary); color: white; border: none; padding: 9px; border-radius: 8px; font-weight: 700; cursor: pointer; }
+  .train-card button:disabled, .med-card button:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  .cooldown-banner { background: rgba(243,156,18,0.1); border: 1px solid var(--orange); color: var(--orange); padding: 12px 16px; border-radius: 10px; font-weight: 700; text-align: center; margin-bottom: 18px; }
+  .phase-banner { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 12px 16px; margin-bottom: 18px; font-size: 0.85rem; color: var(--text-muted); }
+  .med-progress { background: var(--card); border: 1px solid var(--primary); border-radius: 12px; padding: 20px; text-align: center; margin-bottom: 18px; }
+  .btn-collect { background: linear-gradient(120deg, var(--primary), var(--primary2)); color: white; border: none; padding: 12px 30px; border-radius: 10px; font-weight: 800; cursor: pointer; margin-top: 12px; }
+
   .btn-again { display: block; margin: 18px auto 0; background: var(--primary); color: white; border: none; padding: 12px 26px; border-radius: 10px; font-weight: 700; cursor: pointer; }
 </style>
 </head>
@@ -1026,7 +1047,7 @@ ${activitySdkBootstrap(clientId!)}
         </div>
 
         <div class="tab-nav" id="tabNav">
-          \${['batalha','inventario','loja','viajar','pontos'].map(t => \`<button class="tab-btn \${state.activeTab === t ? 'active' : ''}" onclick="switchTab('\${t}')">\${tabLabel(t)}</button>\`).join('')}
+          \${['batalha','inventario','loja','viajar','treinar','meditar','pontos'].map(t => \`<button class="tab-btn \${state.activeTab === t ? 'active' : ''}" onclick="switchTab('\${t}')">\${tabLabel(t)}</button>\`).join('')}
         </div>
         <div id="tabBody"></div>
       \`;
@@ -1035,7 +1056,7 @@ ${activitySdkBootstrap(clientId!)}
     }
 
     function tabLabel(t) {
-      return { batalha: '⚔️ Batalha', inventario: '🎒 Inventário', loja: '🛒 Loja', viajar: '🗺️ Viajar', pontos: '📊 Pontos' }[t];
+      return { batalha: '⚔️ Batalha', inventario: '🎒 Inventário', loja: '🛒 Loja', viajar: '🗺️ Viajar', treinar: '🥊 Treinar', meditar: '🧘 Meditar', pontos: '📊 Pontos' }[t];
     }
 
     function switchTab(t) {
@@ -1049,6 +1070,8 @@ ${activitySdkBootstrap(clientId!)}
       if (t === 'inventario') return renderInventarioTab();
       if (t === 'loja') return renderLojaTab();
       if (t === 'viajar') return renderViajarTab();
+      if (t === 'treinar') return renderTreinarTab();
+      if (t === 'meditar') return renderMeditarTab();
       if (t === 'pontos') return renderPontosTab();
     }
 
@@ -1225,6 +1248,123 @@ ${activitySdkBootstrap(clientId!)}
           renderProfile(p);
         } else {
           document.getElementById('travelFeedback').innerHTML = actionFeedback(result);
+        }
+      } catch (e) {}
+    }
+
+    // ───────────────────────── ABA: TREINAR ─────────────────────────
+    async function renderTreinarTab() {
+      document.getElementById('tabBody').innerHTML = '<p class="empty">⏳ Carregando treino...</p>';
+      try {
+        const res = await fetch('/api/activities/rpg/train');
+        const data = await res.json();
+
+        const buffsHtml = (data.activeBuffs || []).length
+          ? '<div class="buff-list">' + data.activeBuffs.map(b => \`<span class="buff-chip">✨ \${b.label || b.source}</span>\`).join('') + '</div>'
+          : '';
+
+        const cooldownHtml = data.onCooldown
+          ? \`<div class="cooldown-banner">⏳ Aguarde \${data.cooldownRemMin} min para treinar de novo</div>\`
+          : '';
+
+        const cardsHtml = data.options.map(o => \`
+          <div class="train-card">
+            <div class="icon">\${o.emoji}</div>
+            <div class="name">\${o.label}</div>
+            <div class="desc">\${o.description}<br>Custo: \${o.energyCost}⚡</div>
+            <button \${data.onCooldown || data.currentEnergy < o.energyCost ? 'disabled' : ''} onclick="doTrainAction('\${o.id}')">Treinar</button>
+          </div>\`).join('');
+
+        document.getElementById('tabBody').innerHTML = \`
+          <div id="trainFeedback"></div>
+          \${buffsHtml}
+          \${cooldownHtml}
+          <div class="train-grid">\${cardsHtml}</div>
+        \`;
+      } catch (e) {
+        document.getElementById('tabBody').innerHTML = '<p class="error">Erro ao carregar treino.</p>';
+      }
+    }
+
+    async function doTrainAction(statId) {
+      try {
+        const res = await fetch('/api/activities/rpg/train', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ statId })
+        });
+        const result = await res.json();
+        document.getElementById('trainFeedback').innerHTML = actionFeedback(result);
+        if (result.success) {
+          const p = await (await fetch('/api/activities/rpg/profile')).json();
+          state.profileData = p;
+          renderTreinarTab();
+        }
+      } catch (e) {}
+    }
+
+    // ───────────────────────── ABA: MEDITAR ─────────────────────────
+    async function renderMeditarTab() {
+      document.getElementById('tabBody').innerHTML = '<p class="empty">⏳ Carregando meditação...</p>';
+      try {
+        const res = await fetch('/api/activities/rpg/meditate');
+        const data = await res.json();
+
+        const phaseBonus = data.phaseInfo.meditaBonus > 0 ? \` (+\${Math.round(data.phaseInfo.meditaBonus * 100)}% eficiência agora ✨)\` : '';
+        const phaseHtml = \`<div class="phase-banner">\${data.phaseInfo.emoji} Fase do dia: <b>\${data.phaseInfo.name}</b>\${phaseBonus}</div>\`;
+
+        let bodyHtml;
+        if (data.isReady) {
+          bodyHtml = \`
+            <div class="med-progress">
+              <div style="font-size:2rem;">🪷</div>
+              <div style="font-weight:800; margin:8px 0;">Meditação concluída!</div>
+              <button class="btn-collect" onclick="doCollectMeditation()">🪷 Coletar Bônus</button>
+            </div>\`;
+        } else if (data.isMeditating) {
+          bodyHtml = \`
+            <div class="med-progress">
+              <div style="font-size:2rem;">🧘</div>
+              <div style="font-weight:800; margin:8px 0;">Meditando... \${data.remainingMin} min restante(s)</div>
+            </div>\`;
+        } else {
+          bodyHtml = '<div class="med-grid">' + data.options.map(o => \`
+            <div class="med-card">
+              <div class="icon">\${o.emoji}</div>
+              <div class="name">\${o.label}</div>
+              <div class="desc">Restaura \${Math.round(o.hpPercent*100)}% HP + \${o.energyFlat}⚡\${o.buffChance > 0 ? '<br>' + Math.round(o.buffChance*100) + '% chance de +15% XP' : ''}</div>
+              <button onclick="doStartMeditation('\${o.id}')">Meditar</button>
+            </div>\`).join('') + '</div>';
+        }
+
+        document.getElementById('tabBody').innerHTML = '<div id="medFeedback"></div>' + phaseHtml + bodyHtml;
+      } catch (e) {
+        document.getElementById('tabBody').innerHTML = '<p class="error">Erro ao carregar meditação.</p>';
+      }
+    }
+
+    async function doStartMeditation(optionId) {
+      try {
+        const res = await fetch('/api/activities/rpg/meditate/start', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ optionId })
+        });
+        const result = await res.json();
+        document.getElementById('medFeedback').innerHTML = actionFeedback(result);
+        if (result.success) renderMeditarTab();
+      } catch (e) {}
+    }
+
+    async function doCollectMeditation() {
+      try {
+        const res = await fetch('/api/activities/rpg/meditate/collect', { method: 'POST' });
+        const result = await res.json();
+        if (result.success) {
+          document.getElementById('medFeedback').innerHTML = \`<div class="action-feedback ok">🪷 +\${result.hpGained} HP · +\${result.energyGained}⚡\${result.buffGiven ? ' · ✨ Buff de XP ativado!' : ''}</div>\`;
+          const p = await (await fetch('/api/activities/rpg/profile')).json();
+          state.profileData = p;
+          setTimeout(renderMeditarTab, 1500);
+        } else {
+          document.getElementById('medFeedback').innerHTML = actionFeedback(result);
         }
       } catch (e) {}
     }
@@ -1575,6 +1715,86 @@ ${activitySdkBootstrap(clientId!)}
     if (!validStats.includes(stat)) return res.status(400).json({ error: 'Atributo inválido' });
 
     const result = await distributeStatPoints(discordId, stat, Number(points) || 1);
+    res.json(result);
+  });
+
+  // ── Treinar: mesmas TRAIN_OPTIONS e doTrain() de src/rpg/panels/treinar.ts
+  // (buffs temporários, cooldown de 20min, custo de energia — tudo real).
+  app.get('/api/activities/rpg/train', requirePlayerAuth, async (req, res) => {
+    const discordId = req.cookies.player_userid as string;
+    const character = await getCharacter(discordId);
+    if (!character) return res.status(404).json({ error: 'Personagem não encontrado' });
+
+    const buffs = await getActiveBuffs(discordId);
+    const onCooldown = character.lastTrain && (Date.now() - character.lastTrain.getTime()) < 20 * 60 * 1000;
+    const cooldownRemMin = onCooldown
+      ? Math.ceil((20 * 60 * 1000 - (Date.now() - character.lastTrain!.getTime())) / 60000)
+      : 0;
+
+    res.json({
+      options: TRAIN_OPTIONS,
+      activeBuffs: buffs,
+      onCooldown,
+      cooldownRemMin,
+      currentEnergy: character.currentEnergy,
+    });
+  });
+
+  app.post('/api/activities/rpg/train', requirePlayerAuth, async (req, res) => {
+    const discordId = req.cookies.player_userid as string;
+    const { statId } = req.body || {};
+    if (!statId) return res.status(400).json({ error: 'statId é obrigatório' });
+
+    const character = await getCharacter(discordId);
+    if (!character) return res.status(404).json({ error: 'Personagem não encontrado' });
+
+    const result = await doTrain(character, statId);
+    res.json(result);
+  });
+
+  // ── Meditar: mesmas MEDITATION_OPTIONS, startMeditation() e
+  // collectMeditation() de src/rpg/panels/meditar.ts (bônus de fase do dia
+  // real, cooldown de 30min, chance de buff de XP — tudo real).
+  app.get('/api/activities/rpg/meditate', requirePlayerAuth, async (req, res) => {
+    const discordId = req.cookies.player_userid as string;
+    const character = await getCharacter(discordId);
+    if (!character) return res.status(404).json({ error: 'Personagem não encontrado' });
+
+    const phase = getDayPhase();
+    const isMeditating = !!(character.meditatingUntil && character.meditatingUntil > new Date());
+    const isReady = !!(character.meditatingUntil && character.meditatingUntil <= new Date());
+    const remainingMin = isMeditating ? Math.ceil((character.meditatingUntil!.getTime() - Date.now()) / 60000) : 0;
+
+    res.json({
+      options: MEDITATION_OPTIONS,
+      phase,
+      phaseInfo: PHASE_INFO[phase],
+      isMeditating,
+      isReady,
+      remainingMin,
+      currentHp: character.currentHp,
+      currentEnergy: character.currentEnergy,
+    });
+  });
+
+  app.post('/api/activities/rpg/meditate/start', requirePlayerAuth, async (req, res) => {
+    const discordId = req.cookies.player_userid as string;
+    const { optionId } = req.body || {};
+    if (!optionId) return res.status(400).json({ error: 'optionId é obrigatório' });
+
+    const character = await getCharacter(discordId);
+    if (!character) return res.status(404).json({ error: 'Personagem não encontrado' });
+
+    const result = await startMeditation(character, optionId);
+    res.json(result);
+  });
+
+  app.post('/api/activities/rpg/meditate/collect', requirePlayerAuth, async (req, res) => {
+    const discordId = req.cookies.player_userid as string;
+    const character = await getCharacter(discordId);
+    if (!character) return res.status(404).json({ error: 'Personagem não encontrado' });
+
+    const result = await collectMeditation(character);
     res.json(result);
   });
 

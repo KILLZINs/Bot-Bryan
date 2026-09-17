@@ -5,10 +5,11 @@ import path from 'path';
 import { prisma } from '../database/client';
 import { askBryan } from '../ai/bryan';
 import { getCharacter, computeStats, distributeStatPoints, type FullCharacter } from '../rpg/services/character';
-import { getEnemiesForLocation, getEnemy } from '../rpg/constants/enemies';
+import { getEnemiesForLocation, getEnemy, getBossesForLocation } from '../rpg/constants/enemies';
 import { getLocation, LOCATION_LIST } from '../rpg/constants/locations';
 import { getClass } from '../rpg/constants/classes';
-import { startInteractiveCombat, takeCombatAction, CombatBlockedError, type CombatAction } from '../rpg/services/combat';
+import { startInteractiveCombat, takeCombatAction, CombatBlockedError, isDungeonOnCooldown, type CombatAction, type CombatMode } from '../rpg/services/combat';
+import { activeExpeditions, startExpedition, processRandomDungeonEvent, finishExpedition, type DungeonRun } from '../rpg/panels/dungeon';
 import { getItem, ITEMS } from '../rpg/constants/items';
 import { equipItem, useConsumable, sellItem, buyItem } from '../rpg/services/inventory';
 import { travelTo } from '../rpg/panels/travel';
@@ -174,6 +175,28 @@ function enrichItem(itemId: string) {
   return item
     ? { id: itemId, name: item.name, emoji: item.emoji, rarity: item.rarity, slot: item.slot, type: item.type, maxStack: item.maxStack, sellPrice: item.sellPrice }
     : { id: itemId, name: itemId, emoji: '📦', rarity: null, slot: null, type: null, maxStack: 99, sellPrice: 0 };
+}
+
+// Espelha EXATAMENTE a lógica que já existe dentro de buildCombatResultEmbed
+// (dungeon.ts) pra decidir o que acontece com uma expedição quando um
+// combate termina — opera sobre o MESMO Map `activeExpeditions` compartilhado
+// com o Discord, então fica sempre em sincronia, não importa por onde a
+// pessoa esteja jogando.
+function applyExpeditionOutcome(discordId: string, turn: any) {
+  if (!turn.finished) return null;
+  const run = activeExpeditions.get(discordId);
+  if (!run) return null;
+
+  if (turn.result?.result === 'vitoria') {
+    run.currentFloor++;
+    if (run.currentFloor > run.maxFloors) {
+      return { run, next: 'finish' };
+    }
+    return { run, next: 'continue' };
+  }
+
+  activeExpeditions.delete(discordId);
+  return { run: null, next: 'lost' };
 }
 
 // Middleware: exige login de JOGADOR (qualquer conta do Discord — não precisa
@@ -987,6 +1010,24 @@ ${activitySdkBootstrap(clientId!)}
   .med-progress { background: var(--card); border: 1px solid var(--primary); border-radius: 12px; padding: 20px; text-align: center; margin-bottom: 18px; }
   .btn-collect { background: linear-gradient(120deg, var(--primary), var(--primary2)); color: white; border: none; padding: 12px 30px; border-radius: 10px; font-weight: 800; cursor: pointer; margin-top: 12px; }
 
+  .floor-track { display: flex; gap: 6px; margin-bottom: 20px; }
+  .floor-dot { flex: 1; height: 10px; border-radius: 5px; background: var(--border); }
+  .floor-dot.done { background: var(--green); }
+  .floor-dot.current { background: var(--primary); box-shadow: 0 0 10px var(--primary); }
+  .floor-dot.boss { background: var(--red); }
+  .dungeon-entrance { background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 22px; margin-bottom: 18px; }
+  .dungeon-entrance h4 { margin-bottom: 8px; }
+  .dungeon-entrance .enemy-chip { display: inline-block; background: var(--card2); border: 1px solid var(--border); border-radius: 999px; padding: 5px 12px; margin: 3px 4px 3px 0; font-size: 0.8rem; }
+  .btn-enter { background: linear-gradient(120deg, var(--red), var(--orange)); color: white; border: none; padding: 14px 28px; border-radius: 10px; font-weight: 800; cursor: pointer; margin-top: 14px; }
+  .btn-enter:disabled { opacity: 0.4; cursor: not-allowed; }
+  .crawler-log { background: #0B0C14; border: 1px solid var(--border); border-radius: 12px; padding: 16px 18px; margin-bottom: 18px; font-size: 0.85rem; line-height: 1.7; color: #D5D7E0; max-height: 200px; overflow-y: auto; }
+  .crawler-actions { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; }
+  .crawler-actions button { padding: 14px; border-radius: 10px; font-weight: 700; cursor: pointer; border: 1px solid var(--border); }
+  .btn-crawl-fight { background: var(--red); color: white; border: none; }
+  .btn-crawl-boss { background: linear-gradient(120deg, var(--red), var(--gold)); color: white; border: none; }
+  .btn-crawl-event { background: var(--primary); color: white; border: none; }
+  .btn-crawl-flee { background: var(--card2); color: white; }
+
   .btn-again { display: block; margin: 18px auto 0; background: var(--primary); color: white; border: none; padding: 12px 26px; border-radius: 10px; font-weight: 700; cursor: pointer; }
 </style>
 </head>
@@ -1047,7 +1088,7 @@ ${activitySdkBootstrap(clientId!)}
         </div>
 
         <div class="tab-nav" id="tabNav">
-          \${['batalha','inventario','loja','viajar','treinar','meditar','pontos'].map(t => \`<button class="tab-btn \${state.activeTab === t ? 'active' : ''}" onclick="switchTab('\${t}')">\${tabLabel(t)}</button>\`).join('')}
+          \${['batalha','dungeon','inventario','loja','viajar','treinar','meditar','pontos'].map(t => \`<button class="tab-btn \${state.activeTab === t ? 'active' : ''}" onclick="switchTab('\${t}')">\${tabLabel(t)}</button>\`).join('')}
         </div>
         <div id="tabBody"></div>
       \`;
@@ -1056,7 +1097,7 @@ ${activitySdkBootstrap(clientId!)}
     }
 
     function tabLabel(t) {
-      return { batalha: '⚔️ Batalha', inventario: '🎒 Inventário', loja: '🛒 Loja', viajar: '🗺️ Viajar', treinar: '🥊 Treinar', meditar: '🧘 Meditar', pontos: '📊 Pontos' }[t];
+      return { batalha: '⚔️ Batalha', dungeon: '🏰 Dungeon', inventario: '🎒 Inventário', loja: '🛒 Loja', viajar: '🗺️ Viajar', treinar: '🥊 Treinar', meditar: '🧘 Meditar', pontos: '📊 Pontos' }[t];
     }
 
     function switchTab(t) {
@@ -1067,6 +1108,7 @@ ${activitySdkBootstrap(clientId!)}
 
     function renderTab(t) {
       if (t === 'batalha') return renderBatalhaTab();
+      if (t === 'dungeon') return renderDungeonTab();
       if (t === 'inventario') return renderInventarioTab();
       if (t === 'loja') return renderLojaTab();
       if (t === 'viajar') return renderViajarTab();
@@ -1369,6 +1411,237 @@ ${activitySdkBootstrap(clientId!)}
       } catch (e) {}
     }
 
+    // ───────────────────────── ABA: DUNGEON (EXPEDIÇÃO) ─────────────────────────
+    async function renderDungeonTab() {
+      document.getElementById('tabBody').innerHTML = '<p class="empty">⏳ Carregando dungeon...</p>';
+      try {
+        const res = await fetch('/api/activities/rpg/dungeon');
+        const data = await res.json();
+
+        if (data.run) {
+          renderCrawler(data.run, data.currentHp, data.currentEnergy);
+          return;
+        }
+
+        if (data.location.isSafeZone) {
+          document.getElementById('tabBody').innerHTML = '<p class="error">🏰 Você está em uma zona segura. Viaje para uma região hostil na aba 🗺️ Viajar primeiro!</p>';
+          return;
+        }
+        if (!data.location.hasDungeon) {
+          document.getElementById('tabBody').innerHTML = \`<p class="error">\${data.location.name} não possui labirintos. Tente outra região!</p>\`;
+          return;
+        }
+
+        const enemiesHtml = data.enemies.map(e => \`<span class="enemy-chip">\${e.emoji} \${e.name}</span>\`).join('') || '<span class="empty">Nenhum inimigo conhecido no seu nível.</span>';
+        const bossesHtml = data.bosses.length ? data.bosses.map(b => \`<span class="enemy-chip">💀 \${b.emoji} \${b.name}</span>\`).join('') : '<span class="empty">Nenhum boss disponível.</span>';
+
+        document.getElementById('tabBody').innerHTML = \`
+          <div id="dungeonFeedback"></div>
+          <div class="dungeon-entrance">
+            <h4>⚔️ Expedições — \${data.location.emoji} \${data.location.name}</h4>
+            <p style="color:var(--text-muted); font-size:0.85rem; margin-bottom:14px;">Você passará por 5 andares de combates ou eventos aleatórios até a câmara do Boss. Se fugir ou morrer no caminho, perde o progresso.</p>
+            <p style="font-weight:700; margin-bottom:4px;">👹 Ameaças</p>
+            <div>\${enemiesHtml}</div>
+            <p style="font-weight:700; margin:12px 0 4px;">💀 Guardiões</p>
+            <div>\${bossesHtml}</div>
+            <p style="margin-top:14px; color:var(--text-muted); font-size:0.85rem;">⚡ Custo: 20 energia (você tem \${data.currentEnergy}) \${data.cooldown.onCooldown ? '· ⏳ Cooldown: ' + data.cooldown.remaining : ''}</p>
+            <button class="btn-enter" \${data.cooldown.onCooldown || data.currentEnergy < 20 || data.currentHp <= 0 ? 'disabled' : ''} onclick="startDungeonRun()">🚪 Adentrar Expedição</button>
+          </div>
+        \`;
+      } catch (e) {
+        document.getElementById('tabBody').innerHTML = '<p class="error">Erro ao carregar dungeon.</p>';
+      }
+    }
+
+    async function startDungeonRun() {
+      try {
+        const res = await fetch('/api/activities/rpg/dungeon/start', { method: 'POST' });
+        const data = await res.json();
+        if (!data.success) { document.getElementById('dungeonFeedback').innerHTML = \`<div class="action-feedback fail">\${data.error}</div>\`; return; }
+        renderCrawler(data.run, null, null);
+      } catch (e) {}
+    }
+
+    function renderCrawler(run, hp, energy) {
+      const dotsHtml = Array.from({ length: run.maxFloors }, (_, i) => {
+        const floor = i + 1;
+        const cls = floor === run.maxFloors ? 'boss' : floor < run.currentFloor ? 'done' : floor === run.currentFloor ? 'current' : '';
+        return \`<div class="floor-dot \${cls}"></div>\`;
+      }).join('');
+
+      const logHtml = run.logs.slice(-4).map(l => '<div>' + l + '</div>').join('');
+
+      let actionsHtml;
+      if (run.currentFloor >= run.maxFloors) {
+        actionsHtml = \`
+          <button class="btn-crawl-boss" onclick="dungeonFight('boss')">⚔️ Enfrentar Boss</button>
+          <button class="btn-crawl-flee" onclick="dungeonFlee()">🏃 Fugir Covardemente</button>\`;
+      } else if (run.currentFloor % 2 === 0) {
+        actionsHtml = \`<button class="btn-crawl-event" onclick="dungeonEvent()">🔍 Avançar (Evento)</button>\`;
+      } else {
+        actionsHtml = \`
+          <button class="btn-crawl-fight" onclick="dungeonFight('normal')">⚔️ Lutar (Inimigo Comum)</button>
+          <button class="btn-crawl-flee" onclick="dungeonFlee()">🏃 Fugir para a Cidade</button>\`;
+      }
+
+      document.getElementById('tabBody').innerHTML = \`
+        <div id="dungeonFeedback"></div>
+        <div class="floor-track">\${dotsHtml}</div>
+        <p style="font-weight:700; margin-bottom:10px;">🗺️ Andar \${run.currentFloor}/\${run.maxFloors}</p>
+        <div class="crawler-log">\${logHtml}</div>
+        <div class="crawler-actions" id="crawlerActions">\${actionsHtml}</div>
+        <div class="arena" id="dungeonArena"></div>
+      \`;
+    }
+
+    async function dungeonEvent() {
+      try {
+        const res = await fetch('/api/activities/rpg/dungeon/event', { method: 'POST' });
+        const data = await res.json();
+        if (!data.success) { document.getElementById('dungeonFeedback').innerHTML = actionFeedback(data); return; }
+        renderCrawler(data.run, null, null);
+      } catch (e) {}
+    }
+
+    async function dungeonFight(pool) {
+      const arena = document.getElementById('dungeonArena');
+      document.getElementById('crawlerActions').style.display = 'none';
+      arena.classList.add('show');
+      arena.innerHTML = '<p class="empty">⏳ Preparando combate...</p>';
+
+      try {
+        const res = await fetch('/api/activities/rpg/combat/start', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ pool })
+        });
+        const turn = await res.json();
+        if (res.status === 409) { arena.innerHTML = \`<p class="error">⏳ \${turn.message}</p>\`; return; }
+        renderDungeonArena(turn);
+      } catch (e) {
+        arena.innerHTML = '<p class="error">Erro de conexão.</p>';
+      }
+    }
+
+    async function dungeonArenaAction(action) {
+      try {
+        const res = await fetch('/api/activities/rpg/combat/action', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action })
+        });
+        const turn = await res.json();
+        renderDungeonArena(turn);
+      } catch (e) {}
+    }
+
+    function renderDungeonArena(turn) {
+      const s = state.stats;
+      const maxHp = s ? s.maxHp : turn.playerHp;
+      const maxEn = s ? s.maxEnergy : turn.playerEnergy;
+      const heroEmoji = state.cls ? state.cls.emoji : '🧙';
+
+      const playerHpPct = Math.max(0, Math.min(100, (turn.playerHp / maxHp) * 100));
+      const playerEnPct = Math.max(0, Math.min(100, (turn.playerEnergy / maxEn) * 100));
+      const enemyHpPct = Math.max(0, Math.min(100, (turn.enemyHp / turn.enemyMaxHp) * 100));
+      const logHtml = (turn.log || []).map(l => '<div>' + l.replace(/\\*\\*(.*?)\\*\\*/g, '<b>$1</b>') + '</div>').join('');
+
+      let resultHtml = '';
+      if (turn.finished && turn.result) {
+        const r = turn.result;
+        const titleMap = { vitoria: '🏆 Vitória!', derrota: '💀 Derrota!', fuga: '🏃 Fuga', empate: '💥 Empate!' };
+        const dropsHtml = (r.itemsDropped && r.itemsDropped.length)
+          ? '<div class="drop-list">🎁 ' + r.itemsDropped.map(i => i.emoji + ' <b>' + i.name + '</b>').join('  •  ') + '</div>'
+          : '';
+
+        let nextBtn = '';
+        const outcome = turn.expeditionOutcome;
+        if (outcome?.next === 'finish') {
+          nextBtn = '<button class="btn-again" onclick="dungeonFinishRun()">🏆 Resgatar Recompensas!</button>';
+        } else if (outcome?.next === 'continue') {
+          window.__pendingRun = outcome.run;
+          nextBtn = '<button class="btn-again" onclick="continueCrawler()">🚪 Avançar na Expedição</button>';
+        } else if (outcome?.next === 'lost') {
+          nextBtn = '<button class="btn-again" onclick="renderDungeonTab()">😔 Voltar à Entrada</button>';
+        } else {
+          nextBtn = '<button class="btn-again" onclick="loadProfile();">🔄 Atualizar Ficha</button>';
+        }
+
+        resultHtml = \`
+          <div class="result-banner \${r.result}">\${titleMap[r.result] || r.result}
+            <div class="reward-fields">
+              <div class="reward-field">⭐ +\${r.xpGained} XP</div>
+              <div class="reward-field">💰 +\${r.goldGained} Ouro</div>
+            </div>
+            \${dropsHtml}
+          </div>
+          \${nextBtn}
+        \`;
+      }
+
+      document.getElementById('dungeonArena').innerHTML = \`
+        <div class="arena-title"><span>\${turn.finished ? 'Resultado' : '⚔️ Expedição — Rodada ' + (turn.round || 1)}</span></div>
+        <div class="arena-stage">
+          <div class="combatant hero">
+            <div class="sprite">\${heroEmoji}</div>
+            <div class="combatant-name">Você</div>
+            <div class="bars">
+              <div class="bar-row"><span class="tag">HP</span><div class="bar-track"><div class="bar-fill" style="width:\${playerHpPct}%; background:var(--red);"></div></div></div>
+              <div class="bar-row"><span class="tag">EN</span><div class="bar-track"><div class="bar-fill" style="width:\${playerEnPct}%; background:var(--green);"></div></div></div>
+            </div>
+          </div>
+          <div class="vs-badge">VS</div>
+          <div class="combatant enemy">
+            <div class="sprite">\${turn.enemyEmoji || '👹'}</div>
+            <div class="combatant-name">\${turn.enemyName}</div>
+            <div class="bars">
+              <div class="bar-row"><span class="tag">HP</span><div class="bar-track"><div class="bar-fill" style="width:\${enemyHpPct}%; background:var(--gold);"></div></div></div>
+            </div>
+          </div>
+        </div>
+        \${!turn.finished ? \`
+        <div class="action-bar">
+          <button class="action-btn" onclick="dungeonArenaAction('attack')">⚔️ Atacar</button>
+          <button class="action-btn" onclick="dungeonArenaAction('skill')" \${turn.skillReady ? '' : 'disabled'}>✨ \${turn.skillName || 'Habilidade'}</button>
+          <button class="action-btn" onclick="dungeonArenaAction('defend')">🛡️ Defender</button>
+          <button class="action-btn" onclick="dungeonArenaAction('potion')" \${turn.potionAvailable ? '' : 'disabled'}>🧪 Poção</button>
+          <button class="action-btn" onclick="dungeonArenaAction('flee')">🏃 Fugir</button>
+        </div>\` : ''}
+        <div class="combat-log" id="dungeonCombatLog">\${logHtml}</div>
+        \${resultHtml}
+      \`;
+
+      const logEl = document.getElementById('dungeonCombatLog');
+      if (logEl) logEl.scrollTop = logEl.scrollHeight;
+    }
+
+    function continueCrawler() {
+      renderCrawler(window.__pendingRun, null, null);
+    }
+
+    async function dungeonFinishRun() {
+      try {
+        const res = await fetch('/api/activities/rpg/dungeon/finish', { method: 'POST' });
+        const data = await res.json();
+        document.getElementById('tabBody').innerHTML = \`
+          <div class="result-banner vitoria">\${data.title || '🏆 Expedição Concluída!'}
+            <div class="reward-fields">
+              <div class="reward-field">⭐ +\${data.xpGained} XP</div>
+              <div class="reward-field">💰 +\${data.goldGained} Ouro</div>
+            </div>
+          </div>
+          <button class="btn-again" onclick="renderDungeonTab();">Explorar Outra</button>
+        \`;
+        const p = await (await fetch('/api/activities/rpg/profile')).json();
+        state.profileData = p;
+      } catch (e) {}
+    }
+
+    async function dungeonFlee() {
+      try {
+        await fetch('/api/activities/rpg/dungeon/flee', { method: 'POST' });
+        renderDungeonTab();
+      } catch (e) {}
+    }
+
     // ───────────────────────── ABA: PONTOS DE ATRIBUTO ─────────────────────────
     const STAT_LABELS = { strength: 'Força 💪', agility: 'Agilidade 🏃', intelligence: 'Inteligência 🧠', vitality: 'Vitalidade ❤️', luck: 'Sorte 🍀' };
 
@@ -1587,23 +1860,33 @@ ${activitySdkBootstrap(clientId!)}
   // só colando o ID dela.
   app.post('/api/activities/rpg/combat/start', requirePlayerAuth, async (req, res) => {
     const discordId = req.cookies.player_userid as string;
-    const { guildId, enemyId } = req.body || {};
+    const { guildId, enemyId, pool } = req.body || {};
 
     try {
       const character = await getCharacter(discordId);
       if (!character) return res.status(404).json({ error: 'Personagem não encontrado' });
 
+      const run = activeExpeditions.get(discordId);
+
       let enemy = enemyId ? getEnemy(enemyId) : undefined;
       if (!enemy) {
-        const pool = getEnemiesForLocation(character.currentLocation, character.level);
-        if (!pool.length) return res.status(404).json({ error: 'Nenhum inimigo encontrado nessa região.' });
-        enemy = pool[Math.floor(Math.random() * pool.length)];
+        const locationId = run?.locationId ?? character.currentLocation;
+        const candidates = pool === 'boss'
+          ? getBossesForLocation(locationId, character.level)
+          : getEnemiesForLocation(locationId, character.level);
+        if (!candidates.length) return res.status(404).json({ error: 'Nenhum inimigo encontrado nessa região.' });
+        enemy = candidates[Math.floor(Math.random() * candidates.length)];
       }
 
-      const turn: any = await startInteractiveCombat(character, enemy, guildId, 'hunt');
+      // Igual a doBattleRandom/doBattleEnemy: se há expedição ativa, o modo
+      // interno de combate vira 'expedition' (afeta balanceamento), não 'hunt'.
+      const mode: CombatMode = run ? 'expedition' : 'hunt';
+
+      const turn: any = await startInteractiveCombat(character, enemy, guildId, mode);
       if (turn.finished && turn.result?.itemsDropped) {
         turn.result.itemsDropped = turn.result.itemsDropped.map(enrichItem);
       }
+      turn.expeditionOutcome = applyExpeditionOutcome(discordId, turn);
       res.json(turn);
     } catch (err) {
       if (err instanceof CombatBlockedError) return res.status(409).json(isCombatBlockedMessage(err.message));
@@ -1622,12 +1905,80 @@ ${activitySdkBootstrap(clientId!)}
       if (turn.finished && turn.result?.itemsDropped) {
         turn.result.itemsDropped = turn.result.itemsDropped.map(enrichItem);
       }
+      turn.expeditionOutcome = applyExpeditionOutcome(discordId, turn);
       res.json(turn);
     } catch (err) {
       if (err instanceof CombatBlockedError) return res.status(409).json(isCombatBlockedMessage(err.message));
       console.error('[Atividades/RPG] Erro na ação de combate:', err);
       res.status(500).json({ error: 'Erro ao processar ação' });
     }
+  });
+
+  // ── Dungeon / Expedição: mesma engine (startExpedition, processRandomDungeonEvent,
+  // finishExpedition) e o MESMO Map activeExpeditions de src/rpg/panels/dungeon.ts
+  // — uma expedição iniciada no site aparece pro Discord e vice-versa.
+  app.get('/api/activities/rpg/dungeon', requirePlayerAuth, async (req, res) => {
+    const discordId = req.cookies.player_userid as string;
+    const character = await getCharacter(discordId);
+    if (!character) return res.status(404).json({ error: 'Personagem não encontrado' });
+
+    const run = activeExpeditions.get(discordId) || null;
+    const loc = getLocation(character.currentLocation);
+    const cooldown = isDungeonOnCooldown(character, 5);
+    const enemies = getEnemiesForLocation(loc.id, character.level).slice(0, 5);
+    const bosses = getBossesForLocation(loc.id, character.level);
+
+    res.json({
+      run, location: loc, cooldown,
+      enemies: enemies.map(e => ({ id: e.id, name: e.name, emoji: e.emoji })),
+      bosses: bosses.map(b => ({ id: b.id, name: b.name, emoji: b.emoji })),
+      currentHp: character.currentHp, currentEnergy: character.currentEnergy,
+    });
+  });
+
+  app.post('/api/activities/rpg/dungeon/start', requirePlayerAuth, async (req, res) => {
+    const discordId = req.cookies.player_userid as string;
+    const character = await getCharacter(discordId);
+    if (!character) return res.status(404).json({ error: 'Personagem não encontrado' });
+
+    const result = await startExpedition(character, character.currentLocation);
+    res.json(result);
+  });
+
+  app.post('/api/activities/rpg/dungeon/event', requirePlayerAuth, async (req, res) => {
+    const discordId = req.cookies.player_userid as string;
+    const character = await getCharacter(discordId);
+    if (!character) return res.status(404).json({ error: 'Personagem não encontrado' });
+
+    const run = activeExpeditions.get(discordId);
+    if (!run) return res.status(404).json({ error: 'Nenhuma expedição ativa.' });
+
+    const updatedRun = await processRandomDungeonEvent(character, run);
+    res.json({ success: true, run: updatedRun });
+  });
+
+  app.post('/api/activities/rpg/dungeon/finish', requirePlayerAuth, async (req, res) => {
+    const discordId = req.cookies.player_userid as string;
+    const character = await getCharacter(discordId);
+    if (!character) return res.status(404).json({ error: 'Personagem não encontrado' });
+
+    const run = activeExpeditions.get(discordId);
+    if (!run) return res.status(404).json({ error: 'Nenhuma expedição ativa.' });
+
+    const { embed, ...rest } = await finishExpedition(character, run) as any;
+    activeExpeditions.delete(discordId);
+
+    const fields = embed?.data?.fields || [];
+    const xpGained = parseInt((fields.find((f: any) => f.name.includes('XP'))?.value || '+0').replace(/\D/g, '')) || 0;
+    const goldGained = parseInt((fields.find((f: any) => f.name.includes('Ouro'))?.value || '+0').replace(/\D/g, '')) || 0;
+
+    res.json({ success: true, title: embed?.data?.title, description: embed?.data?.description, xpGained, goldGained });
+  });
+
+  app.post('/api/activities/rpg/dungeon/flee', requirePlayerAuth, async (req, res) => {
+    const discordId = req.cookies.player_userid as string;
+    activeExpeditions.delete(discordId);
+    res.json({ success: true });
   });
 
   // ── Inventário: equipar / usar / vender — usa EXATAMENTE as mesmas

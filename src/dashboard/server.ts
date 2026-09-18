@@ -10,7 +10,9 @@ import { getLocation, LOCATION_LIST } from '../rpg/constants/locations';
 import { getClass } from '../rpg/constants/classes';
 import { startInteractiveCombat, takeCombatAction, CombatBlockedError, isDungeonOnCooldown, type CombatAction, type CombatMode } from '../rpg/services/combat';
 import { activeExpeditions, startExpedition, processRandomDungeonEvent, finishExpedition, type DungeonRun } from '../rpg/panels/dungeon';
-import { getItem, ITEMS } from '../rpg/constants/items';
+import { craftItem } from '../rpg/panels/forja';
+import { CRAFT_RECIPES, getItem, ITEMS } from '../rpg/constants/items';
+import { TAVERNA_MENU, buyTavernaItem, rollTavernaDice } from '../rpg/panels/taverna';
 import { equipItem, useConsumable, sellItem, buyItem } from '../rpg/services/inventory';
 import { travelTo } from '../rpg/panels/travel';
 import { SHOP_CATEGORIES } from '../rpg/panels/shop';
@@ -1028,6 +1030,27 @@ ${activitySdkBootstrap(clientId!)}
   .btn-crawl-event { background: var(--primary); color: white; border: none; }
   .btn-crawl-flee { background: var(--card2); color: white; }
 
+  .city-subnav { display: flex; gap: 10px; margin-bottom: 18px; }
+  .city-subnav button { background: var(--card); border: 1px solid var(--border); color: var(--text-muted); padding: 10px 20px; border-radius: 10px; font-weight: 700; cursor: pointer; }
+  .city-subnav button.active { background: linear-gradient(120deg, var(--gold), var(--orange)); color: #1a1200; border-color: transparent; }
+  .recipe-card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 16px; margin-bottom: 12px; }
+  .recipe-card.locked { opacity: 0.55; }
+  .recipe-card .head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+  .recipe-card .head b { font-size: 1.05rem; }
+  .recipe-card .ing-list { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+  .ing-chip { background: #0B0C14; border: 1px solid var(--border); border-radius: 999px; padding: 4px 10px; font-size: 0.75rem; }
+  .ing-chip.ok { border-color: var(--green); color: var(--green); }
+  .ing-chip.bad { border-color: var(--red); color: var(--red); }
+  .recipe-card button { background: var(--gold); color: #1a1200; border: none; padding: 8px 18px; border-radius: 8px; font-weight: 800; cursor: pointer; }
+  .recipe-card button:disabled { opacity: 0.4; cursor: not-allowed; background: var(--border); color: var(--text-muted); }
+  .tavern-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 14px; margin-bottom: 20px; }
+  .tavern-card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 16px; text-align: center; }
+  .tavern-card .icon { font-size: 1.8rem; margin-bottom: 6px; }
+  .tavern-card .desc { color: var(--text-muted); font-size: 0.78rem; min-height: 32px; margin-bottom: 10px; }
+  .tavern-card button { width: 100%; background: var(--primary); color: white; border: none; padding: 9px; border-radius: 8px; font-weight: 700; cursor: pointer; }
+  .dice-box { background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 22px; text-align: center; }
+  .btn-dice { background: linear-gradient(120deg, var(--gold), var(--orange)); color: #1a1200; border: none; padding: 12px 26px; border-radius: 10px; font-weight: 800; cursor: pointer; margin-top: 10px; }
+
   .btn-again { display: block; margin: 18px auto 0; background: var(--primary); color: white; border: none; padding: 12px 26px; border-radius: 10px; font-weight: 700; cursor: pointer; }
 </style>
 </head>
@@ -1088,7 +1111,7 @@ ${activitySdkBootstrap(clientId!)}
         </div>
 
         <div class="tab-nav" id="tabNav">
-          \${['batalha','dungeon','inventario','loja','viajar','treinar','meditar','pontos'].map(t => \`<button class="tab-btn \${state.activeTab === t ? 'active' : ''}" onclick="switchTab('\${t}')">\${tabLabel(t)}</button>\`).join('')}
+          \${['batalha','dungeon','cidade','inventario','loja','viajar','treinar','meditar','pontos'].map(t => \`<button class="tab-btn \${state.activeTab === t ? 'active' : ''}" onclick="switchTab('\${t}')">\${tabLabel(t)}</button>\`).join('')}
         </div>
         <div id="tabBody"></div>
       \`;
@@ -1097,7 +1120,7 @@ ${activitySdkBootstrap(clientId!)}
     }
 
     function tabLabel(t) {
-      return { batalha: '⚔️ Batalha', dungeon: '🏰 Dungeon', inventario: '🎒 Inventário', loja: '🛒 Loja', viajar: '🗺️ Viajar', treinar: '🥊 Treinar', meditar: '🧘 Meditar', pontos: '📊 Pontos' }[t];
+      return { batalha: '⚔️ Batalha', dungeon: '🏰 Dungeon', cidade: '🏙️ Cidade', inventario: '🎒 Inventário', loja: '🛒 Loja', viajar: '🗺️ Viajar', treinar: '🥊 Treinar', meditar: '🧘 Meditar', pontos: '📊 Pontos' }[t];
     }
 
     function switchTab(t) {
@@ -1109,6 +1132,7 @@ ${activitySdkBootstrap(clientId!)}
     function renderTab(t) {
       if (t === 'batalha') return renderBatalhaTab();
       if (t === 'dungeon') return renderDungeonTab();
+      if (t === 'cidade') return renderCidadeTab();
       if (t === 'inventario') return renderInventarioTab();
       if (t === 'loja') return renderLojaTab();
       if (t === 'viajar') return renderViajarTab();
@@ -1144,6 +1168,112 @@ ${activitySdkBootstrap(clientId!)}
       } catch (e) {
         sel.innerHTML = '<option value="">Erro ao carregar inimigos</option>';
       }
+    }
+
+    // ───────────────────────── ABA: CIDADE (FORJA + TAVERNA) ─────────────────────────
+    let citySubTab = 'forja';
+
+    function renderCidadeTab() {
+      document.getElementById('tabBody').innerHTML = \`
+        <div class="city-subnav">
+          <button class="\${citySubTab === 'forja' ? 'active' : ''}" onclick="switchCitySub('forja')">⚒️ Forja</button>
+          <button class="\${citySubTab === 'taverna' ? 'active' : ''}" onclick="switchCitySub('taverna')">🍺 Taverna</button>
+        </div>
+        <div id="cityBody"><p class="empty">⏳ Carregando...</p></div>
+      \`;
+      if (citySubTab === 'forja') renderForjaSub(); else renderTavernaSub();
+    }
+
+    function switchCitySub(tab) {
+      citySubTab = tab;
+      renderCidadeTab();
+    }
+
+    async function renderForjaSub() {
+      try {
+        const res = await fetch('/api/activities/rpg/forge');
+        const data = await res.json();
+
+        const cardsHtml = data.recipes.map(r => {
+          const ingHtml = r.ingredients.map(i => \`<span class="ing-chip \${i.have >= i.need ? 'ok' : 'bad'}">\${i.emoji} \${i.name} \${i.have}/\${i.need}</span>\`).join('');
+          return \`
+            <div class="recipe-card \${r.canCraft ? '' : 'locked'}">
+              <div class="head"><b>\${r.outputEmoji} \${r.outputName} x\${r.outputQty}</b><span>💰 \${r.costGold} · Nv.\${r.minLevel}</span></div>
+              <div class="ing-list">\${ingHtml}</div>
+              <button \${r.canCraft ? '' : 'disabled'} onclick="doCraft('\${r.id}')">Forjar</button>
+            </div>\`;
+        }).join('');
+
+        document.getElementById('cityBody').innerHTML = \`<div id="forgeFeedback"></div>\${cardsHtml}\`;
+      } catch (e) {
+        document.getElementById('cityBody').innerHTML = '<p class="error">Erro ao carregar a forja.</p>';
+      }
+    }
+
+    async function doCraft(recipeId) {
+      try {
+        const res = await fetch('/api/activities/rpg/forge/craft', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ recipeId })
+        });
+        const result = await res.json();
+        document.getElementById('forgeFeedback').innerHTML = actionFeedback(result);
+        if (result.success) renderForjaSub();
+      } catch (e) {}
+    }
+
+    async function renderTavernaSub() {
+      try {
+        const res = await fetch('/api/activities/rpg/tavern');
+        const data = await res.json();
+
+        const buffsHtml = (data.activeBuffs || []).length
+          ? '<div class="buff-list">' + data.activeBuffs.map(b => \`<span class="buff-chip">✨ \${b.label || b.source}</span>\`).join('') + '</div>'
+          : '';
+
+        const cardsHtml = data.menu.map(i => \`
+          <div class="tavern-card">
+            <div class="icon">\${i.emoji}</div>
+            <div style="font-weight:700; margin-bottom:4px;">\${i.name}</div>
+            <div class="desc">\${i.description}</div>
+            <button onclick="doTavernBuy('\${i.id}')">Pedir · \${i.price}🪙</button>
+          </div>\`).join('');
+
+        document.getElementById('cityBody').innerHTML = \`
+          <div id="tavernFeedback"></div>
+          \${buffsHtml}
+          <div class="tavern-grid">\${cardsHtml}</div>
+          <div class="dice-box">
+            <div style="font-size:1.8rem;">🎲</div>
+            <b>Dados da Taverna</b>
+            <p style="color:var(--text-muted); font-size:0.85rem; margin:6px 0;">Aposta fixa de 20🪙. Tire mais que a casa pra dobrar (10+ é jackpot!).</p>
+            <button class="btn-dice" onclick="doTavernDice()">Jogar Dados</button>
+            <div id="diceResult" style="margin-top:12px; font-weight:700;"></div>
+          </div>
+        \`;
+      } catch (e) {
+        document.getElementById('cityBody').innerHTML = '<p class="error">Erro ao carregar a taverna.</p>';
+      }
+    }
+
+    async function doTavernBuy(itemId) {
+      try {
+        const res = await fetch('/api/activities/rpg/tavern/buy', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ itemId })
+        });
+        const result = await res.json();
+        document.getElementById('tavernFeedback').innerHTML = actionFeedback(result);
+        if (result.success) renderTavernaSub();
+      } catch (e) {}
+    }
+
+    async function doTavernDice() {
+      try {
+        const res = await fetch('/api/activities/rpg/tavern/dice', { method: 'POST' });
+        const data = await res.json();
+        document.getElementById('diceResult').innerHTML = \`\${data.description}<br><span style="color:var(--text-muted); font-weight:500; font-size:0.85rem;">🎲 Você: \${data.yourRoll} · 🏠 Casa: \${data.houseRoll} · 💰 Saldo: \${data.balance}</span>\`;
+      } catch (e) {}
     }
 
     // ───────────────────────── ABA: INVENTÁRIO ─────────────────────────
@@ -1979,6 +2109,82 @@ ${activitySdkBootstrap(clientId!)}
     const discordId = req.cookies.player_userid as string;
     activeExpeditions.delete(discordId);
     res.json({ success: true });
+  });
+
+  // ── Cidade: Forja (mesma CRAFT_RECIPES + craftItem() de src/rpg/panels/forja.ts)
+  app.get('/api/activities/rpg/forge', requirePlayerAuth, async (req, res) => {
+    const discordId = req.cookies.player_userid as string;
+    const character = await getCharacter(discordId);
+    if (!character) return res.status(404).json({ error: 'Personagem não encontrado' });
+
+    const inventory = await prisma.rpgInventoryItem.findMany({ where: { characterId: discordId, quantity: { gt: 0 } } });
+    const invMap = new Map(inventory.map(i => [i.itemId, i.quantity]));
+
+    const recipes = CRAFT_RECIPES.map((r: any) => {
+      const output = getItem(r.outputItem);
+      const ingredients = r.ingredients.map((ing: any) => {
+        const ingItem = getItem(ing.itemId);
+        return { itemId: ing.itemId, name: ingItem?.name || ing.itemId, emoji: ingItem?.emoji || '📦', need: ing.qty, have: invMap.get(ing.itemId) || 0 };
+      });
+      const canCraft = character.level >= r.minLevel && character.gold >= r.costGold && ingredients.every((i: any) => i.have >= i.need);
+      return {
+        id: r.id, outputName: output?.name || r.outputItem, outputEmoji: output?.emoji || '⚒️',
+        outputQty: r.outputQty, minLevel: r.minLevel, costGold: r.costGold, ingredients, canCraft,
+      };
+    });
+
+    res.json({ recipes, gold: character.gold, level: character.level });
+  });
+
+  app.post('/api/activities/rpg/forge/craft', requirePlayerAuth, async (req, res) => {
+    const discordId = req.cookies.player_userid as string;
+    const { recipeId } = req.body || {};
+    if (!recipeId) return res.status(400).json({ error: 'recipeId é obrigatório' });
+
+    const result = await craftItem(discordId, recipeId);
+    res.json(result);
+  });
+
+  // ── Cidade: Taverna (mesmo TAVERNA_MENU, buyTavernaItem() e
+  // rollTavernaDice() de src/rpg/panels/taverna.ts — cura HP/energia,
+  // buffs temporários e o minijogo de dados, tudo real).
+  app.get('/api/activities/rpg/tavern', requirePlayerAuth, async (req, res) => {
+    const discordId = req.cookies.player_userid as string;
+    const character = await getCharacter(discordId);
+    if (!character) return res.status(404).json({ error: 'Personagem não encontrado' });
+
+    const buffs = await getActiveBuffs(discordId);
+    res.json({ menu: TAVERNA_MENU, gold: character.gold, activeBuffs: buffs });
+  });
+
+  app.post('/api/activities/rpg/tavern/buy', requirePlayerAuth, async (req, res) => {
+    const discordId = req.cookies.player_userid as string;
+    const { itemId } = req.body || {};
+    if (!itemId) return res.status(400).json({ error: 'itemId é obrigatório' });
+
+    const character = await getCharacter(discordId);
+    if (!character) return res.status(404).json({ error: 'Personagem não encontrado' });
+
+    const result = await buyTavernaItem(character, itemId);
+    res.json(result);
+  });
+
+  app.post('/api/activities/rpg/tavern/dice', requirePlayerAuth, async (req, res) => {
+    const discordId = req.cookies.player_userid as string;
+    const character = await getCharacter(discordId);
+    if (!character) return res.status(404).json({ error: 'Personagem não encontrado' });
+
+    const { embed } = await rollTavernaDice(character) as any;
+    const data = embed?.data || {};
+    const fields = data.fields || [];
+    const getField = (name: string) => fields.find((f: any) => f.name.includes(name))?.value || '';
+
+    res.json({
+      description: data.description,
+      yourRoll: getField('Seu Dado'),
+      houseRoll: getField('Casa'),
+      balance: getField('Saldo'),
+    });
   });
 
   // ── Inventário: equipar / usar / vender — usa EXATAMENTE as mesmas

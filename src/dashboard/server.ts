@@ -20,6 +20,7 @@ import { ensureClassMissions, claimClassMission } from '../rpg/services/class-mi
 import { doExplore } from '../rpg/panels/exploracao';
 import { EXPLORE_ENERGY_COST, EXPLORE_COOLDOWN_MS } from '../rpg/constants/exploration';
 import { DIVINE_SKILLS } from '../rpg/constants/skills';
+import { getActiveBoss, attackWorldBoss, WORLD_BOSS_TEMPLATES, bossHpBar } from '../rpg/services/worldBoss';
 import { CLASS_MISSIONS } from '../rpg/constants/class-missions';
 import { equipItem, useConsumable, sellItem, buyItem } from '../rpg/services/inventory';
 import { travelTo } from '../rpg/panels/travel';
@@ -1107,6 +1108,21 @@ ${activitySdkBootstrap(clientId!)}
   .skill-card input[type="checkbox"]:disabled { cursor: not-allowed; }
   .btn-equip-skills { display: block; margin: 16px auto 0; background: var(--primary); color: white; border: none; padding: 12px 30px; border-radius: 10px; font-weight: 800; cursor: pointer; }
 
+  .boss-card { background: radial-gradient(circle at 50% 0%, rgba(231,76,60,0.15), transparent 60%), var(--card); border: 1px solid var(--red); border-radius: 16px; padding: 26px; text-align: center; margin-bottom: 20px; }
+  .boss-card .sprite { font-size: 3.5rem; margin-bottom: 8px; }
+  .boss-card h3 { font-size: 1.3rem; margin-bottom: 4px; }
+  .boss-card .desc { color: var(--text-muted); font-size: 0.85rem; margin-bottom: 14px; }
+  .boss-hp-track { height: 22px; background: #1A1D2D; border-radius: 11px; overflow: hidden; border: 1px solid var(--border); margin-bottom: 6px; }
+  .boss-hp-fill { height: 100%; background: linear-gradient(90deg, var(--red), var(--orange)); transition: width 0.4s ease; }
+  .boss-hp-text { font-size: 0.85rem; color: var(--text-muted); margin-bottom: 16px; }
+  .btn-attack-boss { background: linear-gradient(120deg, var(--red), #8B0000); color: white; border: none; padding: 14px 32px; border-radius: 10px; font-weight: 800; cursor: pointer; font-size: 1rem; }
+  .btn-attack-boss:disabled { opacity: 0.4; cursor: not-allowed; }
+  .boss-leaderboard { background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 18px 20px; }
+  .lb-row { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid var(--border); font-size: 0.88rem; }
+  .lb-row:last-child { border-bottom: none; }
+  .lb-row.me { color: var(--primary2); font-weight: 700; }
+  .lb-rank { color: var(--text-muted); width: 24px; display: inline-block; }
+
   .btn-again { display: block; margin: 18px auto 0; background: var(--primary); color: white; border: none; padding: 12px 26px; border-radius: 10px; font-weight: 700; cursor: pointer; }
 </style>
 </head>
@@ -1167,7 +1183,7 @@ ${activitySdkBootstrap(clientId!)}
         </div>
 
         <div class="tab-nav" id="tabNav">
-          \${['batalha','dungeon','cidade','explorar','pesca','missoes','habilidades','inventario','loja','viajar','treinar','meditar','pontos'].map(t => \`<button class="tab-btn \${state.activeTab === t ? 'active' : ''}" onclick="switchTab('\${t}')">\${tabLabel(t)}</button>\`).join('')}
+          \${['batalha','dungeon','boss','cidade','explorar','pesca','missoes','habilidades','inventario','loja','viajar','treinar','meditar','pontos'].map(t => \`<button class="tab-btn \${state.activeTab === t ? 'active' : ''}" onclick="switchTab('\${t}')">\${tabLabel(t)}</button>\`).join('')}
         </div>
         <div id="tabBody"></div>
       \`;
@@ -1176,7 +1192,7 @@ ${activitySdkBootstrap(clientId!)}
     }
 
     function tabLabel(t) {
-      return { batalha: '⚔️ Batalha', dungeon: '🏰 Dungeon', cidade: '🏙️ Cidade', explorar: '🌍 Explorar', pesca: '🎣 Pesca', missoes: '📋 Missões', habilidades: '✨ Habilidades', inventario: '🎒 Inventário', loja: '🛒 Loja', viajar: '🗺️ Viajar', treinar: '🥊 Treinar', meditar: '🧘 Meditar', pontos: '📊 Pontos' }[t];
+      return { batalha: '⚔️ Batalha', dungeon: '🏰 Dungeon', boss: '🐉 Boss Mundial', cidade: '🏙️ Cidade', explorar: '🌍 Explorar', pesca: '🎣 Pesca', missoes: '📋 Missões', habilidades: '✨ Habilidades', inventario: '🎒 Inventário', loja: '🛒 Loja', viajar: '🗺️ Viajar', treinar: '🥊 Treinar', meditar: '🧘 Meditar', pontos: '📊 Pontos' }[t];
     }
 
     function switchTab(t) {
@@ -1188,6 +1204,7 @@ ${activitySdkBootstrap(clientId!)}
     function renderTab(t) {
       if (t === 'batalha') return renderBatalhaTab();
       if (t === 'dungeon') return renderDungeonTab();
+      if (t === 'boss') return renderBossTab();
       if (t === 'cidade') return renderCidadeTab();
       if (t === 'explorar') return renderExplorarTab();
       if (t === 'pesca') return renderPescaTab();
@@ -1592,6 +1609,54 @@ ${activitySdkBootstrap(clientId!)}
         const result = await res.json();
         document.getElementById('skillFeedback').innerHTML = actionFeedback(result.success !== false ? { success: true, message: result.message } : { success: false, message: result.error });
         if (result.success) renderHabilidadesTab();
+      } catch (e) {}
+    }
+
+    // ───────────────────────── ABA: BOSS MUNDIAL ─────────────────────────
+    async function renderBossTab() {
+      document.getElementById('tabBody').innerHTML = '<p class="empty">⏳ Verificando bosses ativos...</p>';
+      try {
+        const res = await fetch('/api/activities/rpg/worldboss');
+        const data = await res.json();
+
+        if (!data.boss) {
+          document.getElementById('tabBody').innerHTML = '<p class="empty">🐉 Nenhum Boss Mundial ativo no momento. Fique de olho nos anúncios da Aliança!</p>';
+          return;
+        }
+
+        const b = data.boss;
+        const hpPct = Math.max(0, Math.min(100, (b.currentHp / b.maxHp) * 100));
+        const lbHtml = b.leaderboard.length
+          ? b.leaderboard.map((p, i) => \`<div class="lb-row \${p.isMe ? 'me' : ''}"><span><span class="lb-rank">#\${i+1}</span>\${p.username}\${p.isMe ? ' (você)' : ''}</span><span>\${p.damageDealt.toLocaleString('pt-BR')} dano · \${p.hits} golpes</span></div>\`).join('')
+          : '<p class="empty">Ninguém atacou ainda — seja o primeiro!</p>';
+
+        document.getElementById('tabBody').innerHTML = \`
+          <div id="bossFeedback"></div>
+          <div class="boss-card">
+            <div class="sprite">\${b.emoji}</div>
+            <h3>\${b.name} <span style="color:var(--text-muted); font-weight:600; font-size:0.9rem;">Nv.\${b.level}</span></h3>
+            <div class="desc">\${b.description}</div>
+            <div class="boss-hp-track"><div class="boss-hp-fill" style="width:\${hpPct}%;"></div></div>
+            <div class="boss-hp-text">❤️ \${b.currentHp.toLocaleString('pt-BR')} / \${b.maxHp.toLocaleString('pt-BR')} HP</div>
+            <button class="btn-attack-boss" \${data.onCooldown ? 'disabled' : ''} onclick="doAttackBoss()">⚔️ Atacar!</button>
+            \${data.onCooldown ? \`<p style="color:var(--text-muted); font-size:0.8rem; margin-top:10px;">⏳ Aguarde \${data.cooldownRemMin} min para atacar de novo</p>\` : ''}
+          </div>
+          <div class="section-title" style="margin-top:0;">🏆 Ranking de Dano</div>
+          <div class="boss-leaderboard">\${lbHtml}</div>
+        \`;
+      } catch (e) {
+        document.getElementById('tabBody').innerHTML = '<p class="error">Erro ao carregar Boss Mundial.</p>';
+      }
+    }
+
+    async function doAttackBoss() {
+      try {
+        const res = await fetch('/api/activities/rpg/worldboss/attack', { method: 'POST' });
+        const result = await res.json();
+        document.getElementById('bossFeedback').innerHTML = actionFeedback({ success: result.success, message: result.message });
+        if (result.success) {
+          setTimeout(renderBossTab, 1200);
+        }
       } catch (e) {}
     }
 
@@ -2742,6 +2807,45 @@ ${activitySdkBootstrap(clientId!)}
     await prisma.rpgCharacter.update({ where: { discordId }, data: { equippedSkills: validIds } });
     res.json({ success: true, message: '✨ Habilidades equipadas para combate com sucesso!' });
   });
+
+  // ── Boss Mundial: mesma getActiveBoss()/attackWorldBoss() de
+  // src/rpg/services/worldBoss.ts — HP compartilhado da guilda, cooldown de
+  // 5min por jogador, e o ranking de dano vem do mesmo banco. Invocar boss
+  // fica de fora por enquanto (é uma ação de staff no Discord); aqui só a
+  // participação, que é o que qualquer jogador já faz.
+  app.get('/api/activities/rpg/worldboss', requirePlayerAuth, async (req, res) => {
+    const discordId = req.cookies.player_userid as string;
+    const guildId = await resolveGuildId(req.query.guildId as string | undefined);
+    if (!guildId) return res.json({ boss: null });
+
+    const boss = await getActiveBoss(guildId);
+    if (!boss) return res.json({ boss: null });
+
+    const me = boss.participants.find((p: any) => p.discordId === discordId);
+    const onCooldown = !!(me?.lastHit && (Date.now() - me.lastHit.getTime()) < 5 * 60 * 1000);
+    const cooldownRemMin = onCooldown ? Math.ceil((5 * 60 * 1000 - (Date.now() - me!.lastHit!.getTime())) / 60000) : 0;
+
+    res.json({
+      boss: {
+        name: boss.name, emoji: boss.emoji, description: boss.description,
+        currentHp: boss.currentHp, maxHp: boss.maxHp, level: boss.level,
+        hpBar: bossHpBar(boss.currentHp, boss.maxHp),
+        leaderboard: boss.participants.map((p: any) => ({ username: p.username, damageDealt: p.damageDealt, hits: p.hits, isMe: p.discordId === discordId })),
+      },
+      onCooldown, cooldownRemMin,
+    });
+  });
+
+  app.post('/api/activities/rpg/worldboss/attack', requirePlayerAuth, async (req, res) => {
+    const discordId = req.cookies.player_userid as string;
+    const username = req.cookies.player_username as string || 'Aventureiro';
+    const guildId = await resolveGuildId(req.body?.guildId);
+    if (!guildId) return res.status(400).json({ error: 'Nenhum servidor associado ao bot foi encontrado.' });
+
+    const result = await attackWorldBoss(discordId, username, guildId);
+    res.json(result);
+  });
+
 
   // ── Inventário: equipar / usar / vender — usa EXATAMENTE as mesmas
   // funções de src/rpg/services/inventory.ts que os botões do Discord chamam

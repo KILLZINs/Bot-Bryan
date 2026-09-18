@@ -17,6 +17,9 @@ import { castFishingLine, reelFishingLine } from '../rpg/panels/pescaria';
 import { FISHING_ENERGY_COST, FISHING_COOLDOWN_MS } from '../rpg/constants/fishing';
 import { ensureDailyMissions, ensureWeeklyMissions, claimDailyReward, claimWeeklyReward, DAILY_MISSION_POOL, WEEKLY_MISSION_POOL } from '../commands/utility/missoes';
 import { ensureClassMissions, claimClassMission } from '../rpg/services/class-missions';
+import { doExplore } from '../rpg/panels/exploracao';
+import { EXPLORE_ENERGY_COST, EXPLORE_COOLDOWN_MS } from '../rpg/constants/exploration';
+import { DIVINE_SKILLS } from '../rpg/constants/skills';
 import { CLASS_MISSIONS } from '../rpg/constants/class-missions';
 import { equipItem, useConsumable, sellItem, buyItem } from '../rpg/services/inventory';
 import { travelTo } from '../rpg/panels/travel';
@@ -1084,6 +1087,26 @@ ${activitySdkBootstrap(clientId!)}
   .mission-row .btn-claim:disabled { background: var(--border); color: var(--text-muted); cursor: not-allowed; }
   .mission-row.claimed { opacity: 0.5; }
 
+  .explore-box { background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 26px; text-align: center; }
+  .explore-box .icon { font-size: 2.5rem; margin-bottom: 10px; }
+  .btn-explore { background: linear-gradient(120deg, #16a085, var(--green)); color: white; border: none; padding: 12px 26px; border-radius: 10px; font-weight: 800; cursor: pointer; }
+  .btn-explore:disabled { opacity: 0.4; cursor: not-allowed; }
+  .explore-result { background: var(--card); border: 1px solid var(--green); border-radius: 14px; padding: 20px; margin-top: 16px; }
+  .explore-result .fields { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; margin-top: 10px; }
+
+  .skill-card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 16px; margin-bottom: 12px; display: flex; gap: 14px; align-items: flex-start; }
+  .skill-card.locked { opacity: 0.45; }
+  .skill-card.equipped { border-color: var(--primary); box-shadow: 0 0 14px rgba(139,92,246,0.2); }
+  .skill-card .emoji { font-size: 1.8rem; }
+  .skill-card .info { flex: 1; }
+  .skill-card .info .top { display: flex; justify-content: space-between; align-items: center; }
+  .skill-card .info .top b { font-size: 1rem; }
+  .skill-card .desc { color: var(--text-muted); font-size: 0.8rem; margin: 4px 0 8px; }
+  .skill-card .rank-tag { background: rgba(245,194,66,0.15); color: var(--gold); border: 1px solid var(--gold); border-radius: 999px; padding: 2px 10px; font-size: 0.72rem; font-weight: 800; }
+  .skill-card input[type="checkbox"] { width: 20px; height: 20px; accent-color: var(--primary); cursor: pointer; }
+  .skill-card input[type="checkbox"]:disabled { cursor: not-allowed; }
+  .btn-equip-skills { display: block; margin: 16px auto 0; background: var(--primary); color: white; border: none; padding: 12px 30px; border-radius: 10px; font-weight: 800; cursor: pointer; }
+
   .btn-again { display: block; margin: 18px auto 0; background: var(--primary); color: white; border: none; padding: 12px 26px; border-radius: 10px; font-weight: 700; cursor: pointer; }
 </style>
 </head>
@@ -1144,7 +1167,7 @@ ${activitySdkBootstrap(clientId!)}
         </div>
 
         <div class="tab-nav" id="tabNav">
-          \${['batalha','dungeon','cidade','pesca','missoes','inventario','loja','viajar','treinar','meditar','pontos'].map(t => \`<button class="tab-btn \${state.activeTab === t ? 'active' : ''}" onclick="switchTab('\${t}')">\${tabLabel(t)}</button>\`).join('')}
+          \${['batalha','dungeon','cidade','explorar','pesca','missoes','habilidades','inventario','loja','viajar','treinar','meditar','pontos'].map(t => \`<button class="tab-btn \${state.activeTab === t ? 'active' : ''}" onclick="switchTab('\${t}')">\${tabLabel(t)}</button>\`).join('')}
         </div>
         <div id="tabBody"></div>
       \`;
@@ -1153,7 +1176,7 @@ ${activitySdkBootstrap(clientId!)}
     }
 
     function tabLabel(t) {
-      return { batalha: '⚔️ Batalha', dungeon: '🏰 Dungeon', cidade: '🏙️ Cidade', pesca: '🎣 Pesca', missoes: '📋 Missões', inventario: '🎒 Inventário', loja: '🛒 Loja', viajar: '🗺️ Viajar', treinar: '🥊 Treinar', meditar: '🧘 Meditar', pontos: '📊 Pontos' }[t];
+      return { batalha: '⚔️ Batalha', dungeon: '🏰 Dungeon', cidade: '🏙️ Cidade', explorar: '🌍 Explorar', pesca: '🎣 Pesca', missoes: '📋 Missões', habilidades: '✨ Habilidades', inventario: '🎒 Inventário', loja: '🛒 Loja', viajar: '🗺️ Viajar', treinar: '🥊 Treinar', meditar: '🧘 Meditar', pontos: '📊 Pontos' }[t];
     }
 
     function switchTab(t) {
@@ -1166,8 +1189,10 @@ ${activitySdkBootstrap(clientId!)}
       if (t === 'batalha') return renderBatalhaTab();
       if (t === 'dungeon') return renderDungeonTab();
       if (t === 'cidade') return renderCidadeTab();
+      if (t === 'explorar') return renderExplorarTab();
       if (t === 'pesca') return renderPescaTab();
       if (t === 'missoes') return renderMissoesTab();
+      if (t === 'habilidades') return renderHabilidadesTab();
       if (t === 'inventario') return renderInventarioTab();
       if (t === 'loja') return renderLojaTab();
       if (t === 'viajar') return renderViajarTab();
@@ -1213,15 +1238,50 @@ ${activitySdkBootstrap(clientId!)}
         <div class="city-subnav">
           <button class="\${citySubTab === 'forja' ? 'active' : ''}" onclick="switchCitySub('forja')">⚒️ Forja</button>
           <button class="\${citySubTab === 'taverna' ? 'active' : ''}" onclick="switchCitySub('taverna')">🍺 Taverna</button>
+          <button class="\${citySubTab === 'curar' ? 'active' : ''}" onclick="switchCitySub('curar')">🏥 Curar HP</button>
         </div>
         <div id="cityBody"><p class="empty">⏳ Carregando...</p></div>
       \`;
-      if (citySubTab === 'forja') renderForjaSub(); else renderTavernaSub();
+      if (citySubTab === 'forja') renderForjaSub();
+      else if (citySubTab === 'taverna') renderTavernaSub();
+      else renderCurarSub();
     }
 
     function switchCitySub(tab) {
       citySubTab = tab;
       renderCidadeTab();
+    }
+
+    async function renderCurarSub() {
+      try {
+        const res = await fetch('/api/activities/rpg/heal');
+        const data = await res.json();
+
+        const body = data.full
+          ? '<p style="color:var(--green); font-weight:700;">✅ Você já está com HP e Energia no máximo!</p>'
+          : \`
+            <p style="color:var(--text-muted); font-size:0.9rem; margin-bottom:14px;">❤️ HP faltando: <b>\${data.hpMissing}</b> · ⚡ Energia faltando: <b>\${data.enMissing}</b></p>
+            <button class="btn-enter" \${data.gold < data.cost ? 'disabled' : ''} onclick="doHeal()">🏥 Curar tudo por \${data.cost}🪙</button>
+            \${data.gold < data.cost ? '<p style="color:var(--red); font-size:0.8rem; margin-top:8px;">Ouro insuficiente.</p>' : ''}
+          \`;
+
+        document.getElementById('cityBody').innerHTML = \`<div id="healFeedback"></div><div class="dungeon-entrance">\${body}</div>\`;
+      } catch (e) {
+        document.getElementById('cityBody').innerHTML = '<p class="error">Erro ao carregar curandeiro.</p>';
+      }
+    }
+
+    async function doHeal() {
+      try {
+        const res = await fetch('/api/activities/rpg/heal', { method: 'POST' });
+        const result = await res.json();
+        document.getElementById('healFeedback').innerHTML = actionFeedback(result);
+        if (result.success) {
+          const p = await (await fetch('/api/activities/rpg/profile')).json();
+          state.profileData = p;
+          renderCurarSub();
+        }
+      } catch (e) {}
     }
 
     async function renderForjaSub() {
@@ -1423,6 +1483,115 @@ ${activitySdkBootstrap(clientId!)}
           state.profileData = p;
           renderMissoesTab();
         }
+      } catch (e) {}
+    }
+
+    // ───────────────────────── ABA: EXPLORAR REGIÃO ─────────────────────────
+    async function renderExplorarTab() {
+      document.getElementById('tabBody').innerHTML = '<p class="empty">⏳ Carregando...</p>';
+      try {
+        const res = await fetch('/api/activities/rpg/explore');
+        const data = await res.json();
+
+        const disabled = data.onCooldown || data.currentEnergy < data.energyCost || data.currentHp <= 0;
+        const statusMsg = data.onCooldown
+          ? \`⏳ Aguarde \${data.remainingMin} min\`
+          : data.currentHp <= 0
+            ? '💀 Sem HP — cure-se na Cidade primeiro'
+            : \`Custo: \${data.energyCost}⚡ (você tem \${data.currentEnergy})\`;
+
+        document.getElementById('tabBody').innerHTML = \`
+          <div id="exploreFeedback"></div>
+          <div class="explore-box">
+            <div class="icon">🌍</div>
+            <p style="font-weight:700; margin-bottom:6px;">Explore a região em busca de eventos e recursos</p>
+            <p style="color:var(--text-muted); font-size:0.85rem; margin-bottom:16px;">\${statusMsg}</p>
+            <button class="btn-explore" \${disabled ? 'disabled' : ''} onclick="doExploreAction()">🧭 Explorar!</button>
+            <div id="exploreResult"></div>
+          </div>
+        \`;
+      } catch (e) {
+        document.getElementById('tabBody').innerHTML = '<p class="error">Erro ao carregar exploração.</p>';
+      }
+    }
+
+    async function doExploreAction() {
+      try {
+        const res = await fetch('/api/activities/rpg/explore', { method: 'POST' });
+        const result = await res.json();
+        if (!result.success) { document.getElementById('exploreFeedback').innerHTML = actionFeedback(result); return; }
+
+        const fieldsHtml = (result.fields || []).map(f => \`<div class="reward-field">\${f.name}: \${f.value.replace(/\\*\\*/g,'')}</div>\`).join('');
+        document.getElementById('exploreResult').innerHTML = \`
+          <div class="explore-result">
+            <b>\${result.title}</b>
+            <p style="color:var(--text-muted); font-size:0.85rem; margin-top:6px;">\${result.description}</p>
+            <div class="fields">\${fieldsHtml}</div>
+          </div>\`;
+
+        const p = await (await fetch('/api/activities/rpg/profile')).json();
+        state.profileData = p;
+        setTimeout(renderExplorarTab, 2500);
+      } catch (e) {}
+    }
+
+    // ───────────────────────── ABA: HABILIDADES DIVINAS ─────────────────────────
+    async function renderHabilidadesTab() {
+      document.getElementById('tabBody').innerHTML = '<p class="empty">⏳ Carregando habilidades...</p>';
+      try {
+        const res = await fetch('/api/activities/rpg/skills');
+        const data = await res.json();
+
+        if (!data.skills.length) {
+          document.getElementById('tabBody').innerHTML = '<p class="empty">Sua classe não possui habilidades divinas.</p>';
+          return;
+        }
+
+        const cardsHtml = data.skills.map(s => \`
+          <div class="skill-card \${!s.unlocked ? 'locked' : ''} \${s.equipped ? 'equipped' : ''}">
+            <div class="emoji">\${s.emoji}</div>
+            <div class="info">
+              <div class="top">
+                <b>\${s.name}\${!s.unlocked ? ' 🔒 Lv.' + s.unlockLevel : ''}</b>
+                <span class="rank-tag">Rank \${s.rank}</span>
+              </div>
+              <div class="desc">\${s.description}<br>Custo: \${s.energyCost}⚡ · XP: \${s.exp}/\${s.nextExp}</div>
+            </div>
+            <input type="checkbox" data-skill-id="\${s.id}" \${!s.unlocked ? 'disabled' : ''} \${s.equipped ? 'checked' : ''} onchange="toggleSkillCheck(this)">
+          </div>\`).join('');
+
+        document.getElementById('tabBody').innerHTML = \`
+          <div id="skillFeedback"></div>
+          <p style="color:var(--text-muted); font-size:0.85rem; margin-bottom:14px;">\${data.classEmoji} Classe: <b>\${data.className}</b> · Equipe até \${data.maxEquip} habilidades para usar em combate.</p>
+          \${cardsHtml}
+          <button class="btn-equip-skills" onclick="saveEquippedSkills()">✨ Salvar Habilidades Equipadas</button>
+        \`;
+      } catch (e) {
+        document.getElementById('tabBody').innerHTML = '<p class="error">Erro ao carregar habilidades.</p>';
+      }
+    }
+
+    function toggleSkillCheck(checkboxEl) {
+      const checked = document.querySelectorAll('.skill-card input[type="checkbox"]:checked');
+      if (checked.length > 3) {
+        checkboxEl.checked = false;
+        document.getElementById('skillFeedback').innerHTML = '<div class="action-feedback fail">Você só pode equipar até 3 habilidades.</div>';
+      }
+    }
+
+    async function saveEquippedSkills() {
+      const checked = Array.from(document.querySelectorAll('.skill-card input[type="checkbox"]:checked'));
+      const skillIds = checked.map(c => c.getAttribute('data-skill-id'));
+      if (!skillIds.length) { document.getElementById('skillFeedback').innerHTML = '<div class="action-feedback fail">Selecione ao menos 1 habilidade.</div>'; return; }
+
+      try {
+        const res = await fetch('/api/activities/rpg/skills/equip', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ skillIds })
+        });
+        const result = await res.json();
+        document.getElementById('skillFeedback').innerHTML = actionFeedback(result.success !== false ? { success: true, message: result.message } : { success: false, message: result.error });
+        if (result.success) renderHabilidadesTab();
       } catch (e) {}
     }
 
@@ -2437,6 +2606,141 @@ ${activitySdkBootstrap(clientId!)}
       console.error('[Atividades/RPG] Erro ao coletar missão:', err);
       res.status(500).json({ error: 'Erro ao coletar recompensa.' });
     }
+  });
+
+  // ── Cidade: Curar HP — mesma fórmula EXATA de rpgButtonHandler.ts
+  // (case 'curandeiro'): cost = max(5, ceil(hpMissing*0.12 + enMissing*0.08)).
+  app.get('/api/activities/rpg/heal', requirePlayerAuth, async (req, res) => {
+    const discordId = req.cookies.player_userid as string;
+    const character = await getCharacter(discordId);
+    if (!character) return res.status(404).json({ error: 'Personagem não encontrado' });
+
+    const stats = computeStats(character);
+    const hpMissing = stats.maxHp - character.currentHp;
+    const enMissing = stats.maxEnergy - character.currentEnergy;
+    const cost = Math.max(5, Math.ceil(hpMissing * 0.12 + enMissing * 0.08));
+    const full = hpMissing === 0 && enMissing === 0;
+
+    res.json({ hpMissing, enMissing, cost, full, gold: character.gold });
+  });
+
+  app.post('/api/activities/rpg/heal', requirePlayerAuth, async (req, res) => {
+    const discordId = req.cookies.player_userid as string;
+    const character = await getCharacter(discordId);
+    if (!character) return res.status(404).json({ error: 'Personagem não encontrado' });
+
+    const stats = computeStats(character);
+    const hpMissing = stats.maxHp - character.currentHp;
+    const enMissing = stats.maxEnergy - character.currentEnergy;
+    const cost = Math.max(5, Math.ceil(hpMissing * 0.12 + enMissing * 0.08));
+
+    if (hpMissing === 0 && enMissing === 0) {
+      return res.json({ success: false, message: '✅ Você já está com HP e Energia no máximo!' });
+    }
+    if (character.gold < cost) {
+      return res.json({ success: false, message: `Curar custa ${cost} ouro. Você tem apenas ${character.gold} ouro.` });
+    }
+
+    const healed = await prisma.rpgCharacter.updateMany({
+      where: { discordId, gold: { gte: cost } },
+      data: { currentHp: stats.maxHp, currentEnergy: stats.maxEnergy, gold: { decrement: cost }, lastRest: new Date() },
+    });
+    if (healed.count === 0) return res.json({ success: false, message: 'Seu saldo mudou, tente de novo.' });
+
+    res.json({ success: true, message: `🏥 Curado por completo! −${cost}🪙`, cost });
+  });
+
+  // ── Explorar Região: mesma doExplore() de src/rpg/panels/exploracao.ts
+  // (diferente de Caçada — é evento aleatório de exploração, sem combate).
+  app.get('/api/activities/rpg/explore', requirePlayerAuth, async (req, res) => {
+    const discordId = req.cookies.player_userid as string;
+    const character = await getCharacter(discordId);
+    if (!character) return res.status(404).json({ error: 'Personagem não encontrado' });
+
+    const onCooldown = !!(character.lastExplore && (Date.now() - character.lastExplore.getTime()) < EXPLORE_COOLDOWN_MS);
+    const remainingMin = onCooldown ? Math.ceil((EXPLORE_COOLDOWN_MS - (Date.now() - character.lastExplore!.getTime())) / 60000) : 0;
+
+    res.json({ onCooldown, remainingMin, energyCost: EXPLORE_ENERGY_COST, currentEnergy: character.currentEnergy, currentHp: character.currentHp });
+  });
+
+  app.post('/api/activities/rpg/explore', requirePlayerAuth, async (req, res) => {
+    const discordId = req.cookies.player_userid as string;
+    const character = await getCharacter(discordId);
+    if (!character) return res.status(404).json({ error: 'Personagem não encontrado' });
+
+    const result = await doExplore(character) as any;
+    if (!result.success) return res.json(result);
+
+    const data = result.embed?.data || {};
+    res.json({ success: true, title: data.title, description: data.description, fields: data.fields || [] });
+  });
+
+  // ── Habilidades Divinas: equipar até 3 (mesma regra do select do Discord),
+  // usando DIVINE_SKILLS + a classe do personagem. O rank/XP de cada
+  // habilidade é lido direto de RpgLearnedSkill (criado automaticamente na
+  // primeira vez, igual buildHabilidadesEmbed faz).
+  app.get('/api/activities/rpg/skills', requirePlayerAuth, async (req, res) => {
+    const discordId = req.cookies.player_userid as string;
+    const character = await getCharacter(discordId);
+    if (!character) return res.status(404).json({ error: 'Personagem não encontrado' });
+
+    const cls = getClass(character.class);
+    const availableSkills = (cls?.divineSkills || []).map((id: string) => DIVINE_SKILLS[id]).filter(Boolean);
+
+    let learned = await prisma.rpgLearnedSkill.findMany({ where: { characterId: discordId } });
+    const learnedMap = new Map(learned.map(s => [s.skillId, s]));
+    const toCreate = availableSkills.filter((s: any) => !learnedMap.has(s.id));
+    if (toCreate.length > 0) {
+      await Promise.all(toCreate.map((s: any) =>
+        prisma.rpgLearnedSkill.create({ data: { characterId: discordId, skillId: s.id, rank: 'F', exp: 0 } }).catch(() => null)
+      ));
+      learned = await prisma.rpgLearnedSkill.findMany({ where: { characterId: discordId } });
+    }
+    const freshLearnedMap = new Map(learned.map(s => [s.skillId, s]));
+
+    const equippedIds: string[] = Array.isArray(character.equippedSkills)
+      ? (character.equippedSkills as string[])
+      : (character.divineSkillId ? [character.divineSkillId] : []);
+
+    const RANKS = ['F', 'E', 'D', 'C', 'B', 'A', 'S', 'SS', 'SSS'];
+    const skills = availableSkills.map((s: any) => {
+      const l = freshLearnedMap.get(s.id);
+      const rank = l?.rank ?? 'F';
+      const exp = l?.exp ?? 0;
+      const rankIndex = Math.max(0, RANKS.indexOf(rank));
+      const nextExp = Math.round((s.rankUpExpRequired || 150) * Math.pow(1.5, rankIndex));
+      return {
+        id: s.id, name: s.name, emoji: s.emoji, description: s.description,
+        energyCost: s.energyCost, unlockLevel: s.unlockLevel,
+        unlocked: character.level >= s.unlockLevel,
+        equipped: equippedIds.includes(s.id),
+        rank, exp, nextExp,
+      };
+    });
+
+    res.json({ skills, equippedIds, maxEquip: 3, className: cls?.name || character.class, classEmoji: cls?.emoji || '✨' });
+  });
+
+  app.post('/api/activities/rpg/skills/equip', requirePlayerAuth, async (req, res) => {
+    const discordId = req.cookies.player_userid as string;
+    const { skillIds } = req.body || {};
+    if (!Array.isArray(skillIds) || skillIds.length < 1 || skillIds.length > 3) {
+      return res.status(400).json({ error: 'Selecione de 1 a 3 habilidades.' });
+    }
+
+    const character = await getCharacter(discordId);
+    if (!character) return res.status(404).json({ error: 'Personagem não encontrado' });
+
+    const cls = getClass(character.class);
+    const availableIds = new Set((cls?.divineSkills || []));
+    const validIds = skillIds.filter((id: string) => {
+      const skill = DIVINE_SKILLS[id];
+      return availableIds.has(id) && skill && character.level >= skill.unlockLevel;
+    });
+    if (!validIds.length) return res.status(400).json({ error: 'Nenhuma habilidade válida selecionada.' });
+
+    await prisma.rpgCharacter.update({ where: { discordId }, data: { equippedSkills: validIds } });
+    res.json({ success: true, message: '✨ Habilidades equipadas para combate com sucesso!' });
   });
 
   // ── Inventário: equipar / usar / vender — usa EXATAMENTE as mesmas

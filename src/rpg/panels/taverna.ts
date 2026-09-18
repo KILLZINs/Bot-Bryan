@@ -26,7 +26,7 @@ interface TavernaItem {
   energyRestore?: number;
 }
 
-const TAVERNA_MENU: TavernaItem[] = [
+export const TAVERNA_MENU: TavernaItem[] = [
   // Bebidas
   { id: 'cerveja',      name: 'Cerveja da Casa',     emoji: '🍺', type: 'bebida',   price: 20,  description: '+10% Ouro por 30min',           buffType: 'gold_pct', buffValue: 0.10, durationMs: 30*60*1000, buffLabel: 'Ouro (Cerveja)' },
   { id: 'vinho',        name: 'Vinho Élfico',        emoji: '🍷', type: 'bebida',   price: 40,  description: '+15% XP por 45min',             buffType: 'xp_pct',  buffValue: 0.15, durationMs: 45*60*1000, buffLabel: 'XP (Vinho)' },

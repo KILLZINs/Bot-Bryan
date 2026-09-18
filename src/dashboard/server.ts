@@ -13,6 +13,11 @@ import { activeExpeditions, startExpedition, processRandomDungeonEvent, finishEx
 import { craftItem } from '../rpg/panels/forja';
 import { CRAFT_RECIPES, getItem, ITEMS } from '../rpg/constants/items';
 import { TAVERNA_MENU, buyTavernaItem, rollTavernaDice } from '../rpg/panels/taverna';
+import { castFishingLine, reelFishingLine } from '../rpg/panels/pescaria';
+import { FISHING_ENERGY_COST, FISHING_COOLDOWN_MS } from '../rpg/constants/fishing';
+import { ensureDailyMissions, ensureWeeklyMissions, claimDailyReward, claimWeeklyReward, DAILY_MISSION_POOL, WEEKLY_MISSION_POOL } from '../commands/utility/missoes';
+import { ensureClassMissions, claimClassMission } from '../rpg/services/class-missions';
+import { CLASS_MISSIONS } from '../rpg/constants/class-missions';
 import { equipItem, useConsumable, sellItem, buyItem } from '../rpg/services/inventory';
 import { travelTo } from '../rpg/panels/travel';
 import { SHOP_CATEGORIES } from '../rpg/panels/shop';
@@ -64,6 +69,17 @@ const ACTIVITIES = [
 
 function isCombatBlockedMessage(msg: string) {
   return { blocked: true, message: msg };
+}
+
+// Missões diárias/semanais são por (jogador, servidor) — mas o site não tem
+// necessariamente um "servidor atual" como um comando do Discord tem. Como
+// esse bot atende uma única rede de Aliança, usamos o primeiro servidor
+// cadastrado como padrão (ou um guildId explícito, se o cliente mandar um —
+// ex: futuramente via discordSdk.guildId dentro de uma Activity).
+async function resolveGuildId(explicit?: string): Promise<string | null> {
+  if (explicit) return explicit;
+  const first = await prisma.allianceServer.findFirst();
+  return first?.guildId ?? null;
 }
 
 // =====================================================================
@@ -1051,6 +1067,23 @@ ${activitySdkBootstrap(clientId!)}
   .dice-box { background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 22px; text-align: center; }
   .btn-dice { background: linear-gradient(120deg, var(--gold), var(--orange)); color: #1a1200; border: none; padding: 12px 26px; border-radius: 10px; font-weight: 800; cursor: pointer; margin-top: 10px; }
 
+  .fish-box { background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 26px; text-align: center; }
+  .fish-box .icon { font-size: 2.5rem; margin-bottom: 10px; }
+  .fish-box .status { font-weight: 700; margin-bottom: 14px; }
+  .btn-fish { background: linear-gradient(120deg, #1E90FF, var(--primary2)); color: white; border: none; padding: 12px 26px; border-radius: 10px; font-weight: 800; cursor: pointer; }
+  .btn-fish:disabled { opacity: 0.4; cursor: not-allowed; }
+  .fish-catch { background: var(--card); border: 1px solid var(--gold); border-radius: 14px; padding: 20px; text-align: center; margin-top: 14px; }
+
+  .mission-section { margin-bottom: 26px; }
+  .mission-row { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; margin-bottom: 10px; }
+  .mission-row .top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+  .mission-row .top b { font-size: 0.92rem; }
+  .mission-row .reward { font-size: 0.75rem; color: var(--gold); font-weight: 700; }
+  .mission-row .bar-track { height: 8px; }
+  .mission-row .btn-claim { width: 100%; margin-top: 10px; background: linear-gradient(120deg, var(--green), #1abc9c); color: white; border: none; padding: 8px; border-radius: 8px; font-weight: 700; cursor: pointer; }
+  .mission-row .btn-claim:disabled { background: var(--border); color: var(--text-muted); cursor: not-allowed; }
+  .mission-row.claimed { opacity: 0.5; }
+
   .btn-again { display: block; margin: 18px auto 0; background: var(--primary); color: white; border: none; padding: 12px 26px; border-radius: 10px; font-weight: 700; cursor: pointer; }
 </style>
 </head>
@@ -1111,7 +1144,7 @@ ${activitySdkBootstrap(clientId!)}
         </div>
 
         <div class="tab-nav" id="tabNav">
-          \${['batalha','dungeon','cidade','inventario','loja','viajar','treinar','meditar','pontos'].map(t => \`<button class="tab-btn \${state.activeTab === t ? 'active' : ''}" onclick="switchTab('\${t}')">\${tabLabel(t)}</button>\`).join('')}
+          \${['batalha','dungeon','cidade','pesca','missoes','inventario','loja','viajar','treinar','meditar','pontos'].map(t => \`<button class="tab-btn \${state.activeTab === t ? 'active' : ''}" onclick="switchTab('\${t}')">\${tabLabel(t)}</button>\`).join('')}
         </div>
         <div id="tabBody"></div>
       \`;
@@ -1120,7 +1153,7 @@ ${activitySdkBootstrap(clientId!)}
     }
 
     function tabLabel(t) {
-      return { batalha: '⚔️ Batalha', dungeon: '🏰 Dungeon', cidade: '🏙️ Cidade', inventario: '🎒 Inventário', loja: '🛒 Loja', viajar: '🗺️ Viajar', treinar: '🥊 Treinar', meditar: '🧘 Meditar', pontos: '📊 Pontos' }[t];
+      return { batalha: '⚔️ Batalha', dungeon: '🏰 Dungeon', cidade: '🏙️ Cidade', pesca: '🎣 Pesca', missoes: '📋 Missões', inventario: '🎒 Inventário', loja: '🛒 Loja', viajar: '🗺️ Viajar', treinar: '🥊 Treinar', meditar: '🧘 Meditar', pontos: '📊 Pontos' }[t];
     }
 
     function switchTab(t) {
@@ -1133,6 +1166,8 @@ ${activitySdkBootstrap(clientId!)}
       if (t === 'batalha') return renderBatalhaTab();
       if (t === 'dungeon') return renderDungeonTab();
       if (t === 'cidade') return renderCidadeTab();
+      if (t === 'pesca') return renderPescaTab();
+      if (t === 'missoes') return renderMissoesTab();
       if (t === 'inventario') return renderInventarioTab();
       if (t === 'loja') return renderLojaTab();
       if (t === 'viajar') return renderViajarTab();
@@ -1273,6 +1308,121 @@ ${activitySdkBootstrap(clientId!)}
         const res = await fetch('/api/activities/rpg/tavern/dice', { method: 'POST' });
         const data = await res.json();
         document.getElementById('diceResult').innerHTML = \`\${data.description}<br><span style="color:var(--text-muted); font-weight:500; font-size:0.85rem;">🎲 Você: \${data.yourRoll} · 🏠 Casa: \${data.houseRoll} · 💰 Saldo: \${data.balance}</span>\`;
+      } catch (e) {}
+    }
+
+    // ───────────────────────── ABA: PESCA ─────────────────────────
+    async function renderPescaTab() {
+      document.getElementById('tabBody').innerHTML = '<p class="empty">⏳ Carregando área de pesca...</p>';
+      try {
+        const res = await fetch('/api/activities/rpg/fishing');
+        const data = await res.json();
+
+        const phaseBonus = data.phaseInfo.fishBonus > 0 ? \` (+\${Math.round(data.phaseInfo.fishBonus*100)}% peixe raro ✨)\` : '';
+        let statusHtml, btnHtml;
+
+        if (data.isReady) {
+          statusHtml = '🐟 <b>Algo puxou a isca!</b> Puxe agora!';
+          btnHtml = '<button class="btn-fish" onclick="doReel()">🪝 Puxar!</button>';
+        } else if (data.isWaiting) {
+          statusHtml = '🎣 Isca na água... aguardando.';
+          btnHtml = '<button class="btn-fish" disabled>⏳ Aguardando</button>';
+        } else {
+          statusHtml = \`Lance a isca e espere \${Math.round(FISHING_WAIT_MIN)} min para puxar.\`;
+          btnHtml = \`<button class="btn-fish" \${data.currentEnergy < data.energyCost ? 'disabled' : ''} onclick="doCast()">🎣 Lançar Isca (\${data.energyCost}⚡)</button>\`;
+        }
+
+        document.getElementById('tabBody').innerHTML = \`
+          <div id="fishFeedback"></div>
+          <div class="phase-banner">\${data.phaseInfo.emoji} Fase do dia: <b>\${data.phaseInfo.name}</b>\${phaseBonus}</div>
+          <div class="fish-box">
+            <div class="icon">🎣</div>
+            <div class="status">\${statusHtml}</div>
+            \${btnHtml}
+            <div id="fishCatch"></div>
+          </div>
+        \`;
+
+        if (data.isWaiting && data.reelableAt) {
+          const remaining = Math.max(0, new Date(data.reelableAt).getTime() - Date.now());
+          setTimeout(renderPescaTab, remaining + 500);
+        }
+      } catch (e) {
+        document.getElementById('tabBody').innerHTML = '<p class="error">Erro ao carregar pesca.</p>';
+      }
+    }
+    const FISHING_WAIT_MIN = 2;
+
+    async function doCast() {
+      try {
+        const res = await fetch('/api/activities/rpg/fishing/cast', { method: 'POST' });
+        const result = await res.json();
+        document.getElementById('fishFeedback').innerHTML = actionFeedback(result);
+        if (result.success) renderPescaTab();
+      } catch (e) {}
+    }
+
+    async function doReel() {
+      try {
+        const res = await fetch('/api/activities/rpg/fishing/reel', { method: 'POST' });
+        const result = await res.json();
+        if (!result.success) { document.getElementById('fishFeedback').innerHTML = actionFeedback(result); return; }
+        document.getElementById('fishCatch').innerHTML = \`<div class="fish-catch"><b>\${result.title}</b><p style="color:var(--text-muted); font-size:0.85rem; margin-top:6px;">\${result.description.replace(/\\n/g,'<br>')}</p></div>\`;
+        const p = await (await fetch('/api/activities/rpg/profile')).json();
+        state.profileData = p;
+        setTimeout(renderPescaTab, 2500);
+      } catch (e) {}
+    }
+
+    // ───────────────────────── ABA: MISSÕES ─────────────────────────
+    async function renderMissoesTab() {
+      document.getElementById('tabBody').innerHTML = '<p class="empty">⏳ Carregando missões...</p>';
+      try {
+        const res = await fetch('/api/activities/rpg/missions');
+        const data = await res.json();
+
+        function missionRow(m, kind) {
+          const pct = Math.min(100, Math.round((m.progress / m.target) * 100));
+          const title = m.title || m.label;
+          const desc = m.description ? \`<div style="color:var(--text-muted); font-size:0.78rem; margin-bottom:6px;">\${m.description}</div>\` : '';
+          return \`
+            <div class="mission-row \${m.claimed ? 'claimed' : ''}">
+              <div class="top"><b>\${m.emoji ? m.emoji + ' ' : ''}\${title}</b><span class="reward">⭐\${m.xp} 💰\${m.gold}\${m.energy ? ' ⚡'+m.energy : ''}</span></div>
+              \${desc}
+              <div class="bar-track"><div class="bar-fill" style="width:\${pct}%; background:var(--primary);"></div></div>
+              <div style="font-size:0.75rem; color:var(--text-muted); margin-top:4px;">\${m.progress}/\${m.target}</div>
+              <button class="btn-claim" \${!m.completed || m.claimed ? 'disabled' : ''} onclick="doClaimMission('\${m.id}','\${kind}')">\${m.claimed ? '✅ Coletado' : m.completed ? '🎁 Coletar' : 'Em progresso'}</button>
+            </div>\`;
+        }
+
+        const dailyHtml = data.daily.length ? data.daily.map(m => missionRow(m, 'daily')).join('') : '<p class="empty">Nenhuma missão diária.</p>';
+        const weeklyHtml = data.weekly.length ? data.weekly.map(m => missionRow(m, 'weekly')).join('') : '<p class="empty">Nenhuma missão semanal.</p>';
+        const classHtml = data.classMissions.length ? data.classMissions.map(m => missionRow(m, 'class')).join('') : '<p class="empty">Nenhuma missão de classe hoje.</p>';
+
+        document.getElementById('tabBody').innerHTML = \`
+          <div id="missionFeedback"></div>
+          <div class="mission-section"><div class="section-title" style="margin-top:0;">📅 Diárias</div>\${dailyHtml}</div>
+          <div class="mission-section"><div class="section-title">📆 Semanais</div>\${weeklyHtml}</div>
+          <div class="mission-section"><div class="section-title">🎭 De Classe</div>\${classHtml}</div>
+        \`;
+      } catch (e) {
+        document.getElementById('tabBody').innerHTML = '<p class="error">Erro ao carregar missões.</p>';
+      }
+    }
+
+    async function doClaimMission(missionId, kind) {
+      try {
+        const res = await fetch('/api/activities/rpg/missions/claim', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ missionId, kind })
+        });
+        const result = await res.json();
+        document.getElementById('missionFeedback').innerHTML = actionFeedback(result);
+        if (result.success) {
+          const p = await (await fetch('/api/activities/rpg/profile')).json();
+          state.profileData = p;
+          renderMissoesTab();
+        }
       } catch (e) {}
     }
 
@@ -2185,6 +2335,108 @@ ${activitySdkBootstrap(clientId!)}
       houseRoll: getField('Casa'),
       balance: getField('Saldo'),
     });
+  });
+
+  // ── Pescaria: mesmas castFishingLine()/reelFishingLine() de
+  // src/rpg/panels/pescaria.ts — cooldown, sessão de isca na água e a
+  // tabela real de raridade de peixes (rollFish), tudo real.
+  app.get('/api/activities/rpg/fishing', requirePlayerAuth, async (req, res) => {
+    const discordId = req.cookies.player_userid as string;
+    const character = await getCharacter(discordId);
+    if (!character) return res.status(404).json({ error: 'Personagem não encontrado' });
+
+    const stats = computeStats(character);
+    const session = await prisma.rpgFishingSession.findUnique({ where: { discordId } });
+    const isWaiting = !!(session && session.reelableAt > new Date());
+    const isReady = !!(session && session.reelableAt <= new Date());
+    const phase = getDayPhase();
+
+    res.json({
+      isWaiting, isReady,
+      reelableAt: session?.reelableAt ?? null,
+      currentEnergy: character.currentEnergy, maxEnergy: stats.maxEnergy,
+      energyCost: FISHING_ENERGY_COST,
+      phase, phaseInfo: PHASE_INFO[phase],
+    });
+  });
+
+  app.post('/api/activities/rpg/fishing/cast', requirePlayerAuth, async (req, res) => {
+    const discordId = req.cookies.player_userid as string;
+    const character = await getCharacter(discordId);
+    if (!character) return res.status(404).json({ error: 'Personagem não encontrado' });
+
+    const result = await castFishingLine(character);
+    res.json(result);
+  });
+
+  app.post('/api/activities/rpg/fishing/reel', requirePlayerAuth, async (req, res) => {
+    const discordId = req.cookies.player_userid as string;
+    const character = await getCharacter(discordId);
+    if (!character) return res.status(404).json({ error: 'Personagem não encontrado' });
+
+    const result = await reelFishingLine(character) as any;
+    if (!result.success) return res.json(result);
+
+    const data = result.embed?.data || {};
+    res.json({ success: true, title: data.title, description: data.description });
+  });
+
+  // ── Missões: diárias/semanais (por servidor, com claimDailyReward/
+  // claimWeeklyReward de src/commands/utility/missoes.ts) + missões de
+  // classe (claimClassMission de src/rpg/services/class-missions.ts).
+  app.get('/api/activities/rpg/missions', requirePlayerAuth, async (req, res) => {
+    const discordId = req.cookies.player_userid as string;
+    const character = await getCharacter(discordId);
+    if (!character) return res.status(404).json({ error: 'Personagem não encontrado' });
+
+    const guildId = await resolveGuildId(req.query.guildId as string | undefined);
+
+    let daily: any[] = [];
+    let weekly: any[] = [];
+    if (guildId) {
+      await Promise.all([ensureDailyMissions(discordId, guildId), ensureWeeklyMissions(discordId, guildId)]);
+      const today = new Date().toISOString().slice(0, 10);
+      [daily, weekly] = await Promise.all([
+        prisma.dailyMission.findMany({ where: { memberId: discordId, guildId, dateStr: today }, orderBy: { completed: 'asc' } }),
+        prisma.weeklyMission.findMany({ where: { memberId: discordId, guildId } , orderBy: { completed: 'asc' } }),
+      ]);
+    }
+
+    await ensureClassMissions(discordId, character.class);
+    const classDateStr = new Date().toISOString().slice(0, 10);
+    const classMissions = await prisma.rpgClassMission.findMany({ where: { discordId, dateStr: classDateStr } });
+
+    const dailyOut = daily.map(m => ({ id: m.id, label: DAILY_MISSION_POOL.find((p: any) => p.type === m.type)?.label || m.type, progress: m.progress, target: m.target, completed: m.completed, claimed: m.claimed, xp: m.xpReward, gold: m.coinReward }));
+    const weeklyOut = weekly.map(m => ({ id: m.id, label: WEEKLY_MISSION_POOL.find((p: any) => p.type === m.type)?.label || m.type, progress: m.progress, target: m.target, completed: m.completed, claimed: m.claimed, xp: m.xpReward, gold: m.coinReward }));
+    const classOut = classMissions.map(m => {
+      const tpl = CLASS_MISSIONS.find((t: any) => t.key === m.missionKey);
+      return { id: m.id, emoji: tpl?.emoji || '📜', title: tpl?.title || m.missionKey, description: tpl?.description || '', progress: m.progress, target: m.target, completed: m.completed, claimed: m.claimed, xp: m.xpReward, gold: m.goldReward, energy: m.energyReward };
+    });
+
+    res.json({ daily: dailyOut, weekly: weeklyOut, classMissions: classOut, hasGuild: !!guildId });
+  });
+
+  app.post('/api/activities/rpg/missions/claim', requirePlayerAuth, async (req, res) => {
+    const discordId = req.cookies.player_userid as string;
+    const { missionId, kind } = req.body || {};
+    if (!missionId || !kind) return res.status(400).json({ error: 'missionId e kind são obrigatórios' });
+
+    try {
+      if (kind === 'class') {
+        const result = await claimClassMission(discordId, missionId);
+        return res.json(result);
+      }
+      const guildId = await resolveGuildId(req.body.guildId);
+      if (!guildId) return res.status(400).json({ error: 'Nenhum servidor associado ao bot foi encontrado.' });
+
+      const result = kind === 'weekly'
+        ? await claimWeeklyReward(missionId, discordId, guildId)
+        : await claimDailyReward(missionId, discordId, guildId);
+      res.json(result);
+    } catch (err) {
+      console.error('[Atividades/RPG] Erro ao coletar missão:', err);
+      res.status(500).json({ error: 'Erro ao coletar recompensa.' });
+    }
   });
 
   // ── Inventário: equipar / usar / vender — usa EXATAMENTE as mesmas

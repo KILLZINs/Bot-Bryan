@@ -7,7 +7,7 @@ import { askBryan } from '../ai/bryan';
 import { getCharacter, computeStats, distributeStatPoints, type FullCharacter } from '../rpg/services/character';
 import { getEnemiesForLocation, getEnemy, getBossesForLocation } from '../rpg/constants/enemies';
 import { getLocation, LOCATION_LIST } from '../rpg/constants/locations';
-import { getClass } from '../rpg/constants/classes';
+import { getClass, rpgXpForLevel } from '../rpg/constants/classes';
 import { startInteractiveCombat, takeCombatAction, CombatBlockedError, isDungeonOnCooldown, type CombatAction, type CombatMode } from '../rpg/services/combat';
 import { activeExpeditions, startExpedition, processRandomDungeonEvent, finishExpedition, type DungeonRun } from '../rpg/panels/dungeon';
 import { craftItem } from '../rpg/panels/forja';
@@ -908,6 +908,10 @@ ${activitySdkBootstrap(clientId!)}
   .nav-user span { font-weight: 700; font-size: 0.9rem; }
   .nav-user a.logout { color: var(--text-muted); font-size: 0.8rem; border: 1px solid var(--border); padding: 5px 12px; border-radius: 8px; }
   .nav-user a.logout:hover { border-color: var(--red); color: var(--red); }
+
+  .music-widget { position: fixed; bottom: 20px; right: 20px; z-index: 999; background: var(--card); border: 1px solid var(--border); border-radius: 999px; padding: 10px 16px; display: flex; align-items: center; gap: 10px; box-shadow: 0 8px 24px rgba(0,0,0,0.4); }
+  .music-widget button { background: transparent; border: none; font-size: 1.2rem; cursor: pointer; line-height: 1; }
+  .music-widget input[type="range"] { width: 80px; accent-color: var(--primary); cursor: pointer; }
   #wrap { max-width: 980px; margin: 0 auto; padding: 30px 20px 80px; }
 
   .empty, .error { color: var(--text-muted); padding: 30px 0; text-align: center; }
@@ -1136,10 +1140,102 @@ ${activitySdkBootstrap(clientId!)}
       <a class="logout" href="/logout/player">Sair</a>
     </div>
   </nav>
+
+  <div id="musicWidget" class="music-widget">
+    <button id="musicToggle" title="Tocar/pausar música ambiente">🔇</button>
+    <input id="musicVolume" type="range" min="0" max="100" value="25" title="Volume">
+  </div>
+
   <div id="wrap"><p class="empty">⏳ Carregando sua ficha...</p></div>
 
   <script>
     const state = { stats: null, cls: null, inCombat: false, activeTab: 'batalha', profileData: null };
+
+    // ───────────────────────── MÚSICA AMBIENTE ─────────────────────────
+    // Pad ambiente sintetizado na hora via Web Audio API — sem depender de
+    // nenhum arquivo de áudio externo (zero risco de link quebrado ou
+    // direitos autorais). Guarda volume/estado no localStorage do navegador.
+    const music = { ctx: null, gain: null, playing: false, volume: 25 };
+
+    function initMusicEngine() {
+      if (music.ctx) return;
+      const Ctx = window.AudioContext || window.webkitAudioContext;
+      music.ctx = new Ctx();
+
+      const master = music.ctx.createGain();
+      master.gain.value = music.volume / 100 * 0.18; // teto baixo — é ambiente, não trilha de boss
+      master.connect(music.ctx.destination);
+      music.gain = master;
+
+      const filter = music.ctx.createBiquadFilter();
+      filter.type = 'lowpass';
+      filter.frequency.value = 800;
+      filter.connect(master);
+
+      // Três osciladores formando um acorde suave (raiz, quinta, oitava),
+      // levemente destafinados entre si pra soar "orgânico" e não robótico.
+      const notes = [110, 164.81, 220]; // Lá2, Mi3, Lá3
+      notes.forEach((freq, i) => {
+        const osc = music.ctx.createOscillator();
+        osc.type = 'sine';
+        osc.frequency.value = freq;
+        osc.detune.value = (i - 1) * 4;
+        const oscGain = music.ctx.createGain();
+        oscGain.gain.value = 0.5;
+        osc.connect(oscGain);
+        oscGain.connect(filter);
+        osc.start();
+      });
+
+      // LFO lento modulando o filtro, pra dar uma "respiração" ao pad.
+      const lfo = music.ctx.createOscillator();
+      lfo.frequency.value = 0.05;
+      const lfoGain = music.ctx.createGain();
+      lfoGain.gain.value = 300;
+      lfo.connect(lfoGain);
+      lfoGain.connect(filter.frequency);
+      lfo.start();
+    }
+
+    function setMusicVolume(v) {
+      music.volume = v;
+      localStorage.setItem('rpg_music_volume', String(v));
+      if (music.gain) music.gain.gain.value = v / 100 * 0.18;
+    }
+
+    function toggleMusic() {
+      if (!music.ctx) initMusicEngine();
+      if (music.ctx.state === 'suspended') music.ctx.resume();
+
+      music.playing = !music.playing;
+      document.getElementById('musicToggle').textContent = music.playing ? '🔊' : '🔇';
+      localStorage.setItem('rpg_music_playing', music.playing ? '1' : '0');
+
+      if (music.playing) music.ctx.resume();
+      else music.ctx.suspend();
+    }
+
+    (function initMusicUI() {
+      const savedVol = parseInt(localStorage.getItem('rpg_music_volume') || '25', 10);
+      music.volume = isNaN(savedVol) ? 25 : savedVol;
+      document.getElementById('musicVolume').value = music.volume;
+
+      document.getElementById('musicToggle').addEventListener('click', toggleMusic);
+      document.getElementById('musicVolume').addEventListener('input', (e) => setMusicVolume(parseInt(e.target.value, 10)));
+
+      // Se a pessoa já tinha deixado tocando antes, tenta retomar — mas
+      // navegadores bloqueiam áudio sem interação, então também religamos
+      // no primeiro clique em qualquer lugar da página, só uma vez.
+      const wantedPlaying = localStorage.getItem('rpg_music_playing') === '1';
+      if (wantedPlaying) {
+        const resumeOnce = () => {
+          if (!music.playing) toggleMusic();
+          document.removeEventListener('click', resumeOnce);
+        };
+        document.addEventListener('click', resumeOnce, { once: true });
+      }
+    })();
+
 
     async function loadProfile() {
       const wrap = document.getElementById('wrap');
@@ -1154,15 +1250,34 @@ ${activitySdkBootstrap(clientId!)}
       }
     }
 
-    function renderProfile(data) {
-      state.profileData = data;
-      const c = data.character, s = data.stats, cls = data.class, loc = data.location;
-      state.stats = s; state.cls = cls;
+    // Recarrega só os dados + a barra do topo (HP/EN/XP/Ouro), SEM destruir a
+    // aba atualmente aberta. Isso corrige o bug de "vida não atualiza": antes,
+    // várias ações (curar, treinar, pescar...) atualizavam o personagem no
+    // banco mas só o loadProfile()/switchTab() completos redesenhavam a barra
+    // — agora toda ação que muda HP/Energia/Ouro/XP chama isso.
+    async function refreshProfile() {
+      try {
+        const res = await fetch('/api/activities/rpg/profile');
+        if (!res.ok) return state.profileData;
+        const data = await res.json();
+        state.profileData = data;
+        state.stats = data.stats;
+        state.cls = data.class;
+        const headerWrap = document.getElementById('profileHeaderWrap');
+        if (headerWrap) headerWrap.innerHTML = buildHeaderHtml(data);
+        return data;
+      } catch (e) {
+        return state.profileData;
+      }
+    }
 
+    function buildHeaderHtml(data) {
+      const c = data.character, s = data.stats, cls = data.class, loc = data.location;
       const hpPct = Math.max(0, Math.min(100, (c.currentHp / s.maxHp) * 100));
       const enPct = Math.max(0, Math.min(100, (c.currentEnergy / s.maxEnergy) * 100));
+      const xpPct = Math.max(0, Math.min(100, (c.xp / data.xpNeeded) * 100));
 
-      document.getElementById('wrap').innerHTML = \`
+      return \`
         <div class="profile-header">
           <div class="avatar-ring">\${cls ? cls.emoji : '⚔️'}</div>
           <div style="flex:1;">
@@ -1171,6 +1286,7 @@ ${activitySdkBootstrap(clientId!)}
             <div class="bars">
               <div class="bar-row"><span class="tag">HP</span><div class="bar-track"><div class="bar-fill" style="width:\${hpPct}%; background:var(--red);"></div></div> \${c.currentHp}/\${s.maxHp}</div>
               <div class="bar-row"><span class="tag">EN</span><div class="bar-track"><div class="bar-fill" style="width:\${enPct}%; background:var(--green);"></div></div> \${c.currentEnergy}/\${s.maxEnergy}</div>
+              <div class="bar-row"><span class="tag">XP</span><div class="bar-track"><div class="bar-fill" style="width:\${xpPct}%; background:var(--primary2);"></div></div> \${c.xp}/\${data.xpNeeded}</div>
             </div>
           </div>
         </div>
@@ -1181,7 +1297,16 @@ ${activitySdkBootstrap(clientId!)}
           <div class="stat-card"><div class="label">Esquiva</div><div class="value">\${s.dodgeChance}%</div></div>
           <div class="stat-card"><div class="label">Poder</div><div class="value">\${s.combatPower}</div></div>
         </div>
+      \`;
+    }
 
+    function renderProfile(data) {
+      state.profileData = data;
+      state.stats = data.stats;
+      state.cls = data.class;
+
+      document.getElementById('wrap').innerHTML = \`
+        <div id="profileHeaderWrap">\${buildHeaderHtml(data)}</div>
         <div class="tab-nav" id="tabNav">
           \${['batalha','dungeon','boss','cidade','explorar','pesca','missoes','habilidades','inventario','loja','viajar','treinar','meditar','pontos'].map(t => \`<button class="tab-btn \${state.activeTab === t ? 'active' : ''}" onclick="switchTab('\${t}')">\${tabLabel(t)}</button>\`).join('')}
         </div>
@@ -1294,8 +1419,7 @@ ${activitySdkBootstrap(clientId!)}
         const result = await res.json();
         document.getElementById('healFeedback').innerHTML = actionFeedback(result);
         if (result.success) {
-          const p = await (await fetch('/api/activities/rpg/profile')).json();
-          state.profileData = p;
+          await refreshProfile();
           renderCurarSub();
         }
       } catch (e) {}
@@ -1445,8 +1569,7 @@ ${activitySdkBootstrap(clientId!)}
         const result = await res.json();
         if (!result.success) { document.getElementById('fishFeedback').innerHTML = actionFeedback(result); return; }
         document.getElementById('fishCatch').innerHTML = \`<div class="fish-catch"><b>\${result.title}</b><p style="color:var(--text-muted); font-size:0.85rem; margin-top:6px;">\${result.description.replace(/\\n/g,'<br>')}</p></div>\`;
-        const p = await (await fetch('/api/activities/rpg/profile')).json();
-        state.profileData = p;
+        await refreshProfile();
         setTimeout(renderPescaTab, 2500);
       } catch (e) {}
     }
@@ -1496,8 +1619,7 @@ ${activitySdkBootstrap(clientId!)}
         const result = await res.json();
         document.getElementById('missionFeedback').innerHTML = actionFeedback(result);
         if (result.success) {
-          const p = await (await fetch('/api/activities/rpg/profile')).json();
-          state.profileData = p;
+          await refreshProfile();
           renderMissoesTab();
         }
       } catch (e) {}
@@ -1546,8 +1668,7 @@ ${activitySdkBootstrap(clientId!)}
             <div class="fields">\${fieldsHtml}</div>
           </div>\`;
 
-        const p = await (await fetch('/api/activities/rpg/profile')).json();
-        state.profileData = p;
+        await refreshProfile();
         setTimeout(renderExplorarTab, 2500);
       } catch (e) {}
     }
@@ -1707,8 +1828,7 @@ ${activitySdkBootstrap(clientId!)}
         const result = await res.json();
         document.getElementById('invFeedback').innerHTML = actionFeedback(result);
         if (result.success) {
-          const p = await (await fetch('/api/activities/rpg/profile')).json();
-          state.profileData = p;
+          await refreshProfile();
           renderInventarioTab();
           document.getElementById('invFeedback').innerHTML = actionFeedback(result);
         }
@@ -1765,8 +1885,7 @@ ${activitySdkBootstrap(clientId!)}
         const result = await res.json();
         document.getElementById('shopFeedback').innerHTML = actionFeedback(result);
         if (result.success) {
-          const p = await (await fetch('/api/activities/rpg/profile')).json();
-          state.profileData = p;
+          await refreshProfile();
         }
       } catch (e) {}
     }
@@ -1799,9 +1918,8 @@ ${activitySdkBootstrap(clientId!)}
         });
         const result = await res.json();
         if (result.success) {
-          const p = await (await fetch('/api/activities/rpg/profile')).json();
-          state.profileData = p;
-          renderProfile(p);
+          await refreshProfile();
+          renderProfile(state.profileData);
         } else {
           document.getElementById('travelFeedback').innerHTML = actionFeedback(result);
         }
@@ -1851,8 +1969,7 @@ ${activitySdkBootstrap(clientId!)}
         const result = await res.json();
         document.getElementById('trainFeedback').innerHTML = actionFeedback(result);
         if (result.success) {
-          const p = await (await fetch('/api/activities/rpg/profile')).json();
-          state.profileData = p;
+          await refreshProfile();
           renderTreinarTab();
         }
       } catch (e) {}
@@ -1916,8 +2033,7 @@ ${activitySdkBootstrap(clientId!)}
         const result = await res.json();
         if (result.success) {
           document.getElementById('medFeedback').innerHTML = \`<div class="action-feedback ok">🪷 +\${result.hpGained} HP · +\${result.energyGained}⚡\${result.buffGiven ? ' · ✨ Buff de XP ativado!' : ''}</div>\`;
-          const p = await (await fetch('/api/activities/rpg/profile')).json();
-          state.profileData = p;
+          await refreshProfile();
           setTimeout(renderMeditarTab, 1500);
         } else {
           document.getElementById('medFeedback').innerHTML = actionFeedback(result);
@@ -2144,8 +2260,7 @@ ${activitySdkBootstrap(clientId!)}
           </div>
           <button class="btn-again" onclick="renderDungeonTab();">Explorar Outra</button>
         \`;
-        const p = await (await fetch('/api/activities/rpg/profile')).json();
-        state.profileData = p;
+        await refreshProfile();
       } catch (e) {}
     }
 
@@ -2186,8 +2301,7 @@ ${activitySdkBootstrap(clientId!)}
         const result = await res.json();
         document.getElementById('pointsFeedback').innerHTML = actionFeedback(result);
         if (result.success) {
-          const p = await (await fetch('/api/activities/rpg/profile')).json();
-          state.profileData = p;
+          await refreshProfile();
           renderPontosTab();
         }
       } catch (e) {}
@@ -2338,7 +2452,8 @@ ${activitySdkBootstrap(clientId!)}
         }
       }
 
-      res.json({ character, stats, class: cls, location: loc, inventory, equipment });
+      const xpNeeded = rpgXpForLevel(character.level);
+      res.json({ character, stats, class: cls, location: loc, inventory, equipment, xpNeeded });
     } catch (e) {
       console.error('[Atividades/RPG] Erro ao buscar personagem:', e);
       res.status(500).json({ error: 'Erro ao buscar personagem' });

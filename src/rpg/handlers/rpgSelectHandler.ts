@@ -13,6 +13,7 @@ import { equipItem, useConsumable, sellItem, buyItem } from '../services/invento
 import { buildInventarioEmbed, buildInventarioButtons, buildItemActionSelect } from '../panels/inventario';
 import { joinGuild } from '../panels/guild';
 import { craftItem } from '../panels/forja';
+import { getLocation } from '../constants/locations';
 import { prisma } from '../../database/client';
 import { errorEmbed, successEmbed } from '../../utils/embeds';
 import { generateProfileCard } from '../utils/profileCanvas';
@@ -329,6 +330,11 @@ export async function handleRpgSelect(i: StringSelectMenuInteraction, action: st
         }
 
         if (option === 'taverna') {
+          const tavernaLoc = getLocation(char.currentLocation);
+          if (!tavernaLoc?.hasShop) {
+            await i.editReply({ embeds: [errorEmbed('🏰 Nenhuma cidade por perto', 'A Taverna só existe em cidades. Viaje até um assentamento seguro primeiro.')], components: [] });
+            return;
+          }
           try {
             const { buildTavernaEmbed, buildTavernaMenuSelect, buildTavernaButtons } = await import('../panels/taverna');
             await i.editReply({ embeds: [await buildTavernaEmbed(char)], files: [], components: [buildTavernaMenuSelect(), buildTavernaButtons()] });
@@ -539,6 +545,11 @@ export async function handleRpgSelect(i: StringSelectMenuInteraction, action: st
       case 'taverna_pedir': {
         await i.deferUpdate();
         const char = await getOrCreateCharacter(discordId, username);
+        const pedirLoc = getLocation(char.currentLocation);
+        if (!pedirLoc?.hasShop) {
+          await i.editReply({ embeds: [errorEmbed('🏰 Nenhuma cidade por perto', 'A Taverna só existe em cidades. Viaje até um assentamento seguro primeiro.')], components: [] });
+          break;
+        }
         const { buyTavernaItem, buildTavernaEmbed, buildTavernaMenuSelect, buildTavernaButtons } = await import('../panels/taverna');
         const result = await buyTavernaItem(char, i.values[0]);
         const updatedChar = await getOrCreateCharacter(discordId, username);

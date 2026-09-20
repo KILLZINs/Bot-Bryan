@@ -740,6 +740,11 @@ export async function handleRpgButton(i: ButtonInteraction, action: string): Pro
       case 'taverna': {
         await i.deferUpdate();
         const char = await getOrCreateCharacter(discordId, username);
+        const tavernaLoc = getLocation(char.currentLocation);
+        if (!tavernaLoc?.hasShop) {
+          await i.editReply({ embeds: [errorEmbed('🏰 Nenhuma cidade por perto', `A Taverna só existe em cidades. Viaje até um assentamento seguro primeiro.`)], files: [], components: [] });
+          break;
+        }
         const { buildTavernaEmbed, buildTavernaMenuSelect, buildTavernaButtons } = await import('../panels/taverna');
         await i.editReply({ embeds: [await buildTavernaEmbed(char)], files: [], components: [buildTavernaMenuSelect(), buildTavernaButtons()] });
         break;
@@ -748,6 +753,11 @@ export async function handleRpgButton(i: ButtonInteraction, action: string): Pro
       case 'taverna_dados': {
         await i.deferUpdate();
         const char = await getOrCreateCharacter(discordId, username);
+        const dadosLoc = getLocation(char.currentLocation);
+        if (!dadosLoc?.hasShop) {
+          await i.editReply({ embeds: [errorEmbed('🏰 Nenhuma cidade por perto', `A Taverna só existe em cidades. Viaje até um assentamento seguro primeiro.`)], files: [], components: [] });
+          break;
+        }
         const { rollTavernaDice, buildTavernaButtons } = await import('../panels/taverna');
         const { embed } = await rollTavernaDice(char);
         await i.editReply({ embeds: [embed], files: [], components: [buildTavernaButtons()] });

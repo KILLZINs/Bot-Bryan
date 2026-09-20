@@ -1415,12 +1415,10 @@ ${activitySdkBootstrap(clientId!)}
         <div id="cityBody"><p class="empty">⏳ Carregando...</p></div>
       \`;
 
-      // Forja e Curandeiro só existem em cidade de verdade (igual ao Discord:
-      // buildCidadeButtons só aparece quando hasShop/hasCraft são true).
-      // Taverna fica de fora dessa trava — ela é acessível de qualquer lugar
-      // no Discord também (não faz parte do hub "Cidade").
-      if (!isCity && citySubTab !== 'taverna') {
-        document.getElementById('cityBody').innerHTML = \`<p class="error">🏰 Você está em <b>\${loc?.name || 'uma região selvagem'}</b>, sem infraestrutura de cidade. Viaje até um assentamento seguro (aba 🗺️ Viajar) para acessar forja e curandeiro.</p>\`;
+      // Forja, Curandeiro e Taverna agora só existem em cidade de verdade —
+      // igual ao Discord, onde as três checam hasShop/hasCraft antes de abrir.
+      if (!isCity) {
+        document.getElementById('cityBody').innerHTML = \`<p class="error">🏰 Você está em <b>\${loc?.name || 'uma região selvagem'}</b>, sem infraestrutura de cidade. Viaje até um assentamento seguro (aba 🗺️ Viajar) para acessar forja, curandeiro e taverna.</p>\`;
         return;
       }
 
@@ -2713,6 +2711,8 @@ ${activitySdkBootstrap(clientId!)}
 
     const character = await getCharacter(discordId);
     if (!character) return res.status(404).json({ error: 'Personagem não encontrado' });
+    const tavLoc = getLocation(character.currentLocation);
+    if (!tavLoc?.hasShop) return res.json({ success: false, message: 'A Taverna só existe em cidades. Viaje até um assentamento seguro primeiro.' });
 
     const result = await buyTavernaItem(character, itemId);
     res.json(result);
@@ -2722,6 +2722,8 @@ ${activitySdkBootstrap(clientId!)}
     const discordId = req.cookies.player_userid as string;
     const character = await getCharacter(discordId);
     if (!character) return res.status(404).json({ error: 'Personagem não encontrado' });
+    const diceLoc = getLocation(character.currentLocation);
+    if (!diceLoc?.hasShop) return res.status(403).json({ error: 'A Taverna só existe em cidades.' });
 
     const { embed } = await rollTavernaDice(character) as any;
     const data = embed?.data || {};

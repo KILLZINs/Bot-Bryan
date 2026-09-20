@@ -5,6 +5,7 @@
 import { ButtonInteraction, PermissionFlagsBits, ActionRowBuilder, ButtonBuilder, ButtonStyle, AttachmentBuilder } from 'discord.js';
 import { prisma } from '../../database/client';
 import { getOrCreateCharacter, computeStats, applyPassiveEnergyRegen } from '../services/character';
+import { getLocation } from '../constants/locations';
 import { buildProfileEmbed, buildCidadeEmbed, buildCidadeButtons, buildCidadeButtons2, buildPontosEmbed, buildPontosSelect } from '../panels/profile';
 import { buildTravelEmbed, buildTravelSelect, buildTravelBackButton } from '../panels/travel';
 import {
@@ -183,6 +184,16 @@ export async function handleRpgButton(i: ButtonInteraction, action: string): Pro
 
       case 'cidade': {
         await i.deferUpdate();
+        const cidadeChar = await getOrCreateCharacter(discordId, username);
+        const cidadeLoc = getLocation(cidadeChar.currentLocation);
+        if (!cidadeLoc?.hasShop || !cidadeLoc?.hasCraft) {
+          await i.editReply({
+            embeds: [errorEmbed('🏰 Nenhuma cidade por perto', `Você está em **${cidadeLoc?.name ?? cidadeChar.currentLocation}**, uma região sem infraestrutura de cidade. Viaje até um assentamento seguro (Sede Lúmina, Posto Nevoeiro, Oásis Comercial ou Santuário Astral) para acessar loja, curandeiro, forja e missões.`)],
+            files: [],
+            components: [],
+          });
+          break;
+        }
         await i.editReply({
           embeds: [buildCidadeEmbed()],
           files: [],
@@ -284,6 +295,11 @@ export async function handleRpgButton(i: ButtonInteraction, action: string): Pro
       case 'loja': {
         await i.deferUpdate();
         const char = await getOrCreateCharacter(discordId, username);
+        const loc = getLocation(char.currentLocation);
+        if (!loc?.hasShop) {
+          await i.editReply({ embeds: [errorEmbed('🏰 Nenhuma cidade por perto', `A loja só existe em cidades. Viaje até um assentamento seguro primeiro.`)], files: [], components: [] });
+          break;
+        }
         await i.editReply({
           embeds: [buildShopEmbed(char)],
           files: [],
@@ -295,6 +311,11 @@ export async function handleRpgButton(i: ButtonInteraction, action: string): Pro
       case 'curandeiro': {
         await i.deferUpdate();
         const char = await getOrCreateCharacter(discordId, username);
+        const curaLoc = getLocation(char.currentLocation);
+        if (!curaLoc?.hasShop) {
+          await i.editReply({ embeds: [errorEmbed('🏰 Nenhuma cidade por perto', `O curandeiro só existe em cidades. Viaje até um assentamento seguro primeiro.`)], files: [], components: [] });
+          break;
+        }
         const stats = computeStats(char);
         const hpMissing = stats.maxHp - char.currentHp;
         const enMissing = stats.maxEnergy - char.currentEnergy;
@@ -404,6 +425,11 @@ export async function handleRpgButton(i: ButtonInteraction, action: string): Pro
         await i.deferUpdate();
         const { buildForjaEmbed, buildForjaSelect } = await import('../panels/forja');
         const char = await getOrCreateCharacter(discordId, username);
+        const forjaLoc = getLocation(char.currentLocation);
+        if (!forjaLoc?.hasCraft) {
+          await i.editReply({ embeds: [errorEmbed('🏰 Nenhuma cidade por perto', `A forja só existe em cidades. Viaje até um assentamento seguro primeiro.`)], files: [], components: [] });
+          break;
+        }
         const inventory = await prisma.rpgInventoryItem.findMany({ where: { characterId: discordId, quantity: { gt: 0 } } });
         const embed = buildForjaEmbed(char, inventory);
         const select = buildForjaSelect(char);

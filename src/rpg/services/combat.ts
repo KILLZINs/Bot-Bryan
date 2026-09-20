@@ -3,7 +3,7 @@
 // ═══════════════════════════════════════════════════════════════════════
 
 import { prisma } from '../../database/client';
-import { FullCharacter, ComputedStats, computeStats, addRpgXp } from './character';
+import { FullCharacter, ComputedStats, computeStats, addRpgXp, getCharacter } from './character';
 import { Enemy, scaleEnemy } from '../constants/enemies';
 import { getItem } from '../constants/items';
 import { DIVINE_SKILLS, skillEffectValue } from '../constants/skills';
@@ -252,39 +252,6 @@ export async function runCombat(
       ...(mode === 'dungeon' ? { lastDungeon: slotStartedAt } : {}),
     },
   });
-
-  // Concede XP de rank pra CADA habilidade equipada (até 3), gravando na
-  // tabela por-habilidade (rpg_learned_skills) — a mesma que o site lê.
-  // Isso substitui a lógica antiga que só existia pra UMA habilidade
-  // (divineSkillId/divineSkillExp/divineSkillRank), que é exatamente o
-  // motivo do bug de "só consigo usar uma habilidade" relatado.
-  if (xpGained > 0) {
-    const SKILL_RANKS = ['F', 'E', 'D', 'C', 'B', 'A', 'S', 'SS', 'SSS'] as const;
-    const RANK_MULT = [1, 2, 4, 8, 16, 32, 64, 128] as const;
-
-    for (const skillId of getEquippedSkillIds(char)) {
-      const skill = DIVINE_SKILLS[skillId];
-      if (!skill || skill.type === 'passiva') continue;
-
-      const wasUsed = session.skillsUsedInCombat.has(skillId);
-      const skillXpGain = wasUsed ? Math.max(25, Math.floor(xpGained * 0.4)) : Math.max(5, Math.floor(xpGained * 0.1));
-
-      const learned = await prisma.rpgLearnedSkill.upsert({
-        where: { characterId_skillId: { characterId: char.discordId, skillId } },
-        create: { characterId: char.discordId, skillId, rank: 'F', exp: 0 },
-        update: {},
-      });
-
-      const newExp = learned.exp + skillXpGain;
-      const rankIdx = SKILL_RANKS.indexOf(learned.rank as typeof SKILL_RANKS[number]);
-      const canRankUp = rankIdx >= 0 && rankIdx < SKILL_RANKS.length - 1 && newExp >= (skill.rankUpExpRequired * (RANK_MULT[rankIdx] ?? 1));
-
-      await prisma.rpgLearnedSkill.update({
-        where: { characterId_skillId: { characterId: char.discordId, skillId } },
-        data: { exp: canRankUp ? 0 : newExp, rank: canRankUp ? SKILL_RANKS[rankIdx + 1] : learned.rank },
-      });
-    }
-  }
 
   for (const [itemId, qty] of itemsGainedMap.entries()) await giveItem(char.discordId, itemId, qty);
 
@@ -590,6 +557,39 @@ async function finalizeInteractiveCombat(session: InteractiveCombatSession, resu
     },
   });
 
+  // Concede XP de rank pra CADA habilidade equipada (até 3), gravando na
+  // tabela por-habilidade (rpg_learned_skills) — a mesma que o site lê.
+  // Substitui a lógica antiga que só existia pra UMA habilidade
+  // (divineSkillId/divineSkillExp/divineSkillRank), que era a raiz do bug
+  // de "só consigo usar uma habilidade".
+  if (xpGained > 0) {
+    const SKILL_RANKS = ['F', 'E', 'D', 'C', 'B', 'A', 'S', 'SS', 'SSS'] as const;
+    const RANK_MULT = [1, 2, 4, 8, 16, 32, 64, 128] as const;
+
+    for (const skillId of getEquippedSkillIds(char)) {
+      const skill = DIVINE_SKILLS[skillId];
+      if (!skill || skill.type === 'passiva') continue;
+
+      const wasUsed = session.skillsUsedInCombat.has(skillId);
+      const skillXpGain = wasUsed ? Math.max(25, Math.floor(xpGained * 0.4)) : Math.max(5, Math.floor(xpGained * 0.1));
+
+      const learned = await prisma.rpgLearnedSkill.upsert({
+        where: { characterId_skillId: { characterId: char.discordId, skillId } },
+        create: { characterId: char.discordId, skillId, rank: 'F', exp: 0 },
+        update: {},
+      });
+
+      const newExp = learned.exp + skillXpGain;
+      const rankIdx = SKILL_RANKS.indexOf(learned.rank as typeof SKILL_RANKS[number]);
+      const canRankUp = rankIdx >= 0 && rankIdx < SKILL_RANKS.length - 1 && newExp >= (skill.rankUpExpRequired * (RANK_MULT[rankIdx] ?? 1));
+
+      await prisma.rpgLearnedSkill.update({
+        where: { characterId_skillId: { characterId: char.discordId, skillId } },
+        data: { exp: canRankUp ? 0 : newExp, rank: canRankUp ? SKILL_RANKS[rankIdx + 1] : learned.rank },
+      });
+    }
+  }
+
   for (const [itemId, qty] of itemsGainedMap.entries()) await giveItem(char.discordId, itemId, qty);
 
   await prisma.rpgCombatLog.create({
@@ -654,6 +654,66 @@ function calcPetXp(char: FullCharacter, xpGained: number, log: string[]) {
   }
 
   return { activePetLevel: currentLevel, activePetXp: currentXp };
+}
+
+// ─── Desafios de PvP (Aceitar/Recusar) ──────────────────────────────────────
+// Antes, /rpg pvp resolvia o duelo NA HORA — o desafiado nunca via nada, nem
+// consentia, e podia perder ouro sem saber que tinha sido atacado. Agora todo
+// desafio fica pendente até o alvo aceitar ou recusar (ou expirar em 2min).
+// Fica num Map compartilhado com o site (mesmo processo), então um desafio
+// criado no Discord aparece pro alvo no site e vice-versa.
+export interface PendingPvpChallenge {
+  attackerId: string;
+  attackerUsername: string;
+  defenderId: string;
+  defenderUsername: string;
+  createdAt: number;
+}
+
+export const pendingPvpChallenges = new Map<string, PendingPvpChallenge>(); // key = defenderId
+const PVP_CHALLENGE_TTL_MS = 2 * 60 * 1000;
+
+export class PvpBlockedError extends Error {}
+
+export function getPendingPvpChallenge(defenderId: string): PendingPvpChallenge | null {
+  const c = pendingPvpChallenges.get(defenderId);
+  if (!c) return null;
+  if (Date.now() - c.createdAt > PVP_CHALLENGE_TTL_MS) {
+    pendingPvpChallenges.delete(defenderId);
+    return null;
+  }
+  return c;
+}
+
+export function createPvpChallenge(attacker: FullCharacter, defender: FullCharacter): PendingPvpChallenge {
+  const existing = getPendingPvpChallenge(defender.discordId);
+  if (existing) throw new PvpBlockedError(`**${defender.username}** já tem um desafio de PvP pendente. Aguarde ele responder ou expirar.`);
+
+  const challenge: PendingPvpChallenge = {
+    attackerId: attacker.discordId, attackerUsername: attacker.username,
+    defenderId: defender.discordId, defenderUsername: defender.username,
+    createdAt: Date.now(),
+  };
+  pendingPvpChallenges.set(defender.discordId, challenge);
+  return challenge;
+}
+
+export function declinePvpChallenge(defenderId: string) {
+  pendingPvpChallenges.delete(defenderId);
+}
+
+// Chamado só depois que o DESAFIADO clica em Aceitar — nunca antes disso.
+export async function resolvePendingPvpChallenge(defenderId: string): Promise<ReturnType<typeof runPvp>> {
+  const challenge = getPendingPvpChallenge(defenderId);
+  if (!challenge) throw new PvpBlockedError('Esse desafio expirou ou não existe mais.');
+
+  pendingPvpChallenges.delete(defenderId);
+  const attacker = await getCharacter(challenge.attackerId);
+  const defender = await getCharacter(defenderId);
+  if (!attacker || !defender) throw new PvpBlockedError('Um dos jogadores não foi encontrado.');
+  if (!attacker.pvpEnabled || !defender.pvpEnabled) throw new PvpBlockedError('Um dos jogadores desativou o PvP nesse meio tempo.');
+
+  return runPvp(attacker, defender);
 }
 
 export async function runPvp(attacker: FullCharacter, defender: FullCharacter): Promise<{winner: string; loser: string; log: string[]; xpGained: number; goldStolen: number;}> {

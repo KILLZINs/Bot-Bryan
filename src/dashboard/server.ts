@@ -1169,29 +1169,56 @@ ${activitySdkBootstrap(clientId!)}
 
       const filter = music.ctx.createBiquadFilter();
       filter.type = 'lowpass';
-      filter.frequency.value = 800;
+      filter.frequency.value = 900;
+      filter.Q.value = 0.7;
       filter.connect(master);
 
-      // Três osciladores formando um acorde suave (raiz, quinta, oitava),
-      // levemente destafinados entre si pra soar "orgânico" e não robótico.
-      const notes = [110, 164.81, 220]; // Lá2, Mi3, Lá3
+      // Um "reverb" bem simples via delay com feedback, pra dar espaço ao som
+      // em vez dele soar seco/parado (era isso que causava a sensação de zumbido).
+      const delay = music.ctx.createDelay(2);
+      delay.delayTime.value = 0.6;
+      const feedback = music.ctx.createGain();
+      feedback.gain.value = 0.35;
+      const wet = music.ctx.createGain();
+      wet.gain.value = 0.5;
+      delay.connect(feedback);
+      feedback.connect(delay);
+      delay.connect(wet);
+      wet.connect(master);
+
+      // Cada nota tem seu próprio LFO de volume (períodos diferentes, fora de
+      // fase), fazendo o acorde "respirar" e variar em vez de tocar sempre no
+      // mesmo volume parado — é isso que dá a sensação de pad em vez de zumbido.
+      const notes = [110, 164.81, 220, 220.5]; // Lá2, Mi3, Lá3 (+ uma leve dupla no topo)
       notes.forEach((freq, i) => {
         const osc = music.ctx.createOscillator();
         osc.type = 'sine';
         osc.frequency.value = freq;
-        osc.detune.value = (i - 1) * 4;
+        osc.detune.value = (i - 1.5) * 5;
+
         const oscGain = music.ctx.createGain();
-        oscGain.gain.value = 0.5;
+        oscGain.gain.value = 0.18;
+
+        // LFO de amplitude — período entre 9 e 17s, diferente por nota.
+        const ampLfo = music.ctx.createOscillator();
+        ampLfo.frequency.value = 1 / (9 + i * 2.7);
+        const ampLfoGain = music.ctx.createGain();
+        ampLfoGain.gain.value = 0.12;
+        ampLfo.connect(ampLfoGain);
+        ampLfoGain.connect(oscGain.gain);
+        ampLfo.start();
+
         osc.connect(oscGain);
         oscGain.connect(filter);
+        oscGain.connect(delay);
         osc.start();
       });
 
       // LFO lento modulando o filtro, pra dar uma "respiração" ao pad.
       const lfo = music.ctx.createOscillator();
-      lfo.frequency.value = 0.05;
+      lfo.frequency.value = 0.045;
       const lfoGain = music.ctx.createGain();
-      lfoGain.gain.value = 300;
+      lfoGain.gain.value = 250;
       lfo.connect(lfoGain);
       lfoGain.connect(filter.frequency);
       lfo.start();
@@ -2230,7 +2257,7 @@ ${activitySdkBootstrap(clientId!)}
         \${!turn.finished ? \`
         <div class="action-bar">
           <button class="action-btn" onclick="dungeonArenaAction('attack')">⚔️ Atacar</button>
-          <button class="action-btn" onclick="dungeonArenaAction('skill')" \${turn.skillReady ? '' : 'disabled'}>✨ \${turn.skillName || 'Habilidade'}</button>
+          \${(turn.skills && turn.skills.length ? turn.skills : [{id:'', name:'Habilidade', ready:false}]).map(s => \`<button class="action-btn" onclick="dungeonArenaAction('skill:\${s.id}')" \${s.ready ? '' : 'disabled'}>✨ \${s.name}</button>\`).join('')}
           <button class="action-btn" onclick="dungeonArenaAction('defend')">🛡️ Defender</button>
           <button class="action-btn" onclick="dungeonArenaAction('potion')" \${turn.potionAvailable ? '' : 'disabled'}>🧪 Poção</button>
           <button class="action-btn" onclick="dungeonArenaAction('flee')">🏃 Fugir</button>
@@ -2409,7 +2436,7 @@ ${activitySdkBootstrap(clientId!)}
         \${!turn.finished ? \`
         <div class="action-bar">
           <button class="action-btn" onclick="sendAction('attack')">⚔️ Atacar</button>
-          <button class="action-btn" onclick="sendAction('skill')" \${turn.skillReady ? '' : 'disabled'}>✨ \${turn.skillName || 'Habilidade'}</button>
+          \${(turn.skills && turn.skills.length ? turn.skills : [{id:'', name:'Habilidade', ready:false}]).map(s => \`<button class="action-btn" onclick="sendAction('skill:\${s.id}')" \${s.ready ? '' : 'disabled'}>✨ \${s.name}</button>\`).join('')}
           <button class="action-btn" onclick="sendAction('defend')">🛡️ Defender</button>
           <button class="action-btn" onclick="sendAction('potion')" \${turn.potionAvailable ? '' : 'disabled'}>🧪 Poção</button>
           <button class="action-btn" onclick="sendAction('flee')">🏃 Fugir</button>
@@ -2882,13 +2909,17 @@ ${activitySdkBootstrap(clientId!)}
       ? (character.equippedSkills as string[])
       : (character.divineSkillId ? [character.divineSkillId] : []);
 
+    // Mesma fórmula real do combat.ts: multiplicador dobra por rank
+    // (1,2,4,8,16,32,64,128) — não crescimento de 1.5x que eu tinha usado
+    // por engano aqui antes.
+    const RANK_MULT = [1, 2, 4, 8, 16, 32, 64, 128];
     const RANKS = ['F', 'E', 'D', 'C', 'B', 'A', 'S', 'SS', 'SSS'];
     const skills = availableSkills.map((s: any) => {
       const l = freshLearnedMap.get(s.id);
       const rank = l?.rank ?? 'F';
       const exp = l?.exp ?? 0;
       const rankIndex = Math.max(0, RANKS.indexOf(rank));
-      const nextExp = Math.round((s.rankUpExpRequired || 150) * Math.pow(1.5, rankIndex));
+      const nextExp = Math.round((s.rankUpExpRequired || 150) * (RANK_MULT[rankIndex] ?? 1));
       return {
         id: s.id, name: s.name, emoji: s.emoji, description: s.description,
         energyCost: s.energyCost, unlockLevel: s.unlockLevel,

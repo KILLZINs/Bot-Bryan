@@ -312,13 +312,26 @@ function buildCombatTurnEmbed(turn: CombatTurn, char: FullCharacter): { embed: E
     const fullLog = turn.log.join('\n');
     const logSlice = fullLog.length > 2200 ? '...\n' + fullLog.slice(-2050) : fullLog;
     
+    const skills = turn.skills || [];
+    const firstSkill = skills[0];
+    const extraSkills = skills.slice(1); // até mais 2 habilidades (limite de 3 equipadas)
+
     const actionRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
       new ButtonBuilder().setCustomId('rpg:combate_acao:attack').setLabel('⚔️ Atacar').setStyle(ButtonStyle.Danger),
-      new ButtonBuilder().setCustomId('rpg:combate_acao:skill').setLabel(turn.skillName ? `✨ ${turn.skillName}` : '✨ Habilidade').setStyle(ButtonStyle.Primary).setDisabled(!turn.skillReady),
+      new ButtonBuilder().setCustomId(firstSkill ? `rpg:combate_acao:skill:${firstSkill.id}` : 'rpg:combate_acao:skill').setLabel(firstSkill ? `✨ ${firstSkill.name}` : '✨ Habilidade').setStyle(ButtonStyle.Primary).setDisabled(!firstSkill?.ready),
       new ButtonBuilder().setCustomId('rpg:combate_acao:defend').setLabel('🛡️ Defender').setStyle(ButtonStyle.Secondary),
       new ButtonBuilder().setCustomId('rpg:combate_acao:potion').setLabel('🧪 Poção').setStyle(ButtonStyle.Success).setDisabled(!turn.potionAvailable),
       new ButtonBuilder().setCustomId('rpg:combate_acao:flee').setLabel('🏃 Fugir').setStyle(ButtonStyle.Secondary),
     );
+
+    const rows = [actionRow];
+    if (extraSkills.length > 0) {
+      rows.push(new ActionRowBuilder<ButtonBuilder>().addComponents(
+        ...extraSkills.map(s =>
+          new ButtonBuilder().setCustomId(`rpg:combate_acao:skill:${s.id}`).setLabel(`✨ ${s.name}`).setStyle(ButtonStyle.Primary).setDisabled(!s.ready)
+        )
+      ));
+    }
     
     const status = [ `❤️ Você: **${displayHp}/${stats.maxHp}**`, `👹 ${turn.enemyName}: **${turn.enemyHp}/${turn.enemyMaxHp}**`].join('  •  ');
     
@@ -327,7 +340,7 @@ function buildCombatTurnEmbed(turn: CombatTurn, char: FullCharacter): { embed: E
 
     return {
       embed: new EmbedBuilder().setColor(color).setTitle(`${titleText} — Rodada ${turn.round || 1}`).setDescription(logSlice).addFields({ name: '📊 Combate', value: status }),
-      rows: [actionRow],
+      rows,
     };
   }
   return buildCombatResultEmbed(turn.result!, char, turn.mode);

@@ -1403,6 +1403,9 @@ ${activitySdkBootstrap(clientId!)}
     let citySubTab = 'forja';
 
     function renderCidadeTab() {
+      const loc = state.profileData.location;
+      const isCity = !!(loc?.hasShop && loc?.hasCraft);
+
       document.getElementById('tabBody').innerHTML = \`
         <div class="city-subnav">
           <button class="\${citySubTab === 'forja' ? 'active' : ''}" onclick="switchCitySub('forja')">⚒️ Forja</button>
@@ -1411,6 +1414,16 @@ ${activitySdkBootstrap(clientId!)}
         </div>
         <div id="cityBody"><p class="empty">⏳ Carregando...</p></div>
       \`;
+
+      // Forja e Curandeiro só existem em cidade de verdade (igual ao Discord:
+      // buildCidadeButtons só aparece quando hasShop/hasCraft são true).
+      // Taverna fica de fora dessa trava — ela é acessível de qualquer lugar
+      // no Discord também (não faz parte do hub "Cidade").
+      if (!isCity && citySubTab !== 'taverna') {
+        document.getElementById('cityBody').innerHTML = \`<p class="error">🏰 Você está em <b>\${loc?.name || 'uma região selvagem'}</b>, sem infraestrutura de cidade. Viaje até um assentamento seguro (aba 🗺️ Viajar) para acessar forja e curandeiro.</p>\`;
+        return;
+      }
+
       if (citySubTab === 'forja') renderForjaSub();
       else if (citySubTab === 'taverna') renderTavernaSub();
       else renderCurarSub();
@@ -1867,6 +1880,11 @@ ${activitySdkBootstrap(clientId!)}
     let shopActiveCat = null;
 
     async function renderLojaTab() {
+      const loc = state.profileData.location;
+      if (!loc?.hasShop) {
+        document.getElementById('tabBody').innerHTML = \`<p class="error">🏰 A loja só existe em cidades. Você está em <b>\${loc?.name || 'uma região selvagem'}</b> — viaje até um assentamento seguro na aba 🗺️ Viajar.</p>\`;
+        return;
+      }
       document.getElementById('tabBody').innerHTML = '<p class="empty">⏳ Carregando loja...</p>';
       try {
         const res = await fetch('/api/activities/rpg/shop');
@@ -2667,6 +2685,11 @@ ${activitySdkBootstrap(clientId!)}
     const { recipeId } = req.body || {};
     if (!recipeId) return res.status(400).json({ error: 'recipeId é obrigatório' });
 
+    const character = await getCharacter(discordId);
+    if (!character) return res.status(404).json({ error: 'Personagem não encontrado' });
+    const loc = getLocation(character.currentLocation);
+    if (!loc?.hasCraft) return res.status(403).json({ success: false, message: 'A forja só existe em cidades. Viaje até um assentamento seguro primeiro.' });
+
     const result = await craftItem(discordId, recipeId);
     res.json(result);
   });
@@ -2835,6 +2858,8 @@ ${activitySdkBootstrap(clientId!)}
     const discordId = req.cookies.player_userid as string;
     const character = await getCharacter(discordId);
     if (!character) return res.status(404).json({ error: 'Personagem não encontrado' });
+    const healLoc = getLocation(character.currentLocation);
+    if (!healLoc?.hasShop) return res.json({ success: false, message: 'O curandeiro só existe em cidades. Viaje até um assentamento seguro primeiro.' });
 
     const stats = computeStats(character);
     const hpMissing = stats.maxHp - character.currentHp;
@@ -3037,6 +3062,12 @@ ${activitySdkBootstrap(clientId!)}
     const discordId = req.cookies.player_userid as string;
     const { itemId, qty } = req.body || {};
     if (!itemId) return res.status(400).json({ error: 'itemId é obrigatório' });
+
+    const character = await getCharacter(discordId);
+    if (!character) return res.status(404).json({ error: 'Personagem não encontrado' });
+    const loc = getLocation(character.currentLocation);
+    if (!loc?.hasShop) return res.json({ success: false, message: 'A loja só existe em cidades. Viaje até um assentamento seguro primeiro.' });
+
     const result = await buyItem(discordId, itemId, Number(qty) || 1);
     res.json(result);
   });

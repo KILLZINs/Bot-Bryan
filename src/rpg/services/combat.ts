@@ -48,10 +48,10 @@ interface CombatState {
   poisonRounds: number;
   frozenRounds: number;
   stubbedRounds: number;
-  skillCooldown: number;
+  skillCooldowns: Record<string, number>;
 }
 
-export type CombatAction = 'attack' | 'skill' | 'defend' | 'potion' | 'flee';
+export type CombatAction = 'attack' | 'skill' | 'defend' | 'potion' | 'flee' | `skill:${string}`;
 
 export interface CombatTurn {
   finished: boolean;
@@ -67,6 +67,10 @@ export interface CombatTurn {
   mode: CombatMode;
   skillName?: string;
   skillReady: boolean;
+  // Suporta múltiplas habilidades equipadas (até 3) — skillName/skillReady
+  // acima continuam existindo e espelham a PRIMEIRA equipada, pra não
+  // quebrar nenhum consumidor antigo que ainda só olhe pra elas.
+  skills: { id: string; name: string; emoji: string; energyCost: number; ready: boolean; cooldown: number }[];
   potionAvailable: boolean;
 }
 
@@ -80,10 +84,21 @@ interface InteractiveCombatSession {
   state: CombatState;
   startedAt: Date;
   potionAvailable: boolean;
-  skillUsedInCombat: boolean;
+  skillsUsedInCombat: Set<string>;
 }
 
 const activeCombats = new Map<string, InteractiveCombatSession>();
+
+// Habilidades equipadas do personagem — usa o array novo (equippedSkills,
+// até 3), com fallback pro campo antigo (divineSkillId) pra personagens que
+// nunca reequiparam nada desde que o sistema de múltiplas habilidades foi
+// adicionado. Sem esse fallback, quem nunca abriu o menu de habilidades de
+// novo ficaria sem NENHUMA habilidade utilizável.
+function getEquippedSkillIds(char: FullCharacter): string[] {
+  const equipped = (char as any).equippedSkills;
+  if (Array.isArray(equipped) && equipped.length > 0) return equipped as string[];
+  return char.divineSkillId ? [char.divineSkillId] : [];
+}
 
 // ─── Combate principal (Automático) ─────────────────────────────────────────
 
@@ -123,7 +138,7 @@ export async function runCombat(
     enemyAttackMultiplier: 1, enemyDefenseMultiplier: 1,
     doubleDmgNextHit: false,
     poisonRounds: 0, frozenRounds: 0, stubbedRounds: 0,
-    skillCooldown: 0,
+    skillCooldowns: {},
   };
 
   const MAX_ROUNDS = 20;
@@ -238,18 +253,35 @@ export async function runCombat(
     },
   });
 
-  if (xpGained > 0 && char.divineSkillId) {
-    const skill = DIVINE_SKILLS[char.divineSkillId];
-    if (skill) {
-      const SKILL_RANKS = ['F', 'E', 'D', 'C', 'B', 'A', 'S', 'SS', 'SSS'] as const;
-      const skillXpGain = state.usedSkillThisRound ? Math.max(25, Math.floor(xpGained * 0.4)) : Math.max(5,  Math.floor(xpGained * 0.1));
-      const newSkillExp  = char.divineSkillExp + skillXpGain;
-      const rankIdx      = SKILL_RANKS.indexOf(char.divineSkillRank as typeof SKILL_RANKS[number]);
-      const RANK_MULT    = [1, 2, 4, 8, 16, 32, 64, 128] as const;
-      const canRankUp    = rankIdx >= 0 && rankIdx < SKILL_RANKS.length - 1 && newSkillExp >= (skill.rankUpExpRequired * (RANK_MULT[rankIdx] ?? 1));
-      await prisma.rpgCharacter.update({
-        where: { discordId: char.discordId },
-        data: { divineSkillExp: canRankUp ? 0 : newSkillExp, divineSkillRank: canRankUp ? SKILL_RANKS[rankIdx + 1] : char.divineSkillRank },
+  // Concede XP de rank pra CADA habilidade equipada (até 3), gravando na
+  // tabela por-habilidade (rpg_learned_skills) — a mesma que o site lê.
+  // Isso substitui a lógica antiga que só existia pra UMA habilidade
+  // (divineSkillId/divineSkillExp/divineSkillRank), que é exatamente o
+  // motivo do bug de "só consigo usar uma habilidade" relatado.
+  if (xpGained > 0) {
+    const SKILL_RANKS = ['F', 'E', 'D', 'C', 'B', 'A', 'S', 'SS', 'SSS'] as const;
+    const RANK_MULT = [1, 2, 4, 8, 16, 32, 64, 128] as const;
+
+    for (const skillId of getEquippedSkillIds(char)) {
+      const skill = DIVINE_SKILLS[skillId];
+      if (!skill || skill.type === 'passiva') continue;
+
+      const wasUsed = session.skillsUsedInCombat.has(skillId);
+      const skillXpGain = wasUsed ? Math.max(25, Math.floor(xpGained * 0.4)) : Math.max(5, Math.floor(xpGained * 0.1));
+
+      const learned = await prisma.rpgLearnedSkill.upsert({
+        where: { characterId_skillId: { characterId: char.discordId, skillId } },
+        create: { characterId: char.discordId, skillId, rank: 'F', exp: 0 },
+        update: {},
+      });
+
+      const newExp = learned.exp + skillXpGain;
+      const rankIdx = SKILL_RANKS.indexOf(learned.rank as typeof SKILL_RANKS[number]);
+      const canRankUp = rankIdx >= 0 && rankIdx < SKILL_RANKS.length - 1 && newExp >= (skill.rankUpExpRequired * (RANK_MULT[rankIdx] ?? 1));
+
+      await prisma.rpgLearnedSkill.update({
+        where: { characterId_skillId: { characterId: char.discordId, skillId } },
+        data: { exp: canRankUp ? 0 : newExp, rank: canRankUp ? SKILL_RANKS[rankIdx + 1] : learned.rank },
       });
     }
   }
@@ -310,7 +342,7 @@ export async function startInteractiveCombat(
   const state: CombatState = {
     playerHp: char.currentHp, playerEnergy: char.currentEnergy, enemyHp: scaledEnemy.baseHp, enemyMaxHp: scaledEnemy.baseHp,
     round: 0, usedSkillThisRound: false, berserkActive: 0, shieldActive: 0, enemyAttackMultiplier: 1, enemyDefenseMultiplier: 1,
-    doubleDmgNextHit: false, poisonRounds: 0, frozenRounds: 0, stubbedRounds: 0, skillCooldown: 0,
+    doubleDmgNextHit: false, poisonRounds: 0, frozenRounds: 0, stubbedRounds: 0, skillCooldowns: {},
     log: [
       `**${modeTitle}** — **${char.username}** vs **${enemy.name}** ${enemy.emoji}`,
       `❤️ Seus HP: **${char.currentHp}/${stats.maxHp}** | HP inimigo: **${scaledEnemy.baseHp}/${scaledEnemy.baseHp}**`,
@@ -320,7 +352,7 @@ export async function startInteractiveCombat(
 
   const session: InteractiveCombatSession = {
     char, enemy, scaledEnemy, guildId, mode, stats, state, startedAt: slotStartedAt,
-    potionAvailable: await hasCombatPotion(char.discordId), skillUsedInCombat: false,
+    potionAvailable: await hasCombatPotion(char.discordId), skillsUsedInCombat: new Set(),
   };
   activeCombats.set(char.discordId, session);
   return buildCombatTurn(session);
@@ -331,11 +363,20 @@ export async function takeCombatAction(discordId: string, action: CombatAction):
   if (!session) throw new CombatBlockedError('Essa batalha não está mais ativa. Inicie uma nova batalha.');
 
   const { char, enemy, scaledEnemy, stats, state } = session;
-  const skill = char.divineSkillId ? DIVINE_SKILLS[char.divineSkillId] : undefined;
 
-  if (action === 'skill') {
-    if (!skill || skill.type === 'passiva') return rejectCombatAction(session, 'Você não possui uma habilidade ativa para usar.');
-    if (state.skillCooldown > 0) return rejectCombatAction(session, `Habilidade pronta em **${state.skillCooldown} rodada(s)**.`);
+  // action pode ser "skill" (legado — usa a 1ª equipada) ou "skill:<id>"
+  // (escolhe uma habilidade específica dentre as até 3 equipadas).
+  const isSkillAction = action === 'skill' || action.startsWith('skill:');
+  const equippedIds = getEquippedSkillIds(char);
+  const requestedSkillId = action.startsWith('skill:') ? action.slice(6) : equippedIds[0];
+  const skill = requestedSkillId ? DIVINE_SKILLS[requestedSkillId] : undefined;
+
+  if (isSkillAction) {
+    if (!skill || !equippedIds.includes(requestedSkillId!) || skill.type === 'passiva') {
+      return rejectCombatAction(session, 'Você não possui essa habilidade ativa equipada.');
+    }
+    const cooldown = state.skillCooldowns[skill.id] ?? 0;
+    if (cooldown > 0) return rejectCombatAction(session, `**${skill.name}** pronta em **${cooldown} rodada(s)**.`);
     if (state.playerEnergy < skill.energyCost) return rejectCombatAction(session, `Você precisa de **${skill.energyCost}⚡** para usar ${skill.name}.`);
   }
   if (action === 'potion' && (!session.potionAvailable || state.playerHp >= stats.maxHp)) {
@@ -354,7 +395,7 @@ export async function takeCombatAction(discordId: string, action: CombatAction):
     return buildCombatTurn(session, result);
   }
 
-  if (action === 'skill') useInteractiveSkill(session, skill!);
+  if (isSkillAction) useInteractiveSkill(session, skill!);
   else if (action === 'attack') {
     if (state.frozenRounds > 0) { state.log.push('❄️ Você está congelado e perdeu o turno!'); state.frozenRounds--; } 
     else {
@@ -400,7 +441,9 @@ export async function takeCombatAction(discordId: string, action: CombatAction):
     state.log.push(`☠️ Veneno causa **${poisonDmg}** de dano!`);
     state.poisonRounds--;
   }
-  state.skillCooldown = Math.max(0, state.skillCooldown - 1);
+  for (const id in state.skillCooldowns) {
+    state.skillCooldowns[id] = Math.max(0, state.skillCooldowns[id] - 1);
+  }
 
   if (state.playerHp <= 0) {
     state.log.push(`💀 **DERROTA!** Você foi derrotado por ${enemy.name}...`);
@@ -437,18 +480,30 @@ function useInteractiveSkill(session: InteractiveCombatSession, skill: typeof DI
     state.log.push(`✨ **${skill.name}** ativada: próximo ataque fortalecido.`);
   }
   state.usedSkillThisRound = true;
-  session.skillUsedInCombat = true;
-  state.skillCooldown = skill.cooldownRounds;
+  session.skillsUsedInCombat.add(skill.id);
+  state.skillCooldowns[skill.id] = skill.cooldownRounds;
 }
 
 function buildCombatTurn(session: InteractiveCombatSession, result?: CombatResult): CombatTurn {
   const { char, enemy, mode, state } = session;
-  const skill = char.divineSkillId ? DIVINE_SKILLS[char.divineSkillId] : undefined;
+  const equippedIds = getEquippedSkillIds(char);
+  const skillsInfo = equippedIds
+    .map((id) => DIVINE_SKILLS[id])
+    .filter((s): s is typeof DIVINE_SKILLS[string] => !!s && s.type !== 'passiva')
+    .map((s) => {
+      const cooldown = state.skillCooldowns[s.id] ?? 0;
+      return {
+        id: s.id, name: s.name, emoji: s.emoji, energyCost: s.energyCost, cooldown,
+        ready: cooldown === 0 && state.playerEnergy >= s.energyCost,
+      };
+    });
+  const firstSkill = skillsInfo[0];
+
   return {
     finished: !!result, result, log: state.log, round: state.round,
     playerHp: result?.playerHpLeft ?? state.playerHp, playerEnergy: result?.playerEnergyLeft ?? state.playerEnergy,
     enemyHp: state.enemyHp, enemyMaxHp: state.enemyMaxHp, enemyName: enemy.name, enemyEmoji: enemy.emoji, mode,
-    skillName: skill?.name, skillReady: !!skill && skill.type !== 'passiva' && state.skillCooldown === 0 && state.playerEnergy >= skill.energyCost,
+    skillName: firstSkill?.name, skillReady: !!firstSkill?.ready, skills: skillsInfo,
     potionAvailable: session.potionAvailable && state.playerHp < session.stats.maxHp,
   };
 }

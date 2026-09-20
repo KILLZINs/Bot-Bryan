@@ -38,6 +38,7 @@ export async function handleRpgButton(i: ButtonInteraction, action: string): Pro
     const parts      = fullAction.split(':');
     const baseAction = parts[0];
     const param1     = parts[1];
+    const param2     = parts[2];
 
     switch (baseAction) {
       // ═══════════════════════════════════════════════════════════════════════
@@ -243,8 +244,11 @@ export async function handleRpgButton(i: ButtonInteraction, action: string): Pro
 
       case 'combate_acao': {
         await i.deferUpdate();
-        const combatAction = param1 as 'attack' | 'skill' | 'defend' | 'potion' | 'flee';
-        if (!['attack', 'skill', 'defend', 'potion', 'flee'].includes(combatAction)) {
+        // param1 é a ação-base ('attack'|'skill'|'defend'|'potion'|'flee').
+        // Quando é 'skill' e vem um param2, é o ID de qual das até 3
+        // habilidades equipadas foi clicada (customId: ...skill:<skillId>).
+        const validBase = ['attack', 'skill', 'defend', 'potion', 'flee'];
+        if (!validBase.includes(param1)) {
           await i.editReply({
             embeds: [errorEmbed('Ação inválida', 'Essa ação de combate não existe.')],
             files: [],
@@ -252,6 +256,8 @@ export async function handleRpgButton(i: ButtonInteraction, action: string): Pro
           });
           return;
         }
+        const combatAction = (param1 === 'skill' && param2 ? `skill:${param2}` : param1) as
+          'attack' | 'skill' | 'defend' | 'potion' | 'flee' | `skill:${string}`;
         const char = await getOrCreateCharacter(discordId, username);
         try {
           const { embed, rows } = await doCombatAction(discordId, combatAction, char);

@@ -2,10 +2,11 @@
 // HANDLER DE BOTÕES RPG
 // ═══════════════════════════════════════════════════════════════════════
 
-import { ButtonInteraction, PermissionFlagsBits, ActionRowBuilder, ButtonBuilder, ButtonStyle, AttachmentBuilder } from 'discord.js';
+import { ButtonInteraction, PermissionFlagsBits, ActionRowBuilder, ButtonBuilder, ButtonStyle, AttachmentBuilder, EmbedBuilder } from 'discord.js';
 import { prisma } from '../../database/client';
 import { getOrCreateCharacter, computeStats, applyPassiveEnergyRegen } from '../services/character';
 import { getLocation } from '../constants/locations';
+import { getPendingPvpChallenge, resolvePendingPvpChallenge, declinePvpChallenge, PvpBlockedError } from '../services/combat';
 import { buildProfileEmbed, buildCidadeEmbed, buildCidadeButtons, buildCidadeButtons2, buildPontosEmbed, buildPontosSelect } from '../panels/profile';
 import { buildTravelEmbed, buildTravelSelect, buildTravelBackButton } from '../panels/travel';
 import {
@@ -179,6 +180,52 @@ export async function handleRpgButton(i: ButtonInteraction, action: string): Pro
           files: [],
           components: [buildPontosSelect(char.statPoints)],
         });
+        break;
+      }
+
+      case 'pvp_aceitar': {
+        await i.deferUpdate();
+        const challenge = getPendingPvpChallenge(i.user.id);
+        if (!challenge) {
+          await i.followUp({ content: '⏳ Esse desafio já expirou ou não é mais válido.', ephemeral: true });
+          return;
+        }
+        if (i.user.id !== challenge.defenderId) {
+          await i.followUp({ content: '❌ Esse duelo não é seu — só quem foi desafiado pode responder.', ephemeral: true });
+          return;
+        }
+        try {
+          const pvpResult = await resolvePendingPvpChallenge(i.user.id);
+          const color = pvpResult.winner === challenge.attackerId ? 0x27AE60 : 0xE74C3C;
+          const embed = new EmbedBuilder()
+            .setColor(color)
+            .setTitle('⚔️ Resultado do Duelo')
+            .setDescription(pvpResult.log.slice(-10).join('\n'))
+            .addFields(
+              { name: '🏆 Vencedor', value: `<@${pvpResult.winner}>`, inline: true },
+              { name: '⭐ XP Ganho', value: `+${pvpResult.xpGained}`, inline: true },
+              { name: '💰 Ouro', value: `+${pvpResult.goldStolen}`, inline: true },
+            );
+          await i.editReply({ content: null, embeds: [embed], components: [] });
+        } catch (err) {
+          if (err instanceof PvpBlockedError) {
+            await i.editReply({ content: null, embeds: [errorEmbed('PvP', err.message)], components: [] });
+            return;
+          }
+          throw err;
+        }
+        break;
+      }
+
+      case 'pvp_recusar': {
+        await i.deferUpdate();
+        const challenge = getPendingPvpChallenge(i.user.id);
+        if (!challenge || i.user.id !== challenge.defenderId) {
+          await i.followUp({ content: '❌ Esse duelo não é seu.', ephemeral: true });
+          return;
+        }
+        declinePvpChallenge(i.user.id);
+        await i.editReply({ content: null, embeds: [infoEmbed('❌ Duelo Recusado', `${challenge.defenderUsername} recusou o desafio. Ninguém perdeu nada.`)], components: [] });
         break;
       }
 

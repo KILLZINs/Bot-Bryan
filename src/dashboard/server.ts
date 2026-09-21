@@ -21,6 +21,7 @@ import { doExplore } from '../rpg/panels/exploracao';
 import { EXPLORE_ENERGY_COST, EXPLORE_COOLDOWN_MS } from '../rpg/constants/exploration';
 import { DIVINE_SKILLS } from '../rpg/constants/skills';
 import { getActiveBoss, attackWorldBoss, WORLD_BOSS_TEMPLATES, bossHpBar } from '../rpg/services/worldBoss';
+import { getPendingPvpChallenge, createPvpChallenge, resolvePendingPvpChallenge, declinePvpChallenge, PvpBlockedError } from '../rpg/services/combat';
 import { CLASS_MISSIONS } from '../rpg/constants/class-missions';
 import { equipItem, useConsumable, sellItem, buyItem } from '../rpg/services/inventory';
 import { travelTo } from '../rpg/panels/travel';
@@ -1127,6 +1128,19 @@ ${activitySdkBootstrap(clientId!)}
   .lb-row.me { color: var(--primary2); font-weight: 700; }
   .lb-rank { color: var(--text-muted); width: 24px; display: inline-block; }
 
+  .pvp-challenge-box { background: radial-gradient(circle at 50% 0%, rgba(230,126,34,0.15), transparent 60%), var(--card); border: 1px solid var(--orange); border-radius: 16px; padding: 26px; text-align: center; margin-bottom: 20px; }
+  .pvp-challenge-box .icon { font-size: 2.5rem; margin-bottom: 8px; }
+  .pvp-actions { display: flex; gap: 12px; justify-content: center; margin-top: 16px; }
+  .btn-pvp-accept { background: linear-gradient(120deg, var(--green), #1abc9c); color: white; border: none; padding: 12px 26px; border-radius: 10px; font-weight: 800; cursor: pointer; }
+  .btn-pvp-decline { background: var(--card2); color: white; border: 1px solid var(--red); padding: 12px 26px; border-radius: 10px; font-weight: 800; cursor: pointer; }
+  .pvp-send-box { background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 22px; margin-bottom: 18px; }
+  .pvp-send-box input { width: 100%; background: #0B0C14; border: 1px solid var(--border); color: white; padding: 12px 14px; border-radius: 10px; outline: none; margin: 10px 0; }
+  .btn-pvp-challenge { background: linear-gradient(120deg, var(--orange), var(--red)); color: white; border: none; padding: 12px 26px; border-radius: 10px; font-weight: 800; cursor: pointer; }
+  .pvp-stats-row { display: flex; gap: 14px; margin-bottom: 18px; }
+  .pvp-stat-card { flex: 1; background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 16px; text-align: center; }
+  .pvp-stat-card .value { font-size: 1.4rem; font-weight: 800; }
+  .pvp-stat-card .label { color: var(--text-muted); font-size: 0.75rem; }
+
   .btn-again { display: block; margin: 18px auto 0; background: var(--primary); color: white; border: none; padding: 12px 26px; border-radius: 10px; font-weight: 700; cursor: pointer; }
 </style>
 </head>
@@ -1335,7 +1349,7 @@ ${activitySdkBootstrap(clientId!)}
       document.getElementById('wrap').innerHTML = \`
         <div id="profileHeaderWrap">\${buildHeaderHtml(data)}</div>
         <div class="tab-nav" id="tabNav">
-          \${['batalha','dungeon','boss','cidade','explorar','pesca','missoes','habilidades','inventario','loja','viajar','treinar','meditar','pontos'].map(t => \`<button class="tab-btn \${state.activeTab === t ? 'active' : ''}" onclick="switchTab('\${t}')">\${tabLabel(t)}</button>\`).join('')}
+          \${['batalha','dungeon','boss','pvp','cidade','explorar','pesca','missoes','habilidades','inventario','loja','viajar','treinar','meditar','pontos'].map(t => \`<button class="tab-btn \${state.activeTab === t ? 'active' : ''}" onclick="switchTab('\${t}')">\${tabLabel(t)}</button>\`).join('')}
         </div>
         <div id="tabBody"></div>
       \`;
@@ -1344,7 +1358,7 @@ ${activitySdkBootstrap(clientId!)}
     }
 
     function tabLabel(t) {
-      return { batalha: '⚔️ Batalha', dungeon: '🏰 Dungeon', boss: '🐉 Boss Mundial', cidade: '🏙️ Cidade', explorar: '🌍 Explorar', pesca: '🎣 Pesca', missoes: '📋 Missões', habilidades: '✨ Habilidades', inventario: '🎒 Inventário', loja: '🛒 Loja', viajar: '🗺️ Viajar', treinar: '🥊 Treinar', meditar: '🧘 Meditar', pontos: '📊 Pontos' }[t];
+      return { batalha: '⚔️ Batalha', dungeon: '🏰 Dungeon', boss: '🐉 Boss Mundial', pvp: '🤺 PvP', cidade: '🏙️ Cidade', explorar: '🌍 Explorar', pesca: '🎣 Pesca', missoes: '📋 Missões', habilidades: '✨ Habilidades', inventario: '🎒 Inventário', loja: '🛒 Loja', viajar: '🗺️ Viajar', treinar: '🥊 Treinar', meditar: '🧘 Meditar', pontos: '📊 Pontos' }[t];
     }
 
     function switchTab(t) {
@@ -1357,6 +1371,7 @@ ${activitySdkBootstrap(clientId!)}
       if (t === 'batalha') return renderBatalhaTab();
       if (t === 'dungeon') return renderDungeonTab();
       if (t === 'boss') return renderBossTab();
+      if (t === 'pvp') return renderPvpTab();
       if (t === 'cidade') return renderCidadeTab();
       if (t === 'explorar') return renderExplorarTab();
       if (t === 'pesca') return renderPescaTab();
@@ -1397,6 +1412,93 @@ ${activitySdkBootstrap(clientId!)}
       } catch (e) {
         sel.innerHTML = '<option value="">Erro ao carregar inimigos</option>';
       }
+    }
+
+    // ───────────────────────── ABA: PVP ─────────────────────────
+    async function renderPvpTab() {
+      document.getElementById('tabBody').innerHTML = '<p class="empty">⏳ Carregando arena...</p>';
+      try {
+        const res = await fetch('/api/activities/rpg/pvp');
+        const data = await res.json();
+
+        const statsHtml = \`
+          <div class="pvp-stats-row">
+            <div class="pvp-stat-card"><div class="value">\${data.pvpWins}</div><div class="label">Vitórias</div></div>
+            <div class="pvp-stat-card"><div class="value">\${data.pvpLosses}</div><div class="label">Derrotas</div></div>
+            <div class="pvp-stat-card"><div class="value">\${data.pvpEnabled ? '✅' : '🚫'}</div><div class="label">PvP \${data.pvpEnabled ? 'Ativado' : 'Desativado'}</div></div>
+          </div>\`;
+
+        let challengeHtml = '';
+        if (data.incoming) {
+          challengeHtml = \`
+            <div class="pvp-challenge-box">
+              <div class="icon">⚔️</div>
+              <p style="font-weight:800; font-size:1.1rem;">\${data.incoming.attackerUsername} te desafiou para um duelo!</p>
+              <p style="color:var(--text-muted); font-size:0.85rem; margin-top:6px;">Se você recusar ou não responder em 2 minutos, nada acontece — ninguém perde nada.</p>
+              <div class="pvp-actions">
+                <button class="btn-pvp-accept" onclick="doPvpRespond('accept')">✅ Aceitar Duelo</button>
+                <button class="btn-pvp-decline" onclick="doPvpRespond('decline')">❌ Recusar</button>
+              </div>
+            </div>\`;
+        }
+
+        const sendHtml = \`
+          <div class="pvp-send-box">
+            <p style="font-weight:700; margin-bottom:4px;">🎯 Desafiar alguém</p>
+            <p style="color:var(--text-muted); font-size:0.82rem;">Cole o ID do Discord da pessoa que você quer desafiar. Ela vai ver um pedido de duelo com Aceitar/Recusar — o combate só acontece se ela aceitar.</p>
+            <input id="pvpTargetId" type="text" placeholder="ID do Discord do alvo">
+            <button class="btn-pvp-challenge" \${data.onCooldown ? 'disabled' : ''} onclick="doSendChallenge()">⚔️ Enviar Desafio</button>
+            \${data.onCooldown ? \`<p style="color:var(--orange); font-size:0.8rem; margin-top:8px;">⏳ Aguarde \${data.cooldownRemMin} min para desafiar de novo</p>\` : ''}
+          </div>\`;
+
+        document.getElementById('tabBody').innerHTML = \`<div id="pvpFeedback"></div>\${statsHtml}\${challengeHtml}\${sendHtml}\`;
+      } catch (e) {
+        document.getElementById('tabBody').innerHTML = '<p class="error">Erro ao carregar PvP.</p>';
+      }
+    }
+
+    async function doSendChallenge() {
+      const targetId = document.getElementById('pvpTargetId').value.trim();
+      if (!targetId) return;
+      try {
+        const res = await fetch('/api/activities/rpg/pvp/challenge', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ targetId })
+        });
+        const result = await res.json();
+        document.getElementById('pvpFeedback').innerHTML = actionFeedback(result);
+      } catch (e) {}
+    }
+
+    async function doPvpRespond(action) {
+      try {
+        const res = await fetch('/api/activities/rpg/pvp/' + action, { method: 'POST' });
+        const result = await res.json();
+
+        if (action === 'decline') {
+          document.getElementById('pvpFeedback').innerHTML = '<div class="action-feedback ok">Duelo recusado. Ninguém perdeu nada.</div>';
+          renderPvpTab();
+          return;
+        }
+
+        if (!result.success) {
+          document.getElementById('pvpFeedback').innerHTML = actionFeedback(result);
+          renderPvpTab();
+          return;
+        }
+
+        const won = result.winner === state.profileData.character.discordId;
+        document.getElementById('tabBody').innerHTML = \`
+          <div class="result-banner \${won ? 'vitoria' : 'derrota'}">\${won ? '🏆 Você venceu o duelo!' : '💀 Você perdeu o duelo!'}
+            <div class="reward-fields">
+              <div class="reward-field">⭐ +\${result.xpGained} XP</div>
+              <div class="reward-field">💰 \${won ? '+' : '-'}\${result.goldStolen} Ouro</div>
+            </div>
+          </div>
+          <div class="combat-log">\${(result.log || []).map(l => '<div>' + l + '</div>').join('')}</div>
+          <button class="btn-again" onclick="refreshProfile().then(renderPvpTab);">Voltar</button>
+        \`;
+      } catch (e) {}
     }
 
     // ───────────────────────── ABA: CIDADE (FORJA + TAVERNA) ─────────────────────────
@@ -3017,6 +3119,67 @@ ${activitySdkBootstrap(clientId!)}
 
     const result = await attackWorldBoss(discordId, username, guildId);
     res.json(result);
+  });
+
+  // ── PvP: mesmo sistema de desafio (Aceitar/Recusar) de
+  // src/rpg/services/combat.ts — o Map de desafios pendentes é COMPARTILHADO
+  // com o Discord (mesmo processo), então um desafio criado num lado aparece
+  // pro alvo no outro também.
+  app.get('/api/activities/rpg/pvp', requirePlayerAuth, async (req, res) => {
+    const discordId = req.cookies.player_userid as string;
+    const character = await getCharacter(discordId);
+    if (!character) return res.status(404).json({ error: 'Personagem não encontrado' });
+
+    const incoming = getPendingPvpChallenge(discordId);
+    const onCooldown = !!(character.lastPvp && (Date.now() - character.lastPvp.getTime()) < 10 * 60 * 1000);
+    const cooldownRemMin = onCooldown ? Math.ceil((10 * 60 * 1000 - (Date.now() - character.lastPvp!.getTime())) / 60000) : 0;
+
+    res.json({
+      incoming: incoming && incoming.defenderId === discordId ? incoming : null,
+      pvpEnabled: character.pvpEnabled,
+      pvpWins: character.pvpWins, pvpLosses: character.pvpLosses,
+      onCooldown, cooldownRemMin,
+    });
+  });
+
+  app.post('/api/activities/rpg/pvp/challenge', requirePlayerAuth, async (req, res) => {
+    const discordId = req.cookies.player_userid as string;
+    const { targetId } = req.body || {};
+    if (!targetId) return res.status(400).json({ error: 'targetId é obrigatório' });
+    if (targetId === discordId) return res.json({ success: false, message: 'Você não pode se desafiar!' });
+
+    const [attacker, defender] = await Promise.all([getCharacter(discordId), getCharacter(targetId)]);
+    if (!attacker) return res.status(404).json({ error: 'Seu personagem não foi encontrado' });
+    if (!defender) return res.json({ success: false, message: 'Esse jogador ainda não tem personagem de RPG.' });
+    if (!attacker.pvpEnabled || !defender.pvpEnabled) return res.json({ success: false, message: 'Um dos jogadores está com PvP desativado.' });
+
+    const onCooldown = attacker.lastPvp && (Date.now() - attacker.lastPvp.getTime()) < 10 * 60 * 1000;
+    if (onCooldown) return res.json({ success: false, message: 'Aguarde 10 minutos entre batalhas PvP.' });
+
+    try {
+      createPvpChallenge(attacker, defender);
+      res.json({ success: true, message: `⚔️ Desafio enviado para ${defender.username}! Ele(a) tem 2 minutos para responder.` });
+    } catch (err) {
+      if (err instanceof PvpBlockedError) return res.json({ success: false, message: err.message });
+      throw err;
+    }
+  });
+
+  app.post('/api/activities/rpg/pvp/accept', requirePlayerAuth, async (req, res) => {
+    const discordId = req.cookies.player_userid as string;
+    try {
+      const pvpResult = await resolvePendingPvpChallenge(discordId);
+      res.json({ success: true, ...pvpResult });
+    } catch (err) {
+      if (err instanceof PvpBlockedError) return res.json({ success: false, message: err.message });
+      throw err;
+    }
+  });
+
+  app.post('/api/activities/rpg/pvp/decline', requirePlayerAuth, async (req, res) => {
+    const discordId = req.cookies.player_userid as string;
+    declinePvpChallenge(discordId);
+    res.json({ success: true });
   });
 
 

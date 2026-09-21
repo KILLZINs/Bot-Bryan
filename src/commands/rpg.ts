@@ -5,13 +5,14 @@
 import {
   SlashCommandBuilder, ChatInputCommandInteraction, EmbedBuilder,
   ActionRowBuilder, StringSelectMenuBuilder, StringSelectMenuOptionBuilder, AttachmentBuilder,
+  ButtonBuilder, ButtonStyle,
 } from 'discord.js';
 import { Command } from '../types';
 import { getOrCreateCharacter, getCharacter, computeStats } from '../rpg/services/character';
 import { buildProfileEmbed } from '../rpg/panels/profile';
 import { TIER1_CLASSES } from '../rpg/constants/classes';
 import { TITLE_LIST, BACKGROUND_LIST } from '../rpg/constants/cosmetics'; // ✅ Importação de cosméticos integrada
-import { runPvp } from '../rpg/services/combat';
+import { runPvp, createPvpChallenge, PvpBlockedError } from '../rpg/services/combat';
 import { errorEmbed, successEmbed } from '../utils/embeds';
 import { prisma } from '../database/client';
 import { generateProfileCard } from '../rpg/utils/profileCanvas';
@@ -239,20 +240,30 @@ export default {
         return;
       }
 
-      const pvpResult = await runPvp(attacker, defender);
-      const color = pvpResult.winner === discordId ? 0x27AE60 : 0xE74C3C;
+      // ⚠️ Antes disso o duelo era resolvido NA HORA, sem o desafiado nem
+      // saber — agora só cria um desafio pendente. O combate real só
+      // acontece se/quando o ALVO clicar em "Aceitar".
+      try {
+        createPvpChallenge(attacker, defender);
+      } catch (err) {
+        if (err instanceof PvpBlockedError) {
+          await interaction.editReply({ embeds: [errorEmbed('PvP', err.message)] });
+          return;
+        }
+        throw err;
+      }
 
-      const embed = new EmbedBuilder()
-        .setColor(color)
-        .setTitle('⚔️ Resultado do PvP')
-        .setDescription(pvpResult.log.slice(-10).join('\n'))
-        .addFields(
-          { name: '🏆 Vencedor', value: `<@${pvpResult.winner}>`, inline: true },
-          { name: '⭐ XP Ganho', value: `+${pvpResult.xpGained}`, inline: true },
-          { name: '💰 Ouro', value: `+${pvpResult.goldStolen}`, inline: true },
-        );
+      const challengeEmbed = new EmbedBuilder()
+        .setColor(0xE67E22)
+        .setTitle('⚔️ Desafio de PvP!')
+        .setDescription(`<@${target.id}>, **${attacker.username}** te desafiou para um duelo!\n\nVocê tem **2 minutos** para responder. Se recusar ou não responder, nada acontece — ninguém perde ouro nem HP.`);
 
-      await interaction.editReply({ embeds: [embed] });
+      const challengeButtons = new ActionRowBuilder<ButtonBuilder>().addComponents(
+        new ButtonBuilder().setCustomId('rpg:pvp_aceitar').setLabel('✅ Aceitar Duelo').setStyle(ButtonStyle.Success),
+        new ButtonBuilder().setCustomId('rpg:pvp_recusar').setLabel('❌ Recusar').setStyle(ButtonStyle.Danger),
+      );
+
+      await interaction.editReply({ content: `<@${target.id}>`, embeds: [challengeEmbed], components: [challengeButtons] });
       return;
     }
 

@@ -37,8 +37,9 @@ import {
   listTeams as listFutTeams, createTeam as createFutTeam, deleteTeam as deleteFutTeam, setMemberTeam as setFutMemberTeam,
   createPartida, getOpenPartida, getPartidaById, deletePartida, listPartidaHistory, joinPartida, addOfflinePlayer,
   setTeam, autoBalanceTeams, startPartida, recordEvent, finishPartida, getProfile as getFutProfile, getRanking as getFutRanking,
-  getUserProfile as getFutUserProfile, setUserPosition as setFutUserPosition,
-  type FutEventType, type FutMode, type FutTeam, type FutResultado,
+  getUserProfile as getFutUserProfile, setUserPosition as setFutUserPosition, listGoalVideos,
+  createChamada as createFutChamada, listChamadas as listFutChamadas, deleteChamada as deleteFutChamada, respondChamada as respondFutChamada,
+  type FutEventType, type FutMode, type FutTeam, type FutResultado, type FutRsvpStatus,
 } from '../fut/services/pelada';
 
 const BOT_OWNER_ID = '1195254699943796791';
@@ -1724,10 +1725,18 @@ ${activitySdkBootstrap(clientId!)}
       const assistRef = (req.body?.assistDiscordId || req.body?.assistApelido)
         ? { discordId: req.body?.assistDiscordId || undefined, apelido: req.body?.assistApelido || undefined }
         : undefined;
+      const videoUrl = typeof req.body?.videoUrl === 'string' ? req.body.videoUrl : undefined;
 
-      await recordEvent(partida.id, ref, type, assistRef);
+      await recordEvent(partida.id, ref, type, assistRef, videoUrl);
       res.json({ partida: await serializeFutPartida((await getPartidaById(partida.id))!) });
     } catch (err) { handleFutError(res, err); }
+  });
+
+  app.get('/api/activities/fut/clans/:id/gols', requirePlayerAuth, async (req, res) => {
+    const partida = await getOpenPartida(req.params.id) ?? (await listPartidaHistory(req.params.id, 1))[0];
+    if (!partida) return res.json({ videos: [] });
+    const videos = await listGoalVideos(partida.id);
+    res.json({ videos: videos.map((v) => ({ id: v.id, videoUrl: v.videoUrl, displayName: v.player?.displayName || 'Desconhecido' })) });
   });
 
   app.post('/api/activities/fut/clans/:id/finish', requirePlayerAuth, async (req, res) => {
@@ -1777,6 +1786,54 @@ ${activitySdkBootstrap(clientId!)}
       await setFutUserPosition(userId, mode, String(req.body?.position || ''));
       const profile = await getFutUserProfile(userId);
       res.json({ positionFutsal: profile?.positionFutsal || '', positionCampo: profile?.positionCampo || '' });
+    } catch (err) { handleFutError(res, err); }
+  });
+
+  // ── "Chamar o fut": convite (local, horário, PIX, link) + RSVP ──────────
+  function serializeChamada(chamada: { id: string; local: string; horario: string; pix: string | null; link: string | null; mensagem: string | null; creatorId: string; createdAt: Date; respostas: { discordId: string; displayName: string; status: string }[] }) {
+    return {
+      id: chamada.id, local: chamada.local, horario: chamada.horario, pix: chamada.pix, link: chamada.link,
+      mensagem: chamada.mensagem, creatorId: chamada.creatorId, createdAt: chamada.createdAt,
+      respostas: chamada.respostas,
+    };
+  }
+
+  app.get('/api/activities/fut/clans/:id/chamadas', requirePlayerAuth, async (req, res) => {
+    const chamadas = await listFutChamadas(req.params.id, 5);
+    res.json({ chamadas: chamadas.map(serializeChamada) });
+  });
+
+  app.post('/api/activities/fut/clans/:id/chamadas', requirePlayerAuth, async (req, res) => {
+    try {
+      const userId = req.cookies!.player_userid as string;
+      const chamada = await createFutChamada(req.params.id, userId, {
+        local: String(req.body?.local || ''),
+        horario: String(req.body?.horario || ''),
+        pix: req.body?.pix || undefined,
+        link: req.body?.link || undefined,
+        mensagem: req.body?.mensagem || undefined,
+      });
+      res.json({ chamada: serializeChamada({ ...chamada, respostas: [] }) });
+    } catch (err) { handleFutError(res, err); }
+  });
+
+  app.delete('/api/activities/fut/clans/:id/chamadas/:chamadaId', requirePlayerAuth, async (req, res) => {
+    try {
+      const userId = req.cookies!.player_userid as string;
+      await deleteFutChamada(req.params.chamadaId, userId);
+      res.json({ ok: true });
+    } catch (err) { handleFutError(res, err); }
+  });
+
+  app.post('/api/activities/fut/clans/:id/chamadas/:chamadaId/rsvp', requirePlayerAuth, async (req, res) => {
+    try {
+      const userId = req.cookies!.player_userid as string;
+      const username = (req.cookies!.player_username as string) || 'Jogador';
+      const status = req.body?.status as FutRsvpStatus;
+      if (!['vou', 'talvez', 'nao_vou'].includes(status)) return res.status(400).json({ error: 'Status inválido.' });
+      await respondFutChamada(req.params.chamadaId, userId, username, status);
+      const chamadas = await listFutChamadas(req.params.id, 5);
+      res.json({ chamadas: chamadas.map(serializeChamada) });
     } catch (err) { handleFutError(res, err); }
   });
 
@@ -1924,12 +1981,14 @@ ${activitySdkBootstrap(clientId!)}
       <div class="crumb"><button onclick="voltarParaClanList()">← Clãs</button><span id="clanBreadcrumb"></span></div>
       <div class="tabs">
         <button class="tab active" id="tabPelada" onclick="showTab('pelada')">Partida</button>
+        <button class="tab" id="tabChamar" onclick="showTab('chamar')">Chamar</button>
         <button class="tab" id="tabElenco" onclick="showTab('elenco')">Elenco</button>
         <button class="tab" id="tabHistorico" onclick="showTab('historico')">Histórico</button>
         <button class="tab" id="tabPerfil" onclick="showTab('perfil')">Perfil</button>
         <button class="tab" id="tabRanking" onclick="showTab('ranking')">Ranking</button>
       </div>
       <div id="panelPelada"></div>
+      <div id="panelChamar" style="display:none"></div>
       <div id="panelElenco" style="display:none"></div>
       <div id="panelHistorico" style="display:none"></div>
       <div id="panelPerfil" style="display:none"></div>
@@ -2043,16 +2102,19 @@ ${activitySdkBootstrap(clientId!)}
     function showTab(tab) {
       currentTab = tab;
       document.getElementById('tabPelada').classList.toggle('active', tab === 'pelada');
+      document.getElementById('tabChamar').classList.toggle('active', tab === 'chamar');
       document.getElementById('tabElenco').classList.toggle('active', tab === 'elenco');
       document.getElementById('tabHistorico').classList.toggle('active', tab === 'historico');
       document.getElementById('tabPerfil').classList.toggle('active', tab === 'perfil');
       document.getElementById('tabRanking').classList.toggle('active', tab === 'ranking');
       document.getElementById('panelPelada').style.display = tab === 'pelada' ? 'block' : 'none';
+      document.getElementById('panelChamar').style.display = tab === 'chamar' ? 'block' : 'none';
       document.getElementById('panelElenco').style.display = tab === 'elenco' ? 'block' : 'none';
       document.getElementById('panelHistorico').style.display = tab === 'historico' ? 'block' : 'none';
       document.getElementById('panelPerfil').style.display = tab === 'perfil' ? 'block' : 'none';
       document.getElementById('panelRanking').style.display = tab === 'ranking' ? 'block' : 'none';
       if (tab === 'pelada') refreshPartida();
+      if (tab === 'chamar') loadChamadas();
       if (tab === 'elenco') loadElenco();
       if (tab === 'historico') loadHistorico();
       if (tab === 'perfil') loadPerfil();
@@ -2148,6 +2210,7 @@ ${activitySdkBootstrap(clientId!)}
             <select id="eventPlayer">\${playerOptionsHtml(partida)}</select>
             <select id="eventAssist"><option value="">Sem assistência</option>\${playerOptionsHtml(partida)}</select>
           </div>
+          <div class="row"><input id="eventVideo" type="text" placeholder="Link do vídeo do gol (opcional)" style="flex:1;min-width:200px;"></div>
           <div class="row">
             <button class="btn" onclick="registrarEvento('gol')">⚽ Gol</button>
             <button class="btn secondary" onclick="registrarEvento('defesa')">🧤 Defesa</button>
@@ -2163,8 +2226,23 @@ ${activitySdkBootstrap(clientId!)}
           <div class="row" style="justify-content:center;"><button class="btn" onclick="criarPartida()">Criar nova partida</button></div>\`;
       }
 
+      if (partida.status !== 'aberta') {
+        html += \`<div class="row" style="justify-content:center;margin-top:8px;"><button class="btn secondary" onclick="verVideosGol()">🎬 Vídeos de gol</button></div><div id="videosGolBox"></div>\`;
+      }
+
       html += '</div>';
       panel.innerHTML = html;
+    }
+
+    async function verVideosGol() {
+      const box = document.getElementById('videosGolBox');
+      if (!box) return;
+      box.innerHTML = '<div class="empty-hint">Carregando...</div>';
+      try {
+        const data = await api('/api/activities/fut/clans/' + currentClan.id + '/gols');
+        if (!data.videos.length) { box.innerHTML = '<div class="empty-hint">Nenhum gol com vídeo salvo ainda.</div>'; return; }
+        box.innerHTML = '<div class="unassigned">' + data.videos.map(v => \`<span class="chip">🎬 \${v.displayName} — <a href="\${v.videoUrl}" target="_blank" rel="noopener">assistir</a></span>\`).join('') + '</div>';
+      } catch (e) { box.innerHTML = '<div class="empty-hint">❌ ' + e.message + '</div>'; }
     }
 
     async function refreshPartida() {
@@ -2226,10 +2304,14 @@ ${activitySdkBootstrap(clientId!)}
       if (!playerVal) return showToast('❌ Escolha um jogador.');
       const ref = parsePlayerValue(playerVal);
       const body = { type, discordId: ref.discordId, apelido: ref.apelido };
-      if (type === 'gol' && assistVal) {
-        const assistRef = parsePlayerValue(assistVal);
-        body.assistDiscordId = assistRef.discordId;
-        body.assistApelido = assistRef.apelido;
+      if (type === 'gol') {
+        if (assistVal) {
+          const assistRef = parsePlayerValue(assistVal);
+          body.assistDiscordId = assistRef.discordId;
+          body.assistApelido = assistRef.apelido;
+        }
+        const videoEl = document.getElementById('eventVideo');
+        if (videoEl && videoEl.value.trim()) body.videoUrl = videoEl.value.trim();
       }
       try { await api('/api/activities/fut/clans/' + currentClan.id + '/event', { method: 'POST', body: JSON.stringify(body) }); showToast('✅ Evento registrado!'); refreshPartida(); }
       catch (e) { showToast('❌ ' + e.message); }
@@ -2380,6 +2462,84 @@ ${activitySdkBootstrap(clientId!)}
         await api('/api/activities/fut/clans/' + currentClan.id + '/members/team', { method: 'POST', body: JSON.stringify(body) });
         showToast('✅ Elenco atualizado!');
         loadElenco();
+      } catch (e) { showToast('❌ ' + e.message); }
+    }
+
+    // ── Chamar o fut: convite (local, horário, PIX, link) + RSVP ─────────
+    async function loadChamadas() {
+      const panel = document.getElementById('panelChamar');
+      panel.innerHTML = '<div class="empty-hint">Carregando...</div>';
+      try {
+        const data = await api('/api/activities/fut/clans/' + currentClan.id + '/chamadas');
+        renderChamadas(data.chamadas);
+      } catch (e) { panel.innerHTML = '<div class="card"><div class="empty-hint">❌ ' + e.message + '</div></div>'; }
+    }
+
+    function renderChamadas(chamadas) {
+      const panel = document.getElementById('panelChamar');
+      let html = \`<div class="card">
+        <h2>📣 Chamar o fut</h2>
+        <p style="color:var(--text-muted);font-size:0.85rem;margin-bottom:14px;">Marque local, horário e PIX pra galera confirmar presença.</p>
+        <div class="row"><input id="chamarLocal" type="text" placeholder="Local" style="flex:1;min-width:140px;"><input id="chamarHorario" type="text" placeholder="Horário (ex: Hoje 20h)" style="flex:1;min-width:140px;"></div>
+        <div class="row"><input id="chamarPix" type="text" placeholder="PIX (opcional)" style="flex:1;min-width:140px;"><input id="chamarLink" type="text" placeholder="Link do grupo (opcional)" style="flex:1;min-width:140px;"></div>
+        <div class="row"><input id="chamarMensagem" type="text" placeholder="Mensagem (opcional)" style="flex:1;min-width:200px;"><button class="btn" onclick="criarChamada()">Chamar!</button></div>
+      </div>\`;
+
+      if (!chamadas.length) {
+        html += '<div class="card"><div class="empty-hint">Nenhuma chamada ainda.</div></div>';
+      } else {
+        for (const c of chamadas) {
+          const meResposta = (c.respostas || []).find(r => r.discordId === ME_ID);
+          const vou = (c.respostas || []).filter(r => r.status === 'vou');
+          const talvez = (c.respostas || []).filter(r => r.status === 'talvez');
+          const naoVou = (c.respostas || []).filter(r => r.status === 'nao_vou');
+          html += \`<div class="card" style="margin-top:12px;">
+            <div class="row" style="justify-content:space-between;align-items:center;">
+              <h3 style="margin:0;">📍 \${c.local} — 🕒 \${c.horario}</h3>
+              \${c.creatorId === ME_ID ? '<button class="btn danger" onclick="deletarChamada(\\''+c.id+'\\')">Deletar</button>' : ''}
+            </div>
+            \${c.mensagem ? '<p style="font-size:0.88rem;">' + c.mensagem + '</p>' : ''}
+            \${c.pix ? '<p style="font-size:0.85rem;color:var(--text-muted);">💸 PIX: <strong>' + c.pix + '</strong></p>' : ''}
+            \${c.link ? '<p style="font-size:0.85rem;"><a href="' + c.link + '" target="_blank" rel="noopener">🔗 Link do grupo</a></p>' : ''}
+            <div class="row">
+              <button class="btn \${meResposta && meResposta.status === 'vou' ? '' : 'secondary'}" onclick="rsvpChamada('\${c.id}','vou')">✅ Vou (\${vou.length})</button>
+              <button class="btn \${meResposta && meResposta.status === 'talvez' ? '' : 'secondary'}" onclick="rsvpChamada('\${c.id}','talvez')">🤔 Talvez (\${talvez.length})</button>
+              <button class="btn \${meResposta && meResposta.status === 'nao_vou' ? '' : 'secondary'}" onclick="rsvpChamada('\${c.id}','nao_vou')">❌ Não vou (\${naoVou.length})</button>
+            </div>
+            \${vou.length ? '<p style="font-size:0.8rem;color:var(--text-muted);margin-top:8px;">Confirmados: ' + vou.map(r => r.displayName).join(', ') + '</p>' : ''}
+          </div>\`;
+        }
+      }
+      panel.innerHTML = html;
+    }
+
+    async function criarChamada() {
+      const local = document.getElementById('chamarLocal').value.trim();
+      const horario = document.getElementById('chamarHorario').value.trim();
+      const pix = document.getElementById('chamarPix').value.trim();
+      const link = document.getElementById('chamarLink').value.trim();
+      const mensagem = document.getElementById('chamarMensagem').value.trim();
+      if (!local || !horario) return showToast('❌ Preencha local e horário.');
+      try {
+        await api('/api/activities/fut/clans/' + currentClan.id + '/chamadas', { method: 'POST', body: JSON.stringify({ local, horario, pix, link, mensagem }) });
+        showToast('📣 Fut chamado!');
+        loadChamadas();
+      } catch (e) { showToast('❌ ' + e.message); }
+    }
+
+    async function rsvpChamada(chamadaId, status) {
+      try {
+        await api('/api/activities/fut/clans/' + currentClan.id + '/chamadas/' + chamadaId + '/rsvp', { method: 'POST', body: JSON.stringify({ status }) });
+        loadChamadas();
+      } catch (e) { showToast('❌ ' + e.message); }
+    }
+
+    async function deletarChamada(chamadaId) {
+      if (!confirm('Deletar essa chamada?')) return;
+      try {
+        await api('/api/activities/fut/clans/' + currentClan.id + '/chamadas/' + chamadaId, { method: 'DELETE' });
+        showToast('🗑️ Chamada deletada.');
+        loadChamadas();
       } catch (e) { showToast('❌ ' + e.message); }
     }
 

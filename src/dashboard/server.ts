@@ -572,7 +572,7 @@ export function startDashboard(discordClient: Client) {
   app.use(express.static(path.join(process.cwd(), 'public')));
 
   const port = Number(process.env.PORT) || 8080;
-  const dashboardUrl = process.env.DASHBOARD_URL || 'https://bryanbot.up.railway.app';
+  const dashboardUrl = process.env.DASHBOARD_URL || 'https://bryanfut.up.railway.app';
   const clientId = process.env.CLIENT_ID;
   const clientSecret = process.env.CLIENT_SECRET;
 

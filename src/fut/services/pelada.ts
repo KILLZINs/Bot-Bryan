@@ -128,6 +128,29 @@ export async function joinClan(clanId: string, discordId: string, displayName: s
   return prisma.futClanMember.create({ data: { clanId, discordId, displayName: displayName.slice(0, 40) } });
 }
 
+// Adiciona alguém DIRETO no elenco do clã, com nome e (se tiver) ID do
+// Discord — só quem criou o clã pode fazer isso. Cobre o caso de um clã
+// público: a visibilidade é pública, mas isso não bota ninguém no elenco
+// sozinho, então o criador precisa poder trazer gente pra dentro na mão
+// (inclusive gente sem conta linkada, só com apelido).
+export async function addClanMember(clanId: string, requesterId: string, data: { discordId?: string; displayName: string }) {
+  const clan = await getClanById(clanId);
+  if (!clan) throw new FutError('Clã não encontrado.');
+  if (clan.creatorId !== requesterId) throw new FutError('Só quem criou o clã pode adicionar membros diretamente.');
+
+  const displayName = data.displayName?.trim().slice(0, 40);
+  if (!displayName) throw new FutError('Informe um nome pra essa pessoa.');
+
+  let discordId: string | null = null;
+  if (data.discordId && data.discordId.trim()) {
+    discordId = data.discordId.trim();
+    if (!/^\d{5,25}$/.test(discordId)) throw new FutError('O ID do Discord precisa ser só números (o "Copiar ID" do Discord, com o modo desenvolvedor ativado).');
+    if (clan.members.some((m) => m.discordId === discordId)) throw new FutError('Essa pessoa já faz parte desse clã.');
+  }
+
+  return prisma.futClanMember.create({ data: { clanId, discordId, displayName } });
+}
+
 export async function deleteClan(clanId: string, requesterId: string) {
   const clan = await getClanById(clanId);
   if (!clan) throw new FutError('Clã não encontrado.');
@@ -383,33 +406,13 @@ function sanitizeVideoUrl(url?: string | null): string | null {
   return clean.slice(0, 300);
 }
 
-// Coordenadas do mapa de chute (só fazem sentido em gols), estilo
-// Sofascore/Betano: shotX/shotY = de onde saiu o chute (0-100, 0=fundo
-// próprio, 100=fundo adversário); goalX/goalY = onde a bola entrou no gol
-// (0-100, 0=canto esquerdo/embaixo, 100=canto direito/em cima).
-export interface FutShotCoords {
-  shotX?: number;
-  shotY?: number;
-  goalX?: number;
-  goalY?: number;
-}
-
-function clampPct(n: number | undefined): number | null {
-  if (n === undefined || n === null || Number.isNaN(n)) return null;
-  return Math.max(0, Math.min(100, n));
-}
-
-export async function recordEvent(partidaId: string, playerRef: { discordId?: string; apelido?: string }, type: FutEventType, assistRef?: { discordId?: string; apelido?: string }, videoUrl?: string, shot?: FutShotCoords) {
+export async function recordEvent(partidaId: string, playerRef: { discordId?: string; apelido?: string }, type: FutEventType, assistRef?: { discordId?: string; apelido?: string }, videoUrl?: string) {
   const partida = await getPartidaById(partidaId);
   if (!partida) throw new FutError('Partida não encontrada.');
   if (partida.status !== 'em_andamento') throw new FutError('A partida precisa estar em andamento (`iniciar`) pra registrar eventos.');
 
   const player = await resolvePlayer(partidaId, playerRef);
   const cleanVideoUrl = type === 'gol' ? sanitizeVideoUrl(videoUrl) : null;
-  const shotX = type === 'gol' ? clampPct(shot?.shotX) : null;
-  const shotY = type === 'gol' ? clampPct(shot?.shotY) : null;
-  const goalX = type === 'gol' ? clampPct(shot?.goalX) : null;
-  const goalY = type === 'gol' ? clampPct(shot?.goalY) : null;
 
   switch (type) {
     case 'gol':
@@ -428,7 +431,7 @@ export async function recordEvent(partidaId: string, playerRef: { discordId?: st
       await prisma.futPartidaPlayer.update({ where: { id: player.id }, data: { errosGraves: { increment: 1 } } });
       break;
   }
-  const event = await prisma.futMatchEvent.create({ data: { partidaId, playerId: player.id, type, videoUrl: cleanVideoUrl, shotX, shotY, goalX, goalY } });
+  const event = await prisma.futMatchEvent.create({ data: { partidaId, playerId: player.id, type, videoUrl: cleanVideoUrl } });
 
   if (type === 'gol' && player.team) {
     await prisma.futPartida.update({
@@ -447,22 +450,90 @@ export async function recordEvent(partidaId: string, playerRef: { discordId?: st
   return { player, assistPlayer, event };
 }
 
-// ── Mapa de gols (estilo Sofascore/Betano) ──────────────────────────────
-// Todos os gols de uma partida que têm coordenadas de chute registradas.
-export async function listGoalMap(partidaId: string) {
+// ── Animação do gol (montada no pós-partida, por frames arrastáveis) ────
+// Lista os gols de uma partida (pra escolher qual animar no site).
+export async function listPartidaGoals(partidaId: string) {
   const events = await prisma.futMatchEvent.findMany({
-    where: { partidaId, type: 'gol', shotX: { not: null } },
+    where: { partidaId, type: 'gol' },
     orderBy: { createdAt: 'asc' },
     include: { player: true },
   });
   return events.map((e) => ({
     id: e.id,
-    player: e.player,
-    shotX: e.shotX!,
-    shotY: e.shotY!,
-    goalX: e.goalX,
-    goalY: e.goalY,
+    displayName: e.player?.displayName || 'Desconhecido',
     videoUrl: e.videoUrl,
+    hasAnimation: !!e.animationFrames,
+    createdAt: e.createdAt,
+  }));
+}
+
+export interface FutAnimationToken {
+  id: string;
+  type: string; // 'bola' | 'jogadorA' | 'jogadorB' | 'seta'
+  x: number; // 0-100 (%)
+  y: number; // 0-100 (%)
+  angle: number; // 0-359, só usado por 'seta'
+}
+export type FutAnimationFrame = FutAnimationToken[];
+
+const MAX_ANIM_FRAMES = 20;
+const MAX_TOKENS_PER_FRAME = 24;
+
+function sanitizeFrames(frames: unknown): FutAnimationFrame[] {
+  if (!Array.isArray(frames)) throw new FutError('Formato de animação inválido.');
+  if (frames.length === 0) throw new FutError('A animação precisa ter pelo menos 1 frame.');
+  if (frames.length > MAX_ANIM_FRAMES) throw new FutError(`No máximo ${MAX_ANIM_FRAMES} frames por animação.`);
+
+  return frames.map((frame): FutAnimationFrame => {
+    if (!Array.isArray(frame)) throw new FutError('Formato de animação inválido.');
+    if (frame.length > MAX_TOKENS_PER_FRAME) throw new FutError(`No máximo ${MAX_TOKENS_PER_FRAME} itens por frame.`);
+    return frame.map((t: any): FutAnimationToken => ({
+      id: String(t?.id ?? '').slice(0, 40) || Math.random().toString(36).slice(2, 10),
+      type: ['bola', 'jogadorA', 'jogadorB', 'seta'].includes(t?.type) ? t.type : 'bola',
+      x: Math.max(0, Math.min(100, Number(t?.x) || 0)),
+      y: Math.max(0, Math.min(100, Number(t?.y) || 0)),
+      angle: Math.max(0, Math.min(359, Number(t?.angle) || 0)),
+    }));
+  });
+}
+
+// Salva a animação (sequência de frames) de um gol específico. Feito no
+// PÓS-PARTIDA, no site — só quem criou a partida pode editar.
+export async function saveGoalAnimation(eventId: string, requesterId: string, frames: unknown) {
+  const event = await prisma.futMatchEvent.findUnique({ where: { id: eventId }, include: { partida: true } });
+  if (!event) throw new FutError('Gol não encontrado.');
+  if (event.type !== 'gol') throw new FutError('Só dá pra montar animação em eventos de gol.');
+  if (event.partida.creatorId !== requesterId) throw new FutError('Só quem criou a partida pode editar a animação desse gol.');
+
+  const clean = sanitizeFrames(frames);
+  await prisma.futMatchEvent.update({ where: { id: eventId }, data: { animationFrames: JSON.stringify(clean) } });
+  return clean;
+}
+
+export async function getGoalAnimation(eventId: string) {
+  const event = await prisma.futMatchEvent.findUnique({ where: { id: eventId }, include: { player: true, partida: true } });
+  if (!event) throw new FutError('Gol não encontrado.');
+  let frames: FutAnimationFrame[] = [];
+  if (event.animationFrames) {
+    try { frames = JSON.parse(event.animationFrames); } catch { frames = []; }
+  }
+  return { eventId: event.id, displayName: event.player?.displayName || 'Desconhecido', partidaId: event.partidaId, clanId: event.partida.clanId, creatorId: event.partida.creatorId, frames };
+}
+
+// Log completo de eventos da partida (play-by-play) — pra acessar/revisar
+// as estatísticas de uma partida já finalizada em detalhe.
+export async function listMatchEvents(partidaId: string) {
+  const events = await prisma.futMatchEvent.findMany({
+    where: { partidaId },
+    orderBy: { createdAt: 'asc' },
+    include: { player: true },
+  });
+  return events.map((e) => ({
+    id: e.id,
+    type: e.type,
+    displayName: e.player?.displayName || 'Desconhecido',
+    videoUrl: e.videoUrl,
+    hasAnimation: !!e.animationFrames,
     createdAt: e.createdAt,
   }));
 }

@@ -33,13 +33,13 @@ import { MEDITATION_OPTIONS, startMeditation, collectMeditation } from '../rpg/p
 import { getActiveBuffs, formatBuffList } from '../rpg/services/temp-buffs';
 import { getDayPhase, PHASE_INFO } from '../rpg/services/day-night';
 import {
-  FutError, createClan, joinClan, listClans, getClanByName, getClanById, deleteClan,
+  FutError, createClan, joinClan, listClans, getClanByName, getClanById, getClanByJoinCode, deleteClan,
   listTeams as listFutTeams, createTeam as createFutTeam, deleteTeam as deleteFutTeam, setMemberTeam as setFutMemberTeam,
   createPartida, getOpenPartida, getPartidaById, deletePartida, listPartidaHistory, joinPartida, addOfflinePlayer,
   setTeam, autoBalanceTeams, startPartida, recordEvent, finishPartida, getProfile as getFutProfile, getRanking as getFutRanking,
   getUserProfile as getFutUserProfile, setUserPosition as setFutUserPosition, listGoalVideos,
   createChamada as createFutChamada, listChamadas as listFutChamadas, deleteChamada as deleteFutChamada, respondChamada as respondFutChamada,
-  type FutEventType, type FutMode, type FutTeam, type FutResultado, type FutRsvpStatus,
+  type FutEventType, type FutMode, type FutTeam, type FutResultado, type FutRsvpStatus, type FutVisibility,
 } from '../fut/services/pelada';
 
 const BOT_OWNER_ID = '1195254699943796791';
@@ -104,12 +104,13 @@ function isCombatBlockedMessage(msg: string) {
 }
 
 // Missões diárias/semanais são por (jogador, servidor) — mas o site não tem
-// necessariamente um "servidor atual" como um comando do Discord tem. Como
-// esse bot atende uma única rede de Aliança, usamos o primeiro servidor
-// cadastrado como padrão (ou um guildId explícito, se o cliente mandar um —
-// ex: futuramente via discordSdk.guildId dentro de uma Activity).
-async function resolveGuildId(explicit?: string): Promise<string | null> {
+// necessariamente um "servidor atual" como um comando do Discord tem. A
+// pessoa escolhe o servidor no seletor do site (guarda em um cookie
+// "selected_guild"); sem escolha nenhuma, cai no primeiro servidor da
+// Aliança cadastrado (comportamento antigo, pra não quebrar quem já usava).
+async function resolveGuildId(explicit?: string, cookieGuildId?: string): Promise<string | null> {
   if (explicit) return explicit;
+  if (cookieGuildId) return cookieGuildId;
   const first = await prisma.allianceServer.findFirst();
   return first?.guildId ?? null;
 }
@@ -1511,7 +1512,7 @@ ${activitySdkBootstrap(clientId!)}
     return user ? user.displayAvatarURL({ size: 128 }) : null;
   }
 
-  async function serializeFutClan(clan: NonNullable<Awaited<ReturnType<typeof getClanById>>>) {
+  async function serializeFutClan(clan: NonNullable<Awaited<ReturnType<typeof getClanById>>>, viewerId?: string) {
     const members = await Promise.all(clan.members.map(async (m) => ({
       id: m.id,
       discordId: m.discordId,
@@ -1519,10 +1520,15 @@ ${activitySdkBootstrap(clientId!)}
       teamId: m.teamId,
       avatarUrl: await getAvatarUrl(m.discordId),
     })));
+    // O código de convite (pra clã privado) só aparece pra quem já é
+    // membro/criador — pra essa pessoa poder compartilhar com quem quiser.
+    const souMembro = !!viewerId && (clan.creatorId === viewerId || members.some((m) => m.discordId === viewerId));
     return {
       id: clan.id,
       name: clan.name,
       creatorId: clan.creatorId,
+      visibility: clan.visibility,
+      joinCode: souMembro ? clan.joinCode : null,
       members,
       teams: clan.teams.map((t) => ({ id: t.id, name: t.name, color: t.color })),
     };
@@ -1554,21 +1560,55 @@ ${activitySdkBootstrap(clientId!)}
     res.status(500).json({ error: 'Alguma coisa deu errado. Tenta de novo.' });
   }
 
+  // ── Seletor de servidor (a pessoa pode estar em vários servidores da
+  // Aliança — escolhe qual usar antes de ver os clãs do Fut, missões, etc) ──
+  async function listGuildsForPlayer(discordId: string) {
+    const servers = await prisma.allianceServer.findMany({ orderBy: { guildName: 'asc' } });
+    const withMembership = await Promise.all(servers.map(async (s) => {
+      const guild = discordClient.guilds.cache.get(s.guildId);
+      if (!guild) return null;
+      const member = await guild.members.fetch(discordId).catch(() => null);
+      if (!member) return null;
+      return { guildId: s.guildId, name: s.guildName || guild.name };
+    }));
+    return withMembership.filter((g): g is { guildId: string; name: string } => g !== null);
+  }
+
+  app.get('/api/activities/guilds', requirePlayerAuth, async (req, res) => {
+    const userId = req.cookies!.player_userid as string;
+    const guilds = await listGuildsForPlayer(userId);
+    const selected = (req.cookies?.selected_guild as string | undefined) || guilds[0]?.guildId || null;
+    res.json({ guilds, selected });
+  });
+
+  app.post('/api/activities/select-guild', requirePlayerAuth, async (req, res) => {
+    const userId = req.cookies!.player_userid as string;
+    const guildId = String(req.body?.guildId || '');
+    const guilds = await listGuildsForPlayer(userId);
+    if (!guilds.some((g) => g.guildId === guildId)) {
+      return res.status(400).json({ error: 'Você não faz parte desse servidor.' });
+    }
+    res.cookie('selected_guild', guildId, { maxAge: 1000 * 60 * 60 * 24 * 365, httpOnly: true, sameSite: 'lax' });
+    res.json({ ok: true, selected: guildId });
+  });
+
   app.get('/api/activities/fut/clans', requirePlayerAuth, async (req, res) => {
-    const guildId = await resolveGuildId(typeof req.query.guildId === 'string' ? req.query.guildId : undefined);
+    const guildId = await resolveGuildId(typeof req.query.guildId === 'string' ? req.query.guildId : undefined, req.cookies?.selected_guild as string | undefined);
     if (!guildId) return res.status(400).json({ error: 'Nenhum servidor da Aliança configurado ainda.' });
-    const clans = await listClans(guildId);
-    res.json({ clans: await Promise.all(clans.map(serializeFutClan)), meId: req.cookies!.player_userid });
+    const userId = req.cookies!.player_userid as string;
+    const clans = await listClans(guildId, userId);
+    res.json({ clans: await Promise.all(clans.map((c) => serializeFutClan(c, userId))), meId: userId });
   });
 
   app.post('/api/activities/fut/clans', requirePlayerAuth, async (req, res) => {
     try {
-      const guildId = await resolveGuildId(req.body?.guildId);
+      const guildId = await resolveGuildId(req.body?.guildId, req.cookies?.selected_guild as string | undefined);
       if (!guildId) return res.status(400).json({ error: 'Nenhum servidor da Aliança configurado ainda.' });
       const userId = req.cookies!.player_userid as string;
       const username = (req.cookies!.player_username as string) || 'Jogador';
-      const clan = await createClan(guildId, userId, username, String(req.body?.name || ''));
-      res.json({ clan: await serializeFutClan(clan) });
+      const visibility: FutVisibility = req.body?.visibility === 'privado' ? 'privado' : 'publico';
+      const clan = await createClan(guildId, userId, username, String(req.body?.name || ''), visibility);
+      res.json({ clan: await serializeFutClan(clan, userId) });
     } catch (err) { handleFutError(res, err); }
   });
 
@@ -1576,9 +1616,18 @@ ${activitySdkBootstrap(clientId!)}
     try {
       const userId = req.cookies!.player_userid as string;
       const username = (req.cookies!.player_username as string) || 'Jogador';
-      await joinClan(req.params.id, userId, username);
-      res.json({ clan: await serializeFutClan((await getClanById(req.params.id))!) });
+      const joinCode = typeof req.body?.joinCode === 'string' ? req.body.joinCode : undefined;
+      await joinClan(req.params.id, userId, username, joinCode);
+      res.json({ clan: await serializeFutClan((await getClanById(req.params.id))!, userId) });
     } catch (err) { handleFutError(res, err); }
+  });
+
+  // Achar um clã privado pelo código de convite (pra quem recebeu o código
+  // mas não vê o clã na lista, já que clã privado só aparece pra membros).
+  app.get('/api/activities/fut/clans/by-code/:joinCode', requirePlayerAuth, async (req, res) => {
+    const clan = await getClanByJoinCode(req.params.joinCode);
+    if (!clan) return res.status(404).json({ error: 'Nenhum clã encontrado com esse código.' });
+    res.json({ clan: await serializeFutClan(clan, req.cookies!.player_userid as string) });
   });
 
   app.delete('/api/activities/fut/clans/:id', requirePlayerAuth, async (req, res) => {
@@ -1625,7 +1674,7 @@ ${activitySdkBootstrap(clientId!)}
       const ref = { discordId: req.body?.discordId || undefined, apelido: req.body?.apelido || undefined };
       const teamId = req.body?.teamId || null;
       await setFutMemberTeam(req.params.id, ref, teamId);
-      res.json({ clan: await serializeFutClan((await getClanById(req.params.id))!) });
+      res.json({ clan: await serializeFutClan((await getClanById(req.params.id))!, req.cookies!.player_userid as string) });
     } catch (err) { handleFutError(res, err); }
   });
 
@@ -1958,6 +2007,11 @@ ${activitySdkBootstrap(clientId!)}
   </nav>
   <div class="wrap">
     <div id="clanListView">
+      <div class="card" id="serverSelectCard" style="display:none;">
+        <h2>🌐 Servidor</h2>
+        <p style="color:var(--text-muted);font-size:0.85rem;margin-bottom:12px;">Você tá em mais de um servidor da Aliança — escolha qual usar.</p>
+        <div class="row"><select id="guildSelect" onchange="selecionarServidor()" style="flex:1;min-width:200px;"></select></div>
+      </div>
       <div class="card">
         <h2>🧍 Minha posição preferida</h2>
         <p style="color:var(--text-muted);font-size:0.85rem;margin-bottom:12px;">Usada automaticamente quando você entra numa partida (dá pra mudar na hora também).</p>
@@ -1971,9 +2025,21 @@ ${activitySdkBootstrap(clientId!)}
         <h2>Seus clãs</h2>
         <div class="row">
           <input id="newClanName" type="text" placeholder="Nome do novo clã" style="flex:1;min-width:160px;">
+          <select id="newClanVisibility" style="width:140px;">
+            <option value="publico">🌐 Público</option>
+            <option value="privado">🔒 Privado</option>
+          </select>
           <button class="btn" onclick="criarClan()">Criar Clã</button>
         </div>
+        <p style="color:var(--text-muted);font-size:0.8rem;margin-top:6px;">Privado: só quem já é membro vê na lista — pra entrar, precisa do código de convite (gerado na hora e mostrado só pros membros).</p>
         <div class="clan-list" id="clanList"></div>
+      </div>
+      <div class="card">
+        <h2>🔑 Tenho um código de convite</h2>
+        <div class="row">
+          <input id="joinCodeInput" type="text" placeholder="Código do clã privado" style="flex:1;min-width:160px;text-transform:uppercase;">
+          <button class="btn secondary" onclick="entrarPorCodigo()">Entrar</button>
+        </div>
       </div>
     </div>
 
@@ -2058,18 +2124,52 @@ ${activitySdkBootstrap(clientId!)}
       if (!clans.length) { el.innerHTML = '<div class="empty-hint">Nenhum clã ainda. Crie o primeiro!</div>'; return; }
       el.innerHTML = clans.map(c => \`
         <div class="clan-item" onclick="abrirClan('\${c.id}')">
-          <div><strong>\${c.name}</strong><div class="meta">\${c.members.slice(0, 5).map(m => avatarHtml(m.avatarUrl, m.displayName, 20)).join('')}\${c.members.length} membro(s)\${c.teams && c.teams.length ? ' · ' + c.teams.length + ' time(s)' : ''}</div></div>
+          <div><strong>\${c.visibility === 'privado' ? '🔒 ' : ''}\${c.name}</strong><div class="meta">\${c.members.slice(0, 5).map(m => avatarHtml(m.avatarUrl, m.displayName, 20)).join('')}\${c.members.length} membro(s)\${c.teams && c.teams.length ? ' · ' + c.teams.length + ' time(s)' : ''}\${c.joinCode ? ' · código: <strong>' + c.joinCode + '</strong>' : ''}</div></div>
           <div class="actions">\${c.creatorId === ME_ID ? '<button class="btn danger" onclick="event.stopPropagation();deletarClan(\\''+c.id+'\\')">Deletar</button>' : ''}</div>
         </div>\`).join('');
     }
 
     async function criarClan() {
       const name = document.getElementById('newClanName').value.trim();
+      const visibility = document.getElementById('newClanVisibility').value;
       if (!name) return;
       try {
-        await api('/api/activities/fut/clans', { method: 'POST', body: JSON.stringify({ name }) });
+        const data = await api('/api/activities/fut/clans', { method: 'POST', body: JSON.stringify({ name, visibility }) });
         document.getElementById('newClanName').value = '';
-        showToast('✅ Clã criado!');
+        showToast(data.clan.joinCode ? '✅ Clã privado criado! Código: ' + data.clan.joinCode : '✅ Clã criado!');
+        loadClans();
+      } catch (e) { showToast('❌ ' + e.message); }
+    }
+
+    async function entrarPorCodigo() {
+      const code = document.getElementById('joinCodeInput').value.trim();
+      if (!code) return;
+      try {
+        const found = await api('/api/activities/fut/clans/by-code/' + encodeURIComponent(code));
+        await api('/api/activities/fut/clans/' + found.clan.id + '/join', { method: 'POST', body: JSON.stringify({ joinCode: code }) });
+        document.getElementById('joinCodeInput').value = '';
+        showToast('✅ Você entrou no clã ' + found.clan.name + '!');
+        loadClans();
+      } catch (e) { showToast('❌ ' + e.message); }
+    }
+
+    // ── Seletor de servidor (pra quem tá em mais de um servidor da Aliança) ─
+    async function loadServers() {
+      try {
+        const data = await api('/api/activities/guilds');
+        const card = document.getElementById('serverSelectCard');
+        const select = document.getElementById('guildSelect');
+        if (!data.guilds || data.guilds.length <= 1) { card.style.display = 'none'; return; }
+        card.style.display = 'block';
+        select.innerHTML = data.guilds.map(g => \`<option value="\${g.guildId}"\${g.guildId === data.selected ? ' selected' : ''}>\${g.name}</option>\`).join('');
+      } catch (e) { /* silencioso — não trava a página por causa disso */ }
+    }
+
+    async function selecionarServidor() {
+      const guildId = document.getElementById('guildSelect').value;
+      try {
+        await api('/api/activities/select-guild', { method: 'POST', body: JSON.stringify({ guildId }) });
+        showToast('✅ Servidor alterado!');
         loadClans();
       } catch (e) { showToast('❌ ' + e.message); }
     }
@@ -2545,7 +2645,7 @@ ${activitySdkBootstrap(clientId!)}
 
     (async () => {
       await window.activityReady;
-      await Promise.all([loadClans(), loadMinhasPosicoes()]);
+      await Promise.all([loadServers(), loadClans(), loadMinhasPosicoes()]);
     })();
   </script>
 </body>
@@ -4620,7 +4720,7 @@ ${activitySdkBootstrap(clientId!)}
     const character = await getCharacter(discordId);
     if (!character) return res.status(404).json({ error: 'Personagem não encontrado' });
 
-    const guildId = await resolveGuildId(req.query.guildId as string | undefined);
+    const guildId = await resolveGuildId(req.query.guildId as string | undefined, req.cookies?.selected_guild as string | undefined);
 
     let daily: any[] = [];
     let weekly: any[] = [];
@@ -4657,7 +4757,7 @@ ${activitySdkBootstrap(clientId!)}
         const result = await claimClassMission(discordId, missionId);
         return res.json(result);
       }
-      const guildId = await resolveGuildId(req.body.guildId);
+      const guildId = await resolveGuildId(req.body.guildId, req.cookies?.selected_guild as string | undefined);
       if (!guildId) return res.status(400).json({ error: 'Nenhum servidor associado ao bot foi encontrado.' });
 
       const result = kind === 'weekly'
@@ -4818,7 +4918,7 @@ ${activitySdkBootstrap(clientId!)}
   // participação, que é o que qualquer jogador já faz.
   app.get('/api/activities/rpg/worldboss', requirePlayerAuth, async (req, res) => {
     const discordId = req.cookies.player_userid as string;
-    const guildId = await resolveGuildId(req.query.guildId as string | undefined);
+    const guildId = await resolveGuildId(req.query.guildId as string | undefined, req.cookies?.selected_guild as string | undefined);
     if (!guildId) return res.json({ boss: null });
 
     const boss = await getActiveBoss(guildId);
@@ -4842,7 +4942,7 @@ ${activitySdkBootstrap(clientId!)}
   app.post('/api/activities/rpg/worldboss/attack', requirePlayerAuth, async (req, res) => {
     const discordId = req.cookies.player_userid as string;
     const username = req.cookies.player_username as string || 'Aventureiro';
-    const guildId = await resolveGuildId(req.body?.guildId);
+    const guildId = await resolveGuildId(req.body?.guildId, req.cookies?.selected_guild as string | undefined);
     if (!guildId) return res.status(400).json({ error: 'Nenhum servidor associado ao bot foi encontrado.' });
 
     const result = await attackWorldBoss(discordId, username, guildId);

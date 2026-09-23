@@ -317,12 +317,21 @@ export async function resolvePlayer(partidaId: string, ref: { discordId?: string
   return player;
 }
 
-export async function recordEvent(partidaId: string, playerRef: { discordId?: string; apelido?: string }, type: FutEventType, assistRef?: { discordId?: string; apelido?: string }) {
+// Só aceita link http/https de verdade — evita salvar lixo no campo videoUrl.
+function sanitizeVideoUrl(url?: string | null): string | null {
+  if (!url) return null;
+  const clean = url.trim();
+  if (!/^https?:\/\/\S+$/i.test(clean)) throw new FutError('O link do vídeo precisa ser uma URL válida (começando com http:// ou https://).');
+  return clean.slice(0, 300);
+}
+
+export async function recordEvent(partidaId: string, playerRef: { discordId?: string; apelido?: string }, type: FutEventType, assistRef?: { discordId?: string; apelido?: string }, videoUrl?: string) {
   const partida = await getPartidaById(partidaId);
   if (!partida) throw new FutError('Partida não encontrada.');
   if (partida.status !== 'em_andamento') throw new FutError('A partida precisa estar em andamento (`iniciar`) pra registrar eventos.');
 
   const player = await resolvePlayer(partidaId, playerRef);
+  const cleanVideoUrl = type === 'gol' ? sanitizeVideoUrl(videoUrl) : null;
 
   switch (type) {
     case 'gol':
@@ -341,7 +350,7 @@ export async function recordEvent(partidaId: string, playerRef: { discordId?: st
       await prisma.futPartidaPlayer.update({ where: { id: player.id }, data: { errosGraves: { increment: 1 } } });
       break;
   }
-  await prisma.futMatchEvent.create({ data: { partidaId, playerId: player.id, type } });
+  await prisma.futMatchEvent.create({ data: { partidaId, playerId: player.id, type, videoUrl: cleanVideoUrl } });
 
   if (type === 'gol' && player.team) {
     await prisma.futPartida.update({
@@ -471,4 +480,72 @@ export async function getProfile(clanId: string, discordId: string, mode: FutMod
 
 export async function getRanking(clanId: string, mode: FutMode, limit = 10) {
   return prisma.futClanPlayerStats.findMany({ where: { clanId, mode }, orderBy: { xp: 'desc' }, take: limit });
+}
+
+// ── Vídeos de gol ────────────────────────────────────────────────────────
+// Lista os gols de uma partida que têm link de vídeo, com o autor do gol.
+export async function listGoalVideos(partidaId: string) {
+  const events = await prisma.futMatchEvent.findMany({
+    where: { partidaId, type: 'gol', videoUrl: { not: null } },
+    orderBy: { createdAt: 'asc' },
+    include: { player: true },
+  });
+  return events.map((e) => ({ id: e.id, videoUrl: e.videoUrl!, createdAt: e.createdAt, player: e.player }));
+}
+
+// ── "Chamar o fut" — convite pra combinar uma pelada ────────────────────
+// Local, horário, PIX (pra dividir o custo) e um link (grupo/WhatsApp/etc).
+// Anunciado no Discord, mas confirmado (RSVP) pelo site — que é onde a
+// "chamada" realmente vive, como o resto do sistema.
+
+export type FutRsvpStatus = 'vou' | 'talvez' | 'nao_vou';
+
+export async function createChamada(clanId: string, creatorId: string, data: { local: string; horario: string; pix?: string; link?: string; mensagem?: string }) {
+  const clan = await getClanById(clanId);
+  if (!clan) throw new FutError('Clã não encontrado.');
+
+  const local = data.local?.trim().slice(0, 100);
+  const horario = data.horario?.trim().slice(0, 60);
+  if (!local) throw new FutError('Informe o local do fut.');
+  if (!horario) throw new FutError('Informe o horário do fut.');
+
+  return prisma.futChamada.create({
+    data: {
+      clanId,
+      creatorId,
+      local,
+      horario,
+      pix: data.pix?.trim().slice(0, 100) || null,
+      link: data.link?.trim().slice(0, 300) || null,
+      mensagem: data.mensagem?.trim().slice(0, 300) || null,
+    },
+  });
+}
+
+export async function getChamada(id: string) {
+  return prisma.futChamada.findUnique({ where: { id }, include: { respostas: true } });
+}
+
+export async function listChamadas(clanId: string, limit = 5) {
+  return prisma.futChamada.findMany({ where: { clanId }, orderBy: { createdAt: 'desc' }, take: limit, include: { respostas: true } });
+}
+
+export async function deleteChamada(id: string, requesterId: string) {
+  const chamada = await prisma.futChamada.findUnique({ where: { id } });
+  if (!chamada) throw new FutError('Chamada não encontrada.');
+  if (chamada.creatorId !== requesterId) throw new FutError('Só quem criou a chamada pode deletar ela.');
+
+  await prisma.futChamada.delete({ where: { id } });
+  return chamada;
+}
+
+export async function respondChamada(chamadaId: string, discordId: string, displayName: string, status: FutRsvpStatus) {
+  const chamada = await prisma.futChamada.findUnique({ where: { id: chamadaId } });
+  if (!chamada) throw new FutError('Chamada não encontrada.');
+
+  return prisma.futChamadaResposta.upsert({
+    where: { chamadaId_discordId: { chamadaId, discordId } },
+    create: { chamadaId, discordId, displayName: displayName.slice(0, 40), status },
+    update: { status, displayName: displayName.slice(0, 40), respondedAt: new Date() },
+  });
 }

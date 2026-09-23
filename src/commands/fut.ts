@@ -7,7 +7,7 @@ import { Command } from '../types';
 import { errorEmbed, successEmbed, COLORS } from '../utils/embeds';
 import {
   FutError,
-  createClan, joinClan, addClanMember, listClans, getClanByName, deleteClan,
+  createClan, joinClan, addClanMember, removeClanMember, listClans, getClanByName, deleteClan,
   listTeams, createTeam, deleteTeam, setMemberTeam,
   createPartida, getOpenPartida, getPartidaById, deletePartida, listPartidaHistory,
   joinPartida, addOfflinePlayer, setTeam, autoBalanceTeams, startPartida, recordEvent, finishPartida,
@@ -84,6 +84,10 @@ export default {
         .addStringOption((o) => o.setName('apelido').setDescription('Nome/apelido da pessoa').setRequired(true))
         .addUserOption((o) => o.setName('jogador').setDescription('A pessoa, se ela estiver nesse servidor (preenche o ID sozinho)'))
         .addStringOption((o) => o.setName('id_discord').setDescription('ID do Discord (se "jogador" não achar a pessoa) — modo dev + "Copiar ID"')))
+      .addSubcommand((sub) => sub.setName('remover').setDescription('Remove alguém do elenco do clã (só quem criou o clã)')
+        .addStringOption((o) => o.setName('nome').setDescription('Nome do clã').setRequired(true))
+        .addUserOption((o) => o.setName('jogador').setDescription('A pessoa a remover, se tiver conta no Discord'))
+        .addStringOption((o) => o.setName('apelido').setDescription('Apelido (pra gente offline, sem conta)')))
       .addSubcommand((sub) => sub.setName('stats').setDescription('Estatísticas do clã inteiro (elenco completo) num modo')
         .addStringOption((o) => o.setName('nome').setDescription('Nome do clã').setRequired(true))
         .addStringOption((o) => o.setName('modo').setDescription('Futsal ou campo').setRequired(true)
@@ -256,6 +260,18 @@ export default {
             ? `**${member.displayName}** (<@${member.discordId}>) agora faz parte do elenco de **${clan.name}**.`
             : `**${member.displayName}** agora faz parte do elenco de **${clan.name}** (sem conta do Discord vinculada).`;
           await interaction.reply({ embeds: [successEmbed('Membro adicionado!', desc)] });
+          return;
+        }
+        if (sub === 'remover') {
+          const nome = interaction.options.getString('nome', true);
+          const jogador = interaction.options.getUser('jogador');
+          const apelido = interaction.options.getString('apelido') ?? undefined;
+          if (!jogador && !apelido) { await interaction.reply({ embeds: [errorEmbed('Faltou a pessoa', 'Informe `jogador` ou `apelido`.')], ephemeral: true }); return; }
+          const clan = await getClanByName(guildId, nome);
+          if (!clan) throw new FutError(`Não achei nenhum clã chamado **${nome}**.`);
+
+          const removido = await removeClanMember(clan.id, interaction.user.id, { discordId: jogador?.id, apelido });
+          await interaction.reply({ embeds: [successEmbed('Membro removido', `**${removido.displayName}** saiu do elenco de **${clan.name}**.`)] });
           return;
         }
         if (sub === 'stats') {

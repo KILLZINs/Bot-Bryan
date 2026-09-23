@@ -8,8 +8,8 @@ import { errorEmbed, successEmbed, COLORS } from '../utils/embeds';
 import {
   FutError,
   createClan, joinClan, listClans, getClanByName, deleteClan,
-  createPartida, getOpenPartida, getPartidaById, deletePartida,
-  joinPartida, addOfflinePlayer, setTeam, startPartida, recordEvent, finishPartida,
+  createPartida, getOpenPartida, getPartidaById, deletePartida, listPartidaHistory,
+  joinPartida, addOfflinePlayer, setTeam, autoBalanceTeams, startPartida, recordEvent, finishPartida,
   getProfile, getRanking,
   type FutEventType, type FutMode,
 } from '../fut/services/pelada';
@@ -87,6 +87,8 @@ export default {
           .addChoices({ name: 'Time A', value: 'A' }, { name: 'Time B', value: 'B' }))
         .addUserOption((o) => o.setName('jogador').setDescription('Jogador com conta no Discord'))
         .addStringOption((o) => o.setName('apelido').setDescription('Apelido (jogador offline)')))
+      .addSubcommand((sub) => sub.setName('auto_equilibrar').setDescription('Distribui os jogadores em times A/B tentando equilibrar o nível (só quem criou a partida)')
+        .addStringOption((o) => o.setName('cla').setDescription('Nome do clã').setRequired(true)))
       .addSubcommand((sub) => sub.setName('iniciar').setDescription('Inicia a partida (fecha as inscrições)')
         .addStringOption((o) => o.setName('cla').setDescription('Nome do clã').setRequired(true)))
       .addSubcommand((sub) => sub.setName('gol').setDescription('Registra um gol')
@@ -108,6 +110,8 @@ export default {
         .addUserOption((o) => o.setName('jogador').setDescription('Quem errou'))
         .addStringOption((o) => o.setName('apelido').setDescription('Apelido (jogador offline)')))
       .addSubcommand((sub) => sub.setName('placar').setDescription('Mostra o placar da partida em aberto do clã')
+        .addStringOption((o) => o.setName('cla').setDescription('Nome do clã').setRequired(true)))
+      .addSubcommand((sub) => sub.setName('historico').setDescription('Mostra as últimas partidas finalizadas do clã')
         .addStringOption((o) => o.setName('cla').setDescription('Nome do clã').setRequired(true)))
       .addSubcommand((sub) => sub.setName('finalizar').setDescription('Finaliza a partida e salva as estatísticas')
         .addStringOption((o) => o.setName('cla').setDescription('Nome do clã').setRequired(true))
@@ -177,6 +181,23 @@ export default {
           return;
         }
 
+        if (sub === 'historico') {
+          const clan = await resolveClan(interaction);
+          const partidas = await listPartidaHistory(clan.id, 10);
+          if (!partidas.length) {
+            await interaction.reply({ embeds: [errorEmbed('Sem histórico ainda', 'Nenhuma partida finalizada nesse clã ainda.')], ephemeral: true });
+            return;
+          }
+          const lines = partidas.map((p) => {
+            const resLabel = p.resultado === 'empate' ? 'Empate' : p.resultado === 'vitoria_a' ? 'Vitória A' : 'Vitória B';
+            const data = p.finishedAt ? p.finishedAt.toLocaleDateString('pt-BR') : '';
+            return `**${p.name || 'Partida'}** (${p.mode}) — ${p.scoreA}x${p.scoreB} — ${resLabel} — ${data}`;
+          });
+          const embed = new EmbedBuilder().setColor(COLORS.PRIMARY).setTitle(`📜 Histórico — ${clan.name}`).setDescription(lines.join('\n'));
+          await interaction.reply({ embeds: [embed] });
+          return;
+        }
+
         const clan = await resolveClan(interaction);
         const partida = await getOpenPartida(clan.id);
         if (!partida && sub !== 'deletar') {
@@ -212,6 +233,12 @@ export default {
           if (!ref.discordId && !ref.apelido) { await interaction.reply({ embeds: [errorEmbed('Faltou o jogador', 'Informe `jogador` ou `apelido`.')], ephemeral: true }); return; }
           await setTeam(partida!.id, ref, time);
           await interaction.reply({ embeds: [buildPartidaEmbed(await getPartidaById(partida!.id), clan.name)] });
+          return;
+        }
+
+        if (sub === 'auto_equilibrar') {
+          const balanced = await autoBalanceTeams(partida!.id, interaction.user.id);
+          await interaction.reply({ embeds: [successEmbed('Times equilibrados!', 'Distribuí com base no XP de cada um nesse modo.'), buildPartidaEmbed(balanced, clan.name)] });
           return;
         }
 

@@ -1072,14 +1072,12 @@ model FutMatchEvent {
   playerId  String?
   type      String   // gol | assistencia | defesa | concedido | erro
   videoUrl  String?  // link do vídeo do lance (opcional, geralmente só em 'gol')
-  // Mapa do chute (só em 'gol'): shotX/shotY = de onde saiu o chute no campo
-  // (0-100, 0=linha de fundo própria, 100=linha de fundo adversária);
-  // goalX/goalY = onde a bola entrou no gol (0-100, 0=canto esquerdo/embaixo,
-  // 100=canto direito/em cima, visto de quem está batendo).
-  shotX     Float?
-  shotY     Float?
-  goalX     Float?
-  goalY     Float?
+  // Animação do gol (só em 'gol'), montada no PÓS-PARTIDA no site: uma
+  // sequência de "frames" arrastáveis (bola, jogadores, seta de direção)
+  // que, reproduzidos em sequência, viram a animação da jogada. Guardado
+  // como JSON serializado: um array de frames, cada frame um array de
+  // tokens { id, type, x, y, angle }.
+  animationFrames String? @db.Text
   createdAt DateTime @default(now())
 
   partida FutPartida        @relation(fields: [partidaId], references: [id], onDelete: Cascade)

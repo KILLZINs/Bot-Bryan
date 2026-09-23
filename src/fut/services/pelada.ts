@@ -100,6 +100,25 @@ export async function listPartidaHistory(clanId: string, limit = 10) {
   });
 }
 
+// ── Perfil pessoal (posição preferida por modo) ─────────────────────────
+
+export async function getUserProfile(discordId: string) {
+  return prisma.futUserProfile.findUnique({ where: { discordId } });
+}
+
+export async function setUserPosition(discordId: string, mode: FutMode, position: string) {
+  const clean = position.trim().slice(0, 30);
+  if (!clean) throw new FutError('Informe uma posição válida.');
+  const data = mode === 'futsal' ? { positionFutsal: clean } : { positionCampo: clean };
+  return prisma.futUserProfile.upsert({ where: { discordId }, create: { discordId, ...data }, update: data });
+}
+
+async function defaultPositionFor(discordId: string, mode: FutMode) {
+  const profile = await getUserProfile(discordId);
+  if (!profile) return null;
+  return (mode === 'futsal' ? profile.positionFutsal : profile.positionCampo) || null;
+}
+
 export async function createPartida(clanId: string, creatorId: string, creatorName: string, mode: FutMode, name?: string) {
   const clan = await getClanById(clanId);
   if (!clan) throw new FutError('Clã não encontrado.');
@@ -107,13 +126,15 @@ export async function createPartida(clanId: string, creatorId: string, creatorNa
   const existing = await getOpenPartida(clanId);
   if (existing) throw new FutError(`Esse clã já tem uma partida em aberto (**${existing.name || 'sem nome'}**). Finalize ela antes de criar outra.`);
 
+  const position = await defaultPositionFor(creatorId, mode);
+
   return prisma.futPartida.create({
     data: {
       clanId,
       creatorId,
       mode,
       name: name?.slice(0, 60) || null,
-      players: { create: [{ discordId: creatorId, displayName: creatorName.slice(0, 40) }] },
+      players: { create: [{ discordId: creatorId, displayName: creatorName.slice(0, 40), position }] },
     },
     include: { players: true },
   });
@@ -139,8 +160,10 @@ export async function joinPartida(partidaId: string, discordId: string, displayN
 
   if (partida.players.some((p) => p.discordId === discordId)) throw new FutError('Você já está inscrito nessa partida.');
 
+  const finalPosition = position?.trim().slice(0, 30) || await defaultPositionFor(discordId, partida.mode as FutMode);
+
   return prisma.futPartidaPlayer.create({
-    data: { partidaId, discordId, displayName: displayName.slice(0, 40), position: position?.slice(0, 30) || null },
+    data: { partidaId, discordId, displayName: displayName.slice(0, 40), position: finalPosition },
   });
 }
 

@@ -967,11 +967,13 @@ model MusicPlaylistTrack {
 // por modo dentro do clã — um cara pode ser bom de futsal e ruim de campo.
 // ═══════════════════════════════════════════════════════════════════════
 model FutClan {
-  id        String   @id @default(cuid())
-  guildId   String
-  creatorId String
-  name      String
-  createdAt DateTime @default(now())
+  id         String   @id @default(cuid())
+  guildId    String
+  creatorId  String
+  name       String
+  visibility String   @default("publico") // 'publico' (qualquer um do servidor vê e entra) | 'privado' (só quem tem o código)
+  joinCode   String?  @unique             // gerado só pra clãs privados — precisa dele pra entrar
+  createdAt  DateTime @default(now())
 
   members  FutClanMember[]
   partidas FutPartida[]

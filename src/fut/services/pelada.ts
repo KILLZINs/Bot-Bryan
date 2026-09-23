@@ -91,6 +91,15 @@ export async function getPartidaById(partidaId: string) {
   return prisma.futPartida.findUnique({ where: { id: partidaId }, include: { players: true } });
 }
 
+export async function listPartidaHistory(clanId: string, limit = 10) {
+  return prisma.futPartida.findMany({
+    where: { clanId, status: 'finalizada' },
+    orderBy: { finishedAt: 'desc' },
+    take: limit,
+    include: { players: true },
+  });
+}
+
 export async function createPartida(clanId: string, creatorId: string, creatorName: string, mode: FutMode, name?: string) {
   const clan = await getClanById(clanId);
   if (!clan) throw new FutError('Clã não encontrado.');
@@ -155,6 +164,44 @@ export async function setTeam(partidaId: string, player: { discordId?: string; a
   const target = await resolvePlayer(partidaId, player);
   await prisma.futPartidaPlayer.update({ where: { id: target.id }, data: { team } });
   return target;
+}
+
+// "Criador de time": distribui os jogadores em A/B tentando equilibrar o
+// nível médio dos dois lados, usando o XP acumulado de cada um NO MODO da
+// partida (futsal e campo têm níveis separados). Quem ainda não tem
+// estatística nesse modo (jogador novo ou offline) entra com XP 0 — fica
+// misturado com o resto pelo algoritmo guloso abaixo.
+export async function autoBalanceTeams(partidaId: string, requesterId: string) {
+  const partida = await getPartidaById(partidaId);
+  if (!partida) throw new FutError('Partida não encontrada.');
+  if (partida.creatorId !== requesterId) throw new FutError('Só quem criou a partida pode usar o auto-equilibrar.');
+  assertNotFinished(partida);
+  if (partida.players.length < 2) throw new FutError('Precisa de pelo menos 2 jogadores pra equilibrar os times.');
+
+  const scored = await Promise.all(partida.players.map(async (p) => {
+    if (!p.discordId) return { player: p, score: 0 };
+    const stats = await prisma.futClanPlayerStats.findUnique({
+      where: { clanId_discordId_mode: { clanId: partida.clanId, discordId: p.discordId, mode: partida.mode } },
+    });
+    return { player: p, score: stats?.xp ?? 0 };
+  }));
+
+  // Maior XP primeiro, depois vai alternando pro time com menor soma —
+  // técnica clássica de particionamento guloso pra minimizar a diferença.
+  scored.sort((a, b) => b.score - a.score);
+
+  let totalA = 0;
+  let totalB = 0;
+  const assignments: { id: string; team: FutTeam }[] = [];
+  for (const { player, score } of scored) {
+    const team: FutTeam = totalA <= totalB ? 'A' : 'B';
+    if (team === 'A') totalA += score; else totalB += score;
+    assignments.push({ id: player.id, team });
+  }
+
+  await prisma.$transaction(assignments.map((a) => prisma.futPartidaPlayer.update({ where: { id: a.id }, data: { team: a.team } })));
+
+  return getPartidaById(partidaId);
 }
 
 export async function startPartida(partidaId: string, requesterId: string) {

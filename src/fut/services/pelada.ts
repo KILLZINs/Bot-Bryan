@@ -25,6 +25,10 @@ const XP_POR_DEFESA = 5;
 const XP_POR_ERRO = -3;
 const XP_BONUS_VITORIA = 20;
 
+// Limite de clãs simultâneos por servidor — evita clã abandonado acumulando
+// e não deixa a lista virar bagunça. Deletar um clã libera o slot.
+const MAX_CLANS_PER_GUILD = 3;
+
 // ── Clã ──────────────────────────────────────────────────────────────────
 
 const CLAN_INCLUDE = { members: { include: { team: true } }, teams: { orderBy: { createdAt: 'asc' as const } } };
@@ -38,6 +42,17 @@ export async function listClans(guildId: string, viewerId?: string) {
   const clans = await prisma.futClan.findMany({ where: { guildId }, orderBy: { createdAt: 'desc' }, include: CLAN_INCLUDE });
   if (!viewerId) return clans.filter((c) => c.visibility !== 'privado');
   return clans.filter((c) => c.visibility !== 'privado' || c.members.some((m) => m.discordId === viewerId));
+}
+
+// Total de clãs do servidor (incluindo privados que essa pessoa não vê) —
+// usado só pra mostrar "X/3 slots usados" mesmo quando tem clã privado
+// escondido da listagem.
+export async function countClans(guildId: string) {
+  return prisma.futClan.count({ where: { guildId } });
+}
+
+export function maxClansPerGuild() {
+  return MAX_CLANS_PER_GUILD;
 }
 
 export async function getClanByName(guildId: string, name: string) {
@@ -78,6 +93,11 @@ export async function createClan(guildId: string, creatorId: string, creatorName
 
   const existing = await getClanByName(guildId, clean);
   if (existing) throw new FutError(`Já existe um clã chamado **${existing.name}** neste servidor.`);
+
+  const totalClans = await prisma.futClan.count({ where: { guildId } });
+  if (totalClans >= MAX_CLANS_PER_GUILD) {
+    throw new FutError(`Esse servidor já tem o máximo de ${MAX_CLANS_PER_GUILD} clãs. Delete um clã existente (\`/fut cla deletar\`) pra liberar um espaço.`);
+  }
 
   const joinCode = visibility === 'privado' ? await uniqueJoinCode() : null;
 
@@ -425,6 +445,17 @@ function calcNota(p: { goals: number; assists: number; defesas: number; golsConc
 
   nota = Math.max(0, Math.min(10, nota));
   return Math.round(nota * 10) / 10;
+}
+
+// Faixa da nota (estilo Sofascore/Betano) — usada tanto no Discord (emoji
+// colorido) quanto no site (badge colorido), pra sempre bater a mesma cor
+// pro mesmo número, nos dois lugares.
+export type NotaBand = 'ruim' | 'mediano' | 'bom' | 'excelente';
+export function notaBand(nota: number): NotaBand {
+  if (nota < 6) return 'ruim';
+  if (nota < 7) return 'mediano';
+  if (nota < 8) return 'bom';
+  return 'excelente';
 }
 
 export async function finishPartida(partidaId: string, requesterId: string, resultadoOverride?: FutResultado) {

@@ -36,6 +36,7 @@ import {
   FutError, createClan, joinClan, listClans, getClanByName, getClanById, deleteClan,
   createPartida, getOpenPartida, getPartidaById, deletePartida, listPartidaHistory, joinPartida, addOfflinePlayer,
   setTeam, autoBalanceTeams, startPartida, recordEvent, finishPartida, getProfile as getFutProfile, getRanking as getFutRanking,
+  getUserProfile as getFutUserProfile, setUserPosition as setFutUserPosition,
   type FutEventType, type FutMode, type FutTeam, type FutResultado,
 } from '../fut/services/pelada';
 
@@ -1684,8 +1685,9 @@ ${activitySdkBootstrap(clientId!)}
   app.get('/api/activities/fut/clans/:id/profile', requirePlayerAuth, async (req, res) => {
     const mode: FutMode = req.query.mode === 'campo' ? 'campo' : 'futsal';
     const userId = typeof req.query.userId === 'string' ? req.query.userId : (req.cookies!.player_userid as string);
-    const profile = await getFutProfile(req.params.id, userId, mode);
-    res.json({ profile });
+    const [profile, userProfile] = await Promise.all([getFutProfile(req.params.id, userId, mode), getFutUserProfile(userId)]);
+    const posicao = (mode === 'futsal' ? userProfile?.positionFutsal : userProfile?.positionCampo) || null;
+    res.json({ profile, posicao });
   });
 
   app.get('/api/activities/fut/clans/:id/ranking', requirePlayerAuth, async (req, res) => {
@@ -1701,6 +1703,22 @@ ${activitySdkBootstrap(clientId!)}
   app.get('/api/activities/fut/clans/:id/historico', requirePlayerAuth, async (req, res) => {
     const partidas = await listPartidaHistory(req.params.id, 10);
     res.json({ partidas: partidas.map(serializeFutPartida) });
+  });
+
+  // Perfil PESSOAL (posição preferida) — global, não depende de clã.
+  app.get('/api/activities/fut/me', requirePlayerAuth, async (req, res) => {
+    const profile = await getFutUserProfile(req.cookies!.player_userid as string);
+    res.json({ positionFutsal: profile?.positionFutsal || '', positionCampo: profile?.positionCampo || '' });
+  });
+
+  app.post('/api/activities/fut/me/position', requirePlayerAuth, async (req, res) => {
+    try {
+      const mode: FutMode = req.body?.mode === 'campo' ? 'campo' : 'futsal';
+      const userId = req.cookies!.player_userid as string;
+      await setFutUserPosition(userId, mode, String(req.body?.position || ''));
+      const profile = await getFutUserProfile(userId);
+      res.json({ positionFutsal: profile?.positionFutsal || '', positionCampo: profile?.positionCampo || '' });
+    } catch (err) { handleFutError(res, err); }
   });
 
   app.get('/atividades/fut', (req, res) => {
@@ -1825,6 +1843,15 @@ ${activitySdkBootstrap(clientId!)}
   <div class="wrap">
     <div id="clanListView">
       <div class="card">
+        <h2>🧍 Minha posição preferida</h2>
+        <p style="color:var(--text-muted);font-size:0.85rem;margin-bottom:12px;">Usada automaticamente quando você entra numa partida (dá pra mudar na hora também).</p>
+        <div class="row">
+          <input id="posFutsal" type="text" placeholder="Posição no Futsal (ex: Pivô)" style="flex:1;min-width:160px;">
+          <input id="posCampo" type="text" placeholder="Posição no Campo (ex: Meia)" style="flex:1;min-width:160px;">
+          <button class="btn secondary" onclick="salvarMinhasPosicoes()">Salvar</button>
+        </div>
+      </div>
+      <div class="card">
         <h2>Seus clãs</h2>
         <div class="row">
           <input id="newClanName" type="text" placeholder="Nome do novo clã" style="flex:1;min-width:160px;">
@@ -1876,6 +1903,25 @@ ${activitySdkBootstrap(clientId!)}
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || 'Erro na requisição.');
       return data;
+    }
+
+    // ── Minha posição preferida (global, independe de clã) ──────────────
+    async function loadMinhasPosicoes() {
+      try {
+        const data = await api('/api/activities/fut/me');
+        document.getElementById('posFutsal').value = data.positionFutsal || '';
+        document.getElementById('posCampo').value = data.positionCampo || '';
+      } catch (e) { /* silencioso */ }
+    }
+
+    async function salvarMinhasPosicoes() {
+      const futsal = document.getElementById('posFutsal').value.trim();
+      const campo = document.getElementById('posCampo').value.trim();
+      try {
+        if (futsal) await api('/api/activities/fut/me/position', { method: 'POST', body: JSON.stringify({ mode: 'futsal', position: futsal }) });
+        if (campo) await api('/api/activities/fut/me/position', { method: 'POST', body: JSON.stringify({ mode: 'campo', position: campo }) });
+        showToast('✅ Posições salvas!');
+      } catch (e) { showToast('❌ ' + e.message); }
     }
 
     // ── Lista de clãs ──────────────────────────────────────────────────
@@ -2144,12 +2190,17 @@ ${activitySdkBootstrap(clientId!)}
       panel.innerHTML = modeToggleHtml() + '<div class="empty-hint">Carregando...</div>';
       try {
         const data = await api('/api/activities/fut/clans/' + currentClan.id + '/profile?mode=' + currentMode);
-        if (!data.profile) { panel.innerHTML = modeToggleHtml() + '<div class="card"><div class="empty-hint">Você ainda não finalizou nenhuma partida de ' + currentMode + ' nesse clã.</div></div>'; return; }
+        const posicao = data.posicao || 'Não definida';
+        if (!data.profile) {
+          panel.innerHTML = modeToggleHtml() + '<div class="card"><h2>Suas estatísticas (' + currentMode + ')</h2><table class="stats-table"><tr><td>Posição</td><td style="text-align:right;">' + posicao + '</td></tr></table><div class="empty-hint" style="margin-top:10px;">Você ainda não finalizou nenhuma partida de ' + currentMode + ' nesse clã.</div></div>';
+          return;
+        }
         const p = data.profile;
         panel.innerHTML = modeToggleHtml() + \`
           <div class="card">
             <h2>Suas estatísticas (\${currentMode})</h2>
             <table class="stats-table">
+              <tr><td>Posição</td><td style="text-align:right;">\${posicao}</td></tr>
               <tr><td>Partidas</td><td style="text-align:right;">\${p.totalPartidas}</td></tr>
               <tr><td>Vitórias / Derrotas / Empates</td><td style="text-align:right;">\${p.vitorias} / \${p.derrotas} / \${p.empates}</td></tr>
               <tr><td>XP</td><td style="text-align:right;">\${p.xp}</td></tr>
@@ -2176,7 +2227,7 @@ ${activitySdkBootstrap(clientId!)}
 
     (async () => {
       await window.activityReady;
-      await loadClans();
+      await Promise.all([loadClans(), loadMinhasPosicoes()]);
     })();
   </script>
 </body>

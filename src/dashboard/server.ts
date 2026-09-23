@@ -39,7 +39,9 @@ import {
   setTeam, autoBalanceTeams, startPartida, recordEvent, finishPartida, getProfile as getFutProfile, getRanking as getFutRanking,
   getUserProfile as getFutUserProfile, setUserPosition as setFutUserPosition, listGoalVideos,
   createChamada as createFutChamada, listChamadas as listFutChamadas, deleteChamada as deleteFutChamada, respondChamada as respondFutChamada,
-  type FutEventType, type FutMode, type FutTeam, type FutResultado, type FutRsvpStatus, type FutVisibility,
+  undoLastEvent as undoFutLastEvent, reopenPartida as reopenFutPartida, listGoalMap as listFutGoalMap,
+  getClanOverview as getFutClanOverview, listFullClanStats as listFullFutClanStats,
+  type FutEventType, type FutMode, type FutTeam, type FutResultado, type FutRsvpStatus, type FutVisibility, type FutShotCoords,
 } from '../fut/services/pelada';
 
 const BOT_OWNER_ID = '1195254699943796791';
@@ -1775,9 +1777,39 @@ ${activitySdkBootstrap(clientId!)}
         ? { discordId: req.body?.assistDiscordId || undefined, apelido: req.body?.assistApelido || undefined }
         : undefined;
       const videoUrl = typeof req.body?.videoUrl === 'string' ? req.body.videoUrl : undefined;
+      const shot: FutShotCoords | undefined = type === 'gol' && req.body?.shot ? {
+        shotX: typeof req.body.shot.shotX === 'number' ? req.body.shot.shotX : undefined,
+        shotY: typeof req.body.shot.shotY === 'number' ? req.body.shot.shotY : undefined,
+        goalX: typeof req.body.shot.goalX === 'number' ? req.body.shot.goalX : undefined,
+        goalY: typeof req.body.shot.goalY === 'number' ? req.body.shot.goalY : undefined,
+      } : undefined;
 
-      await recordEvent(partida.id, ref, type, assistRef, videoUrl);
+      await recordEvent(partida.id, ref, type, assistRef, videoUrl, shot);
       res.json({ partida: await serializeFutPartida((await getPartidaById(partida.id))!) });
+    } catch (err) { handleFutError(res, err); }
+  });
+
+  // Desfaz o último evento da partida em andamento — "subtrair coisa
+  // durante o jogo em caso de erro".
+  app.post('/api/activities/fut/clans/:id/event/undo', requirePlayerAuth, async (req, res) => {
+    try {
+      const partida = await currentFutPartidaOr400(req, res);
+      if (!partida) return;
+      const userId = req.cookies!.player_userid as string;
+      const desfeito = await undoFutLastEvent(partida.id, userId);
+      res.json({ partida: await serializeFutPartida((await getPartidaById(partida.id))!), desfeito: { type: desfeito.type, displayName: desfeito.player.displayName } });
+    } catch (err) { handleFutError(res, err); }
+  });
+
+  // Reabre a última partida finalizada do clã pra corrigir gols/estatísticas/
+  // resultado — "no pós partida, tudo pode ser capaz de ser alterado".
+  app.post('/api/activities/fut/clans/:id/reopen', requirePlayerAuth, async (req, res) => {
+    try {
+      const ultima = (await listPartidaHistory(req.params.id, 1))[0];
+      if (!ultima) return res.status(400).json({ error: 'Esse clã não tem nenhuma partida finalizada.' });
+      const userId = req.cookies!.player_userid as string;
+      const reaberta = await reopenFutPartida(ultima.id, userId);
+      res.json({ partida: await serializeFutPartida(reaberta) });
     } catch (err) { handleFutError(res, err); }
   });
 
@@ -1786,6 +1818,14 @@ ${activitySdkBootstrap(clientId!)}
     if (!partida) return res.json({ videos: [] });
     const videos = await listGoalVideos(partida.id);
     res.json({ videos: videos.map((v) => ({ id: v.id, videoUrl: v.videoUrl, displayName: v.player?.displayName || 'Desconhecido' })) });
+  });
+
+  // Mapa de gols (estilo Sofascore/Betano): local do chute + região do gol.
+  app.get('/api/activities/fut/clans/:id/mapa-gols', requirePlayerAuth, async (req, res) => {
+    const partida = await getOpenPartida(req.params.id) ?? (await listPartidaHistory(req.params.id, 1))[0];
+    if (!partida) return res.json({ gols: [] });
+    const gols = await listFutGoalMap(partida.id);
+    res.json({ gols: gols.map((g) => ({ id: g.id, displayName: g.player?.displayName || 'Desconhecido', shotX: g.shotX, shotY: g.shotY, goalX: g.goalX, goalY: g.goalY, videoUrl: g.videoUrl })) });
   });
 
   app.post('/api/activities/fut/clans/:id/finish', requirePlayerAuth, async (req, res) => {
@@ -1815,6 +1855,25 @@ ${activitySdkBootstrap(clientId!)}
       return { ...p, displayName: user?.username || p.discordId, avatarUrl: user ? user.displayAvatarURL({ size: 64 }) : null };
     }));
     res.json({ ranking: withNames });
+  });
+
+  // Estatísticas do clã inteiro (agregado) + elenco completo individual
+  // (sem limite de top-N) — item "salvar tanto os da pelada inteira quanto
+  // individualmente, mostrando a de todo o elenco".
+  app.get('/api/activities/fut/clans/:id/overview', requirePlayerAuth, async (req, res) => {
+    const mode: FutMode = req.query.mode === 'campo' ? 'campo' : 'futsal';
+    const [overview, elenco] = await Promise.all([getFutClanOverview(req.params.id, mode), listFullFutClanStats(req.params.id, mode)]);
+    const elencoComNomes = await Promise.all(elenco.map(async (p) => {
+      const user = await discordClient.users.fetch(p.discordId).catch(() => null);
+      return { ...p, displayName: user?.username || p.discordId, avatarUrl: user ? user.displayAvatarURL({ size: 64 }) : null };
+    }));
+    const withUser = async (stat: typeof overview.artilheiro) => {
+      if (!stat) return null;
+      const user = await discordClient.users.fetch(stat.discordId).catch(() => null);
+      return { ...stat, displayName: user?.username || stat.discordId, avatarUrl: user ? user.displayAvatarURL({ size: 64 }) : null };
+    };
+    const [artilheiro, garcom, melhorNota] = await Promise.all([withUser(overview.artilheiro), withUser(overview.garcom), withUser(overview.melhorNota)]);
+    res.json({ overview: { ...overview, artilheiro, garcom, melhorNota }, elenco: elencoComNomes });
   });
 
   app.get('/api/activities/fut/clans/:id/historico', requirePlayerAuth, async (req, res) => {
@@ -2052,6 +2111,7 @@ ${activitySdkBootstrap(clientId!)}
         <button class="tab" id="tabHistorico" onclick="showTab('historico')">Histórico</button>
         <button class="tab" id="tabPerfil" onclick="showTab('perfil')">Perfil</button>
         <button class="tab" id="tabRanking" onclick="showTab('ranking')">Ranking</button>
+        <button class="tab" id="tabStats" onclick="showTab('stats')">Estatísticas do clã</button>
       </div>
       <div id="panelPelada"></div>
       <div id="panelChamar" style="display:none"></div>
@@ -2059,6 +2119,7 @@ ${activitySdkBootstrap(clientId!)}
       <div id="panelHistorico" style="display:none"></div>
       <div id="panelPerfil" style="display:none"></div>
       <div id="panelRanking" style="display:none"></div>
+      <div id="panelStats" style="display:none"></div>
     </div>
   </div>
   <div class="toast" id="toast"></div>
@@ -2212,18 +2273,21 @@ ${activitySdkBootstrap(clientId!)}
       document.getElementById('tabHistorico').classList.toggle('active', tab === 'historico');
       document.getElementById('tabPerfil').classList.toggle('active', tab === 'perfil');
       document.getElementById('tabRanking').classList.toggle('active', tab === 'ranking');
+      document.getElementById('tabStats').classList.toggle('active', tab === 'stats');
       document.getElementById('panelPelada').style.display = tab === 'pelada' ? 'block' : 'none';
       document.getElementById('panelChamar').style.display = tab === 'chamar' ? 'block' : 'none';
       document.getElementById('panelElenco').style.display = tab === 'elenco' ? 'block' : 'none';
       document.getElementById('panelHistorico').style.display = tab === 'historico' ? 'block' : 'none';
       document.getElementById('panelPerfil').style.display = tab === 'perfil' ? 'block' : 'none';
       document.getElementById('panelRanking').style.display = tab === 'ranking' ? 'block' : 'none';
+      document.getElementById('panelStats').style.display = tab === 'stats' ? 'block' : 'none';
       if (tab === 'pelada') refreshPartida();
       if (tab === 'chamar') loadChamadas();
       if (tab === 'elenco') loadElenco();
       if (tab === 'historico') loadHistorico();
       if (tab === 'perfil') loadPerfil();
       if (tab === 'ranking') loadRanking();
+      if (tab === 'stats') loadClanStats();
     }
 
     function avatarHtml(url, name, size) {
@@ -2329,23 +2393,60 @@ ${activitySdkBootstrap(clientId!)}
             <select id="eventAssist"><option value="">Sem assistência</option>\${playerOptionsHtml(partida)}</select>
           </div>
           <div class="row"><input id="eventVideo" type="text" placeholder="Link do vídeo do gol (opcional)" style="flex:1;min-width:200px;"></div>
+          <div class="row" title="Mapa do chute (opcional) — de onde saiu e onde a bola entrou no gol">
+            <select id="eventShotDist">
+              <option value="">Chute de onde? (opcional)</option>
+              <option value="pequena_area">Pequena área</option>
+              <option value="grande_area">Grande área</option>
+              <option value="entrada_area">Entrada da área</option>
+              <option value="fora_area">Fora da área</option>
+              <option value="meio_campo">Meio de campo ou mais longe</option>
+            </select>
+            <select id="eventShotSide">
+              <option value="">Lado (opcional)</option>
+              <option value="esquerda">Esquerda</option>
+              <option value="centro">Centro</option>
+              <option value="direita">Direita</option>
+            </select>
+            <select id="eventGoalRegion">
+              <option value="">Onde entrou no gol? (opcional)</option>
+              <option value="inferior_esquerdo">Canto inferior esquerdo</option>
+              <option value="inferior_meio">Embaixo no meio</option>
+              <option value="inferior_direito">Canto inferior direito</option>
+              <option value="meio_esquerdo">Meia altura, esquerda</option>
+              <option value="centro">Centro do gol</option>
+              <option value="meio_direito">Meia altura, direita</option>
+              <option value="superior_esquerdo">Canto superior esquerdo</option>
+              <option value="superior_meio">Em cima no meio</option>
+              <option value="superior_direito">Canto superior direito</option>
+            </select>
+          </div>
           <div class="row">
             <button class="btn" onclick="registrarEvento('gol')">⚽ Gol</button>
             <button class="btn secondary" onclick="registrarEvento('defesa')">🧤 Defesa</button>
             <button class="btn secondary" onclick="registrarEvento('concedido')">🥅 Concedido</button>
             <button class="btn secondary" onclick="registrarEvento('erro')">⚠️ Erro grave</button>
           </div>
-          <div class="row"><button class="btn danger" onclick="finalizarPartida()">Finalizar partida</button></div>\`;
+          <div class="row">
+            <button class="btn secondary" onclick="desfazerEvento()" title="Remove o último evento registrado, em caso de engano">↩️ Desfazer último evento</button>
+            <button class="btn danger" onclick="finalizarPartida()">Finalizar partida</button>
+          </div>\`;
       }
 
       if (partida.status === 'finalizada') {
         const resLabel = partida.resultado === 'empate' ? 'Empate' : partida.resultado === 'vitoria_a' ? 'Vitória do Time A' : 'Vitória do Time B';
         html += \`<p style="text-align:center;color:var(--text-muted);">\${resLabel} — estatísticas salvas em \${partida.mode}. Crie uma nova partida quando quiser.</p>
-          <div class="row" style="justify-content:center;"><button class="btn" onclick="criarPartida()">Criar nova partida</button></div>\`;
+          <div class="row" style="justify-content:center;">
+            \${souCriador ? '<button class="btn secondary" onclick="reabrirPartida()" title="Corrigir gols, estatísticas ou resultado dessa partida">✏️ Reabrir pra editar</button>' : ''}
+            <button class="btn" onclick="criarPartida()">Criar nova partida</button>
+          </div>\`;
       }
 
       if (partida.status !== 'aberta') {
-        html += \`<div class="row" style="justify-content:center;margin-top:8px;"><button class="btn secondary" onclick="verVideosGol()">🎬 Vídeos de gol</button></div><div id="videosGolBox"></div>\`;
+        html += \`<div class="row" style="justify-content:center;margin-top:8px;">
+          <button class="btn secondary" onclick="verVideosGol()">🎬 Vídeos de gol</button>
+          <button class="btn secondary" onclick="verMapaGols()">🗺️ Mapa de gols</button>
+        </div><div id="videosGolBox"></div><div id="mapaGolsBox"></div>\`;
       }
 
       html += '</div>';
@@ -2416,6 +2517,16 @@ ${activitySdkBootstrap(clientId!)}
       catch (e) { showToast('❌ ' + e.message); }
     }
 
+    // Mesmo mapeamento amigável usado no comando /fut (src/commands/fut.ts)
+    // pra converter as escolhas do mapa de chute em coordenadas percentuais.
+    const SHOT_DIST_MAP = { pequena_area: 92, grande_area: 82, entrada_area: 70, fora_area: 55, meio_campo: 35 };
+    const SHOT_SIDE_MAP = { esquerda: 20, centro: 50, direita: 80 };
+    const GOAL_REGION_MAP = {
+      inferior_esquerdo: { x: 15, y: 15 }, inferior_meio: { x: 50, y: 15 }, inferior_direito: { x: 85, y: 15 },
+      meio_esquerdo: { x: 15, y: 50 }, centro: { x: 50, y: 50 }, meio_direito: { x: 85, y: 50 },
+      superior_esquerdo: { x: 15, y: 85 }, superior_meio: { x: 50, y: 85 }, superior_direito: { x: 85, y: 85 },
+    };
+
     async function registrarEvento(type) {
       const playerVal = document.getElementById('eventPlayer').value;
       const assistVal = document.getElementById('eventAssist').value;
@@ -2430,15 +2541,78 @@ ${activitySdkBootstrap(clientId!)}
         }
         const videoEl = document.getElementById('eventVideo');
         if (videoEl && videoEl.value.trim()) body.videoUrl = videoEl.value.trim();
+
+        const dist = document.getElementById('eventShotDist') ? document.getElementById('eventShotDist').value : '';
+        const side = document.getElementById('eventShotSide') ? document.getElementById('eventShotSide').value : '';
+        const region = document.getElementById('eventGoalRegion') ? document.getElementById('eventGoalRegion').value : '';
+        if (dist || side || region) {
+          body.shot = {
+            shotX: dist ? SHOT_DIST_MAP[dist] : undefined,
+            shotY: side ? SHOT_SIDE_MAP[side] : undefined,
+            goalX: region ? GOAL_REGION_MAP[region].x : undefined,
+            goalY: region ? GOAL_REGION_MAP[region].y : undefined,
+          };
+        }
       }
       try { await api('/api/activities/fut/clans/' + currentClan.id + '/event', { method: 'POST', body: JSON.stringify(body) }); showToast('✅ Evento registrado!'); refreshPartida(); }
       catch (e) { showToast('❌ ' + e.message); }
+    }
+
+    async function desfazerEvento() {
+      if (!confirm('Desfazer o último evento registrado nessa partida?')) return;
+      try {
+        const data = await api('/api/activities/fut/clans/' + currentClan.id + '/event/undo', { method: 'POST', body: '{}' });
+        showToast('↩️ Desfeito: ' + (data.desfeito ? data.desfeito.type + ' de ' + data.desfeito.displayName : 'último evento') + '.');
+        renderPartida(data.partida);
+      } catch (e) { showToast('❌ ' + e.message); }
+    }
+
+    async function reabrirPartida() {
+      if (!confirm('Reabrir a última partida finalizada pra editar? As estatísticas dela serão revertidas do clã até você finalizar de novo.')) return;
+      try {
+        const data = await api('/api/activities/fut/clans/' + currentClan.id + '/reopen', { method: 'POST', body: '{}' });
+        showToast('✏️ Partida reaberta! Edite o que precisar e finalize de novo quando terminar.');
+        renderPartida(data.partida);
+      } catch (e) { showToast('❌ ' + e.message); }
     }
 
     async function finalizarPartida() {
       if (!confirm('Finalizar a partida e salvar as estatísticas de todo mundo?')) return;
       try { const data = await api('/api/activities/fut/clans/' + currentClan.id + '/finish', { method: 'POST', body: '{}' }); showToast('🏁 Partida finalizada!'); renderPartida(data.partida); }
       catch (e) { showToast('❌ ' + e.message); }
+    }
+
+    // ── Mapa de gols (estilo Sofascore/Betano): mini-campo + gol, com os
+    // pontos de onde saiu o chute e onde a bola entrou. ────────────────────
+    async function verMapaGols() {
+      const box = document.getElementById('mapaGolsBox');
+      if (!box) return;
+      box.innerHTML = '<div class="empty-hint">Carregando...</div>';
+      try {
+        const data = await api('/api/activities/fut/clans/' + currentClan.id + '/mapa-gols');
+        if (!data.gols.length) { box.innerHTML = '<div class="empty-hint">Nenhum gol com local de chute registrado ainda.</div>'; return; }
+
+        const comChute = data.gols.filter(g => g.shotX != null);
+        const comRegiao = data.gols.filter(g => g.goalX != null);
+
+        let campoSvg = '<svg viewBox="0 0 100 60" style="width:100%;max-width:260px;background:#12331f;border-radius:6px;">' +
+          '<rect x="1" y="1" width="98" height="58" fill="none" stroke="#3a6b4a" stroke-width="1"/>' +
+          '<line x1="50" y1="1" x2="50" y2="59" stroke="#3a6b4a" stroke-width="0.6"/>' +
+          '<rect x="82" y="16" width="17" height="28" fill="none" stroke="#3a6b4a" stroke-width="0.6"/>' +
+          comChute.map(g => '<circle cx="' + g.shotX + '" cy="' + (g.shotY != null ? g.shotY * 0.6 : 30) + '" r="1.6" fill="#f1c40f" stroke="#fff" stroke-width="0.3"><title>' + g.displayName + '</title></circle>').join('') +
+          '</svg>';
+
+        let golSvg = '<svg viewBox="0 0 100 100" style="width:100%;max-width:180px;background:#1b1e2e;border-radius:6px;">' +
+          '<rect x="4" y="4" width="92" height="92" fill="none" stroke="#555b7a" stroke-width="2"/>' +
+          comRegiao.map(g => '<circle cx="' + g.goalX + '" cy="' + (100 - g.goalY) + '" r="4" fill="#e74c3c" stroke="#fff" stroke-width="1"><title>' + g.displayName + '</title></circle>').join('') +
+          '</svg>';
+
+        box.innerHTML = '<div class="row" style="align-items:flex-start;gap:20px;margin-top:8px;">' +
+          '<div><p style="font-size:0.78rem;color:var(--text-muted);margin-bottom:4px;">De onde saiu o chute</p>' + campoSvg + '</div>' +
+          '<div><p style="font-size:0.78rem;color:var(--text-muted);margin-bottom:4px;">Onde a bola entrou no gol</p>' + golSvg + '</div>' +
+          '</div>' +
+          '<div class="unassigned" style="margin-top:8px;">' + data.gols.map(g => '<span class="chip">⚽ ' + g.displayName + '</span>').join('') + '</div>';
+      } catch (e) { box.innerHTML = '<div class="empty-hint">❌ ' + e.message + '</div>'; }
     }
 
     async function loadHistorico() {
@@ -2495,6 +2669,54 @@ ${activitySdkBootstrap(clientId!)}
         if (!data.ranking.length) { panel.innerHTML = modeToggleHtml() + '<div class="card"><div class="empty-hint">Ninguém finalizou uma partida de ' + currentMode + ' ainda.</div></div>'; return; }
         panel.innerHTML = modeToggleHtml() + '<div class="card"><h2>🏆 Ranking (' + currentMode + ')</h2>' + data.ranking.map((p, i) => \`
           <div class="rank-item"><span>\${i + 1}. \${avatarHtml(p.avatarUrl, p.displayName, 24)}\${p.displayName}</span><span>\${p.xp} XP · \${notaBadgeHtml(p.notaMedia)}</span></div>\`).join('') + '</div>';
+      } catch (e) { panel.innerHTML = modeToggleHtml() + '<div class="card"><div class="empty-hint">❌ ' + e.message + '</div></div>'; }
+    }
+
+    // ── Estatísticas do clã inteiro (agregado) + elenco completo ─────────
+    // (item: "salvar tanto os da pelada inteira quanto individualmente,
+    // mostrando a de todo o elenco" — sem limite de top-N como o Ranking).
+    async function loadClanStats() {
+      const panel = document.getElementById('panelStats');
+      panel.innerHTML = modeToggleHtml() + '<div class="empty-hint">Carregando...</div>';
+      try {
+        const data = await api('/api/activities/fut/clans/' + currentClan.id + '/overview?mode=' + currentMode);
+        const o = data.overview;
+        if (!o.totalJogadores) {
+          panel.innerHTML = modeToggleHtml() + '<div class="card"><div class="empty-hint">Ninguém finalizou uma partida de ' + currentMode + ' nesse clã ainda.</div></div>';
+          return;
+        }
+        let html = modeToggleHtml() + \`
+          <div class="card">
+            <h2>📊 Visão geral do clã (\${currentMode})</h2>
+            <table class="stats-table">
+              <tr><td>Partidas finalizadas</td><td style="text-align:right;">\${o.totalPartidas}</td></tr>
+              <tr><td>Jogadores com estatísticas</td><td style="text-align:right;">\${o.totalJogadores}</td></tr>
+              <tr><td>Vitórias / Derrotas / Empates (somado)</td><td style="text-align:right;">\${o.totalVitorias} / \${o.totalDerrotas} / \${o.totalEmpates}</td></tr>
+              <tr><td>Gols do elenco</td><td style="text-align:right;">\${o.totalGols}</td></tr>
+              <tr><td>Assistências do elenco</td><td style="text-align:right;">\${o.totalAssists}</td></tr>
+              <tr><td>Defesas do elenco</td><td style="text-align:right;">\${o.totalDefesas}</td></tr>
+              <tr><td>Gols concedidos</td><td style="text-align:right;">\${o.totalConcedidos}</td></tr>
+              <tr><td>Erros graves</td><td style="text-align:right;">\${o.totalErros}</td></tr>
+            </table>\`;
+        if (o.artilheiro) html += \`<p style="margin-top:10px;">👑 <strong>Artilheiro:</strong> \${avatarHtml(o.artilheiro.avatarUrl, o.artilheiro.displayName, 20)}\${o.artilheiro.displayName} — \${o.artilheiro.goals} gols</p>\`;
+        if (o.garcom) html += \`<p>🎯 <strong>Garçom:</strong> \${avatarHtml(o.garcom.avatarUrl, o.garcom.displayName, 20)}\${o.garcom.displayName} — \${o.garcom.assists} assists</p>\`;
+        if (o.melhorNota) html += \`<p>⭐ <strong>Melhor nota média:</strong> \${avatarHtml(o.melhorNota.avatarUrl, o.melhorNota.displayName, 20)}\${o.melhorNota.displayName} — \${notaBadgeHtml(o.melhorNota.notaMedia)}</p>\`;
+        html += '</div>';
+
+        html += '<div class="card"><h2>👥 Elenco completo (' + data.elenco.length + ')</h2><table class="stats-table"><tr><td><strong>Jogador</strong></td><td style="text-align:right;"><strong>Nota</strong></td><td style="text-align:right;"><strong>J</strong></td><td style="text-align:right;"><strong>⚽</strong></td><td style="text-align:right;"><strong>🅰️</strong></td><td style="text-align:right;"><strong>🧤</strong></td><td style="text-align:right;"><strong>🥅</strong></td><td style="text-align:right;"><strong>⚠️</strong></td><td style="text-align:right;"><strong>XP</strong></td></tr>' +
+          data.elenco.map(p => \`<tr>
+            <td>\${avatarHtml(p.avatarUrl, p.displayName, 20)}\${p.displayName}</td>
+            <td style="text-align:right;">\${notaBadgeHtml(p.notaMedia)}</td>
+            <td style="text-align:right;">\${p.totalPartidas}</td>
+            <td style="text-align:right;">\${p.goals}</td>
+            <td style="text-align:right;">\${p.assists}</td>
+            <td style="text-align:right;">\${p.defesas}</td>
+            <td style="text-align:right;">\${p.golsConcedidos}</td>
+            <td style="text-align:right;">\${p.errosGraves}</td>
+            <td style="text-align:right;">\${p.xp}</td>
+          </tr>\`).join('') + '</table></div>';
+
+        panel.innerHTML = html;
       } catch (e) { panel.innerHTML = modeToggleHtml() + '<div class="card"><div class="empty-hint">❌ ' + e.message + '</div></div>'; }
     }
 

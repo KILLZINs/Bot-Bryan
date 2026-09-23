@@ -10,7 +10,7 @@ import {
   createClan, joinClan, listClans, getClanByName, deleteClan,
   createPartida, getOpenPartida, getPartidaById, deletePartida, listPartidaHistory,
   joinPartida, addOfflinePlayer, setTeam, autoBalanceTeams, startPartida, recordEvent, finishPartida,
-  getProfile, getRanking,
+  getProfile, getRanking, getUserProfile, setUserPosition,
   type FutEventType, type FutMode,
 } from '../fut/services/pelada';
 
@@ -125,7 +125,11 @@ export default {
     .addSubcommand((sub) => sub.setName('ranking').setDescription('Mostra o ranking de um clã')
       .addStringOption((o) => o.setName('cla').setDescription('Nome do clã').setRequired(true))
       .addStringOption((o) => o.setName('modo').setDescription('Futsal ou campo').setRequired(true)
-        .addChoices({ name: 'Futsal', value: 'futsal' }, { name: 'Campo', value: 'campo' }))),
+        .addChoices({ name: 'Futsal', value: 'futsal' }, { name: 'Campo', value: 'campo' })))
+    .addSubcommand((sub) => sub.setName('posicao').setDescription('Define sua posição preferida (usada como padrão ao entrar em partidas)')
+      .addStringOption((o) => o.setName('modo').setDescription('Futsal ou campo').setRequired(true)
+        .addChoices({ name: 'Futsal', value: 'futsal' }, { name: 'Campo', value: 'campo' }))
+      .addStringOption((o) => o.setName('posicao').setDescription('Ex: Goleiro, Zagueiro, Meia, Atacante, Pivô...').setRequired(true))),
 
   async execute(interaction: ChatInputCommandInteraction) {
     const group = interaction.options.getSubcommandGroup(false);
@@ -286,13 +290,19 @@ export default {
         const clan = await resolveClan(interaction);
         const modo = interaction.options.getString('modo', true) as FutMode;
         const target = interaction.options.getUser('usuario') ?? interaction.user;
-        const profile = await getProfile(clan.id, target.id, modo);
-        if (!profile) { await interaction.reply({ embeds: [errorEmbed('Sem estatísticas ainda', `${target.username} ainda não finalizou nenhuma partida de ${modo} nesse clã.`)], ephemeral: true }); return; }
+        const [profile, userProfile] = await Promise.all([getProfile(clan.id, target.id, modo), getUserProfile(target.id)]);
+        const posicao = (modo === 'futsal' ? userProfile?.positionFutsal : userProfile?.positionCampo) || 'Não definida';
+
+        if (!profile) {
+          await interaction.reply({ embeds: [errorEmbed('Sem estatísticas ainda', `${target.username} ainda não finalizou nenhuma partida de ${modo} nesse clã.\nPosição preferida: **${posicao}**.`)], ephemeral: true });
+          return;
+        }
         const embed = new EmbedBuilder()
           .setColor(COLORS.GOLD)
           .setTitle(`⚽ Perfil de ${target.username} — ${clan.name} (${modo})`)
           .setThumbnail(target.displayAvatarURL())
           .addFields(
+            { name: 'Posição', value: posicao, inline: true },
             { name: 'Partidas', value: `${profile.totalPartidas}`, inline: true },
             { name: 'V / D / E', value: `${profile.vitorias} / ${profile.derrotas} / ${profile.empates}`, inline: true },
             { name: 'XP', value: `${profile.xp}`, inline: true },
@@ -303,6 +313,14 @@ export default {
             { name: 'Erros Graves', value: `${profile.errosGraves}`, inline: true },
           );
         await interaction.reply({ embeds: [embed] });
+        return;
+      }
+
+      if (sub === 'posicao') {
+        const modo = interaction.options.getString('modo', true) as FutMode;
+        const posicao = interaction.options.getString('posicao', true);
+        await setUserPosition(interaction.user.id, modo, posicao);
+        await interaction.reply({ embeds: [successEmbed('Posição salva!', `Sua posição preferida de **${modo}** agora é **${posicao}**. Ela é usada como padrão sempre que você entra numa partida (mas dá pra sobrescrever na hora, se quiser).`)], ephemeral: true });
         return;
       }
 

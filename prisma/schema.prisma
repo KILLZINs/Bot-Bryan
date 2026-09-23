@@ -960,14 +960,48 @@ model MusicPlaylistTrack {
 }
 
 // ═══════════════════════════════════════════════════════════════════════
-// SISTEMA "RACHÃO" (/fut) — FASE 1: núcleo (criar pelada + estatísticas)
+// SISTEMA "RACHÃO" (/fut) — FASE 2
+// A "pelada" agora é um CLÃ: um grupo persistente (não tem modo, não
+// "finaliza"). Dentro dele acontecem PARTIDAS de verdade (cada uma com seu
+// modo, futsal ou campo). As estatísticas de cada jogador ficam separadas
+// por modo dentro do clã — um cara pode ser bom de futsal e ruim de campo.
 // ═══════════════════════════════════════════════════════════════════════
-model FutPelada {
+model FutClan {
+  id        String   @id @default(cuid())
+  guildId   String
+  creatorId String
+  name      String
+  createdAt DateTime @default(now())
+
+  members  FutClanMember[]
+  partidas FutPartida[]
+  stats    FutClanPlayerStats[]
+
+  @@unique([guildId, name])
+  @@index([guildId])
+  @@map("fut_clans")
+}
+
+model FutClanMember {
+  id          String   @id @default(cuid())
+  clanId      String
+  discordId   String?  // opcional — membro sem conta vinculada (offline)
+  displayName String
+  joinedAt    DateTime @default(now())
+
+  clan FutClan @relation(fields: [clanId], references: [id], onDelete: Cascade)
+
+  @@unique([clanId, discordId])
+  @@index([clanId])
+  @@map("fut_clan_members")
+}
+
+model FutPartida {
   id         String   @id @default(cuid())
-  guildId    String
+  clanId     String
   creatorId  String
-  name       String?
   mode       String   // 'futsal' | 'campo'
+  name       String?
   status     String   @default("aberta") // aberta | em_andamento | finalizada
   scoreA     Int      @default(0)
   scoreB     Int      @default(0)
@@ -976,16 +1010,17 @@ model FutPelada {
   startedAt  DateTime?
   finishedAt DateTime?
 
-  players FutPeladaPlayer[]
+  clan    FutClan             @relation(fields: [clanId], references: [id], onDelete: Cascade)
+  players FutPartidaPlayer[]
   events  FutMatchEvent[]
 
-  @@index([guildId])
-  @@map("fut_peladas")
+  @@index([clanId])
+  @@map("fut_partidas")
 }
 
-model FutPeladaPlayer {
-  id             String  @id @default(cuid())
-  peladaId       String
+model FutPartidaPlayer {
+  id             String   @id @default(cuid())
+  partidaId      String
   discordId      String? // opcional — jogador sem conta vinculada (offline)
   displayName    String
   position       String?
@@ -997,34 +1032,36 @@ model FutPeladaPlayer {
   errosGraves    Int     @default(0)
   createdAt      DateTime @default(now())
 
-  pelada FutPelada       @relation(fields: [peladaId], references: [id], onDelete: Cascade)
-  events FutMatchEvent[] @relation("PlayerEvents")
+  partida FutPartida      @relation(fields: [partidaId], references: [id], onDelete: Cascade)
+  events  FutMatchEvent[] @relation("PlayerEvents")
 
-  @@index([peladaId])
+  @@index([partidaId])
   @@index([discordId])
-  @@map("fut_pelada_players")
+  @@map("fut_partida_players")
 }
 
 model FutMatchEvent {
   id        String   @id @default(cuid())
-  peladaId  String
+  partidaId String
   playerId  String?
   type      String   // gol | assistencia | defesa | concedido | erro
-  note      String?
   createdAt DateTime @default(now())
 
-  pelada FutPelada        @relation(fields: [peladaId], references: [id], onDelete: Cascade)
-  player FutPeladaPlayer? @relation("PlayerEvents", fields: [playerId], references: [id], onDelete: SetNull)
+  partida FutPartida        @relation(fields: [partidaId], references: [id], onDelete: Cascade)
+  player  FutPartidaPlayer? @relation("PlayerEvents", fields: [playerId], references: [id], onDelete: SetNull)
 
-  @@index([peladaId])
+  @@index([partidaId])
   @@map("fut_match_events")
 }
 
-model FutPlayerProfile {
+// Estatísticas agregadas de um jogador DENTRO de um clã, separadas por modo
+// (futsal e campo contam pontos/XP/ranking independentes um do outro).
+model FutClanPlayerStats {
   id             String   @id @default(cuid())
-  guildId        String
+  clanId         String
   discordId      String
-  totalPeladas   Int      @default(0)
+  mode           String   // 'futsal' | 'campo'
+  totalPartidas  Int      @default(0)
   vitorias       Int      @default(0)
   derrotas       Int      @default(0)
   empates        Int      @default(0)
@@ -1036,6 +1073,9 @@ model FutPlayerProfile {
   xp             Int      @default(0)
   updatedAt      DateTime @updatedAt
 
-  @@unique([guildId, discordId])
-  @@map("fut_player_profiles")
+  clan FutClan @relation(fields: [clanId], references: [id], onDelete: Cascade)
+
+  @@unique([clanId, discordId, mode])
+  @@index([clanId])
+  @@map("fut_clan_player_stats")
 }

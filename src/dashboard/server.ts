@@ -2,6 +2,8 @@ import express from 'express';
 import axios from 'axios';
 import cookieParser from 'cookie-parser';
 import path from 'path';
+import type { Client } from 'discord.js';
+import { useMainPlayer, QueryType } from 'discord-player';
 import { prisma } from '../database/client';
 import { askBryan } from '../ai/bryan';
 import { getCharacter, computeStats, distributeStatPoints, type FullCharacter } from '../rpg/services/character';
@@ -53,6 +55,14 @@ const ACTIVITIES = [
     tagline: 'Converse com a IA do bot direto pelo navegador.',
     status: 'live',
     href: '/atividades/chat'
+  },
+  {
+    id: 'music',
+    name: 'Música',
+    icon: '🎵',
+    tagline: 'Busque músicas, favorite e monte playlists — login com Discord.',
+    status: 'live',
+    href: '/atividades/musica'
   },
   {
     id: 'social',
@@ -112,6 +122,9 @@ function activitySdkBootstrap(clientId: string): string {
       const { DiscordSDK } = await import('https://cdn.jsdelivr.net/npm/@discord/embedded-app-sdk@2.5.0/+esm');
       const discordSdk = new DiscordSDK('${clientId}');
       await discordSdk.ready();
+
+      window.discordChannelId = discordSdk.channelId || null;
+      window.discordGuildId = discordSdk.guildId || null;
 
       const { code } = await discordSdk.commands.authorize({
         client_id: '${clientId}',
@@ -231,7 +244,7 @@ function requirePlayerAuth(req: express.Request, res: express.Response, next: ex
   return res.status(401).json({ error: 'Faça login com o Discord para continuar.', loginUrl: '/login/player' });
 }
 
-const PLAYER_REDIRECT_WHITELIST = new Set(['/atividades/rpg', '/atividades', '/atividades/chat']);
+const PLAYER_REDIRECT_WHITELIST = new Set(['/atividades/rpg', '/atividades', '/atividades/chat', '/atividades/musica']);
 function safePlayerRedirect(next: unknown): string {
   return typeof next === 'string' && PLAYER_REDIRECT_WHITELIST.has(next) ? next : '/atividades/rpg';
 }
@@ -507,7 +520,7 @@ async function renderBryanflix(res: express.Response) {
 </html>`);
 }
 
-export function startDashboard() {
+export function startDashboard(discordClient: Client) {
   const app = express();
   
   app.use((req, res, next) => {
@@ -822,6 +835,577 @@ export function startDashboard() {
     }
 
     res.json({ reply });
+  });
+
+  // =====================================================================
+  // 🎵 MÚSICA (estilo Spotify) — usa a MESMA engine (discord-player) que os
+  // comandos /play do Discord. Buscar, favoritar e montar playlists é
+  // 100% no site (Postgres via Prisma); tocar de fato num canal de voz só
+  // funciona de dentro da Activity (foguetinho), porque precisa saber em
+  // qual canal de voz a pessoa está — window.discordChannelId, exposto pelo
+  // activitySdkBootstrap logo depois do discordSdk.ready().
+  // =====================================================================
+  function trackToJson(t: any) {
+    return {
+      title: t.title,
+      author: t.author || null,
+      url: t.url,
+      thumbnail: t.thumbnail || null,
+      duration: t.duration || null,
+    };
+  }
+
+  app.get('/api/activities/music/search', requirePlayerAuth, async (req, res) => {
+    const q = String(req.query.q || '').trim();
+    if (!q) return res.json({ tracks: [] });
+    try {
+      const player = useMainPlayer();
+      const isLink = /^https?:\/\//i.test(q);
+      const result = await player.search(q, {
+        searchEngine: isLink ? QueryType.AUTO : QueryType.SOUNDCLOUD_SEARCH,
+      });
+      if (!result.hasTracks()) return res.json({ tracks: [] });
+      res.json({ tracks: result.tracks.slice(0, 20).map(trackToJson) });
+    } catch (err) {
+      console.error('[Música/Site] Erro na busca:', err);
+      res.status(500).json({ error: 'Não consegui buscar essa música agora.' });
+    }
+  });
+
+  app.get('/api/activities/music/favorites', requirePlayerAuth, async (req, res) => {
+    const userId = req.cookies!.player_userid as string;
+    const favorites = await prisma.musicFavorite.findMany({ where: { userId }, orderBy: { createdAt: 'desc' } });
+    res.json({ favorites });
+  });
+
+  app.post('/api/activities/music/favorites/toggle', requirePlayerAuth, async (req, res) => {
+    const userId = req.cookies!.player_userid as string;
+    const { title, author, url, thumbnail, duration } = req.body || {};
+    if (!title || !url) return res.status(400).json({ error: 'Faixa inválida.' });
+
+    const existing = await prisma.musicFavorite.findUnique({ where: { userId_url: { userId, url } } });
+    if (existing) {
+      await prisma.musicFavorite.delete({ where: { id: existing.id } });
+      return res.json({ favorited: false });
+    }
+    await prisma.musicFavorite.create({ data: { userId, title, author: author || null, url, thumbnail: thumbnail || null, duration: duration || null } });
+    res.json({ favorited: true });
+  });
+
+  app.get('/api/activities/music/playlists', requirePlayerAuth, async (req, res) => {
+    const userId = req.cookies!.player_userid as string;
+    const playlists = await prisma.musicPlaylist.findMany({
+      where: { userId },
+      orderBy: { createdAt: 'desc' },
+      include: { tracks: { orderBy: { addedAt: 'asc' } } },
+    });
+    res.json({ playlists });
+  });
+
+  app.post('/api/activities/music/playlists', requirePlayerAuth, async (req, res) => {
+    const userId = req.cookies!.player_userid as string;
+    const name = String(req.body?.name || '').trim().slice(0, 60);
+    if (!name) return res.status(400).json({ error: 'Dê um nome pra playlist.' });
+    const playlist = await prisma.musicPlaylist.create({ data: { userId, name }, include: { tracks: true } });
+    res.json({ playlist });
+  });
+
+  app.delete('/api/activities/music/playlists/:id', requirePlayerAuth, async (req, res) => {
+    const userId = req.cookies!.player_userid as string;
+    const playlist = await prisma.musicPlaylist.findUnique({ where: { id: req.params.id } });
+    if (!playlist || playlist.userId !== userId) return res.status(404).json({ error: 'Playlist não encontrada.' });
+    await prisma.musicPlaylist.delete({ where: { id: playlist.id } });
+    res.json({ ok: true });
+  });
+
+  app.post('/api/activities/music/playlists/:id/tracks', requirePlayerAuth, async (req, res) => {
+    const userId = req.cookies!.player_userid as string;
+    const playlist = await prisma.musicPlaylist.findUnique({ where: { id: req.params.id } });
+    if (!playlist || playlist.userId !== userId) return res.status(404).json({ error: 'Playlist não encontrada.' });
+
+    const { title, author, url, thumbnail, duration } = req.body || {};
+    if (!title || !url) return res.status(400).json({ error: 'Faixa inválida.' });
+
+    const track = await prisma.musicPlaylistTrack.create({
+      data: { playlistId: playlist.id, title, author: author || null, url, thumbnail: thumbnail || null, duration: duration || null },
+    });
+    res.json({ track });
+  });
+
+  app.delete('/api/activities/music/playlists/:id/tracks/:trackId', requirePlayerAuth, async (req, res) => {
+    const userId = req.cookies!.player_userid as string;
+    const playlist = await prisma.musicPlaylist.findUnique({ where: { id: req.params.id } });
+    if (!playlist || playlist.userId !== userId) return res.status(404).json({ error: 'Playlist não encontrada.' });
+    await prisma.musicPlaylistTrack.delete({ where: { id: req.params.trackId } }).catch(() => null);
+    res.json({ ok: true });
+  });
+
+  // Toca de fato num canal de voz — só funciona dentro da Activity, porque
+  // precisa do channelId da call atual (não dá pra "escolher" um canal pelo
+  // navegador comum sem sair da call). Reaproveita a MESMA lógica/opções do
+  // comando /play (src/commands/music/play.ts) pra não divergir do bot.
+  app.post('/api/activities/music/play', requirePlayerAuth, async (req, res) => {
+    const { url, title, channelId, guildId } = req.body || {};
+    if (!url || !channelId || !guildId) {
+      return res.status(400).json({ error: 'Isso só funciona de dentro da Activity, dentro de uma call de voz.' });
+    }
+
+    try {
+      const guild = await discordClient.guilds.fetch(guildId);
+      const channel = await guild.channels.fetch(channelId);
+      if (!channel || !channel.isVoiceBased()) {
+        return res.status(400).json({ error: 'Esse canal não é um canal de voz válido.' });
+      }
+
+      const player = useMainPlayer();
+      const searchResult = await player.search(url, { searchEngine: QueryType.AUTO });
+      if (!searchResult.hasTracks()) return res.status(404).json({ error: 'Não encontrei mais essa faixa.' });
+
+      const { track } = await player.play(channel, searchResult, {
+        nodeOptions: {
+          metadata: { title },
+          leaveOnEmpty: true,
+          leaveOnEmptyCooldown: 300000,
+          leaveOnEnd: false,
+          leaveOnStop: true,
+          leaveOnStopCooldown: 5000,
+          connectionTimeout: 120000,
+          bufferingTimeout: 30000,
+          volume: 100,
+        },
+      });
+
+      res.json({ ok: true, title: track.title });
+    } catch (err) {
+      console.error('[Música/Site] Erro ao tocar:', err);
+      const message = err instanceof Error ? err.message : String(err);
+      res.status(500).json({ error: `Não consegui tocar essa faixa. Detalhes: ${message.slice(0, 300)}` });
+    }
+  });
+
+  app.get('/atividades/musica', (req, res) => {
+    if (req.cookies?.player_auth !== 'permitido' || !req.cookies?.player_userid) {
+      return res.send(`<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Música — Bryan Bot</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
+${activitySdkBootstrap(clientId!)}
+<style>
+  :root { --bg: #05050A; --primary: #1DB954; --card: #12131F; --border: #262A40; --text: #F2F3F5; --text-muted: #9CA3AF; }
+  * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Inter', sans-serif; }
+  html, body { height: 100%; }
+  body { background: var(--bg); color: var(--text); display: flex; align-items: center; justify-content: center; }
+  .box { text-align: center; padding: 40px; max-width: 420px; }
+  .box h1 { font-size: 1.6rem; margin-bottom: 12px; }
+  .box p { color: var(--text-muted); margin-bottom: 26px; line-height: 1.5; }
+  .box a.btn { display: inline-block; background: var(--primary); color: #05050A; text-decoration: none; font-weight: 800; padding: 14px 28px; border-radius: 999px; }
+  .box a.back { display: block; margin-top: 18px; color: var(--text-muted); text-decoration: none; font-size: 0.9rem; }
+</style>
+</head>
+<body>
+  <div class="box">
+    <h1>🎵 Música do Bryan</h1>
+    <p>Pra buscar músicas, favoritar e montar suas playlists, entra com sua conta do Discord.</p>
+    <a class="btn" href="/login/player?next=/atividades/musica">Entrar com Discord</a>
+    <a class="back" href="/atividades">← Voltar às Atividades</a>
+  </div>
+  <script>
+    (async () => {
+      const ok = await window.activityReady;
+      if (ok) window.location.reload();
+    })();
+  </script>
+</body>
+</html>`);
+    }
+
+    res.send(`<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Música — Bryan Bot</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
+${activitySdkBootstrap(clientId!)}
+<style>
+  :root { --bg: #05050A; --bg2: #0A0A12; --primary: #1DB954; --card: #12131F; --card2: #181A28; --border: #262A40; --text: #F2F3F5; --text-muted: #9CA3AF; }
+  * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Inter', sans-serif; }
+  html, body { height: 100%; }
+  body { background: var(--bg); color: var(--text); display: flex; overflow: hidden; }
+  a { color: inherit; }
+  .sidebar { width: 240px; flex-shrink: 0; background: var(--bg2); border-right: 1px solid var(--border); padding: 20px 14px; display: flex; flex-direction: column; gap: 4px; height: 100vh; overflow-y: auto; }
+  .brand { font-weight: 800; font-size: 1.1rem; display: flex; align-items: center; gap: 8px; padding: 6px 10px 18px; }
+  .nav-item { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 8px; cursor: pointer; color: var(--text-muted); font-weight: 600; font-size: 0.92rem; background: none; border: none; width: 100%; text-align: left; }
+  .nav-item:hover { color: white; }
+  .nav-item.active { color: white; background: var(--card2); }
+  .nav-sep { height: 1px; background: var(--border); margin: 12px 0; }
+  .pl-list { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 2px; }
+  .pl-item { display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; border-radius: 8px; cursor: pointer; color: var(--text-muted); font-size: 0.88rem; font-weight: 600; }
+  .pl-item:hover { color: white; background: var(--card2); }
+  .pl-item.active { color: white; background: var(--card2); }
+  .pl-item .del { opacity: 0; font-size: 0.85rem; }
+  .pl-item:hover .del { opacity: 0.6; }
+  .pl-item .del:hover { opacity: 1 !important; color: #E74C3C; }
+  #newPlaylistBtn { margin-top: 10px; background: none; border: 1px dashed var(--border); color: var(--text-muted); padding: 10px; border-radius: 8px; cursor: pointer; font-weight: 700; font-size: 0.85rem; }
+  #newPlaylistBtn:hover { border-color: var(--primary); color: var(--primary); }
+  .back-link { display: block; margin-top: 14px; color: var(--text-muted); text-decoration: none; font-size: 0.82rem; text-align: center; }
+  .main { flex: 1; display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+  .topbar { padding: 18px 28px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 16px; }
+  .search-box { flex: 1; max-width: 480px; position: relative; }
+  .search-box input { width: 100%; background: var(--card2); border: 1px solid var(--border); color: white; padding: 12px 16px 12px 40px; border-radius: 999px; outline: none; font-size: 0.92rem; }
+  .search-box input:focus { border-color: var(--primary); }
+  .search-box::before { content: '🔎'; position: absolute; left: 14px; top: 50%; transform: translateY(-50%); font-size: 0.9rem; opacity: 0.6; }
+  .content { flex: 1; overflow-y: auto; padding: 20px 28px 60px; }
+  .content h2 { font-size: 1.3rem; margin-bottom: 16px; }
+  .empty-hint { color: var(--text-muted); font-size: 0.92rem; padding: 40px 0; text-align: center; }
+  .track-row { display: flex; align-items: center; gap: 14px; padding: 10px 12px; border-radius: 10px; }
+  .track-row:hover { background: var(--card2); }
+  .track-row img { width: 46px; height: 46px; border-radius: 6px; object-fit: cover; background: var(--card); flex-shrink: 0; }
+  .track-info { flex: 1; min-width: 0; }
+  .track-info .t-title { font-weight: 700; font-size: 0.92rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .track-info .t-author { color: var(--text-muted); font-size: 0.82rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .t-duration { color: var(--text-muted); font-size: 0.8rem; width: 46px; text-align: right; flex-shrink: 0; }
+  .t-actions { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+  .t-actions button { background: none; border: none; color: var(--text-muted); font-size: 1.05rem; cursor: pointer; padding: 6px; border-radius: 6px; line-height: 1; }
+  .t-actions button:hover { color: white; background: rgba(255,255,255,0.08); }
+  .t-actions button.fav.active { color: var(--primary); }
+  .t-actions button.play { color: var(--primary); }
+  .toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); background: var(--card2); border: 1px solid var(--border); padding: 12px 22px; border-radius: 10px; font-size: 0.88rem; opacity: 0; pointer-events: none; transition: .25s; z-index: 999; box-shadow: 0 8px 24px rgba(0,0,0,0.4); }
+  .toast.show { opacity: 1; transform: translateX(-50%) translateY(-6px); }
+  .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.6); display: none; align-items: center; justify-content: center; z-index: 1000; }
+  .modal-overlay.show { display: flex; }
+  .modal { background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 26px; width: 100%; max-width: 360px; }
+  .modal h3 { margin-bottom: 16px; font-size: 1.05rem; }
+  .modal input[type="text"] { width: 100%; background: var(--card2); border: 1px solid var(--border); color: white; padding: 12px 14px; border-radius: 8px; outline: none; margin-bottom: 16px; font-size: 0.92rem; }
+  .modal input[type="text"]:focus { border-color: var(--primary); }
+  .modal .pl-pick { max-height: 220px; overflow-y: auto; display: flex; flex-direction: column; gap: 4px; margin-bottom: 16px; }
+  .modal .pl-pick button { text-align: left; background: var(--card2); border: 1px solid var(--border); color: white; padding: 10px 12px; border-radius: 8px; cursor: pointer; font-size: 0.88rem; }
+  .modal .pl-pick button:hover { border-color: var(--primary); }
+  .modal-actions { display: flex; gap: 10px; justify-content: flex-end; }
+  .modal-actions button { padding: 10px 18px; border-radius: 8px; border: none; font-weight: 700; cursor: pointer; font-size: 0.88rem; }
+  .modal-actions .cancel { background: none; color: var(--text-muted); }
+  .modal-actions .confirm { background: var(--primary); color: #05050A; }
+  .loading { color: var(--text-muted); font-size: 0.9rem; padding: 20px 0; text-align: center; }
+</style>
+</head>
+<body>
+  <aside class="sidebar">
+    <div class="brand">🎵 Música</div>
+    <button class="nav-item active" id="navSearch" onclick="showView('search')">🔎 Buscar</button>
+    <button class="nav-item" id="navFavorites" onclick="showView('favorites')">💚 Favoritas</button>
+    <div class="nav-sep"></div>
+    <div style="padding: 0 12px; color: var(--text-muted); font-size: 0.78rem; font-weight: 700; text-transform: uppercase; margin-bottom: 6px;">Suas Playlists</div>
+    <div class="pl-list" id="plList"></div>
+    <button id="newPlaylistBtn" onclick="openNewPlaylistModal()">+ Nova Playlist</button>
+    <a class="back-link" href="/atividades">← Voltar às Atividades</a>
+  </aside>
+
+  <div class="main">
+    <div class="topbar">
+      <div class="search-box">
+        <input id="searchInput" type="text" placeholder="O que você quer ouvir?" autocomplete="off">
+      </div>
+    </div>
+    <div class="content" id="content">
+      <div class="empty-hint">Digite algo na busca pra começar 🎧</div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <div class="modal-overlay" id="playlistModal">
+    <div class="modal">
+      <h3>Nova playlist</h3>
+      <input type="text" id="newPlaylistName" placeholder="Nome da playlist" maxlength="60">
+      <div class="modal-actions">
+        <button class="cancel" onclick="closeNewPlaylistModal()">Cancelar</button>
+        <button class="confirm" onclick="confirmNewPlaylist()">Criar</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="addToPlaylistModal">
+    <div class="modal">
+      <h3>Adicionar à playlist</h3>
+      <div class="pl-pick" id="plPick"></div>
+      <div class="modal-actions">
+        <button class="cancel" onclick="closeAddToPlaylistModal()">Fechar</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let playlists = [];
+    let favorites = [];
+    let currentView = 'search';
+    let currentPlaylistId = null;
+    let pendingTrackForPlaylist = null;
+
+    function showToast(msg) {
+      const el = document.getElementById('toast');
+      el.textContent = msg;
+      el.classList.add('show');
+      setTimeout(() => el.classList.remove('show'), 2600);
+    }
+
+    function isFavorited(url) {
+      return favorites.some(f => f.url === url);
+    }
+
+    function trackRowHtml(t, opts) {
+      opts = opts || {};
+      const fav = isFavorited(t.url);
+      const dataAttr = encodeURIComponent(JSON.stringify(t));
+      const removeBtn = opts.removableFromPlaylist
+        ? \`<button title="Remover da playlist" onclick="removeFromCurrentPlaylist('\${t.id || ''}', event)">🗑️</button>\`
+        : '';
+      return \`
+        <div class="track-row" data-track="\${dataAttr}">
+          <img src="\${t.thumbnail || ''}" onerror="this.style.visibility='hidden'">
+          <div class="track-info">
+            <div class="t-title">\${t.title}</div>
+            <div class="t-author">\${t.author || ''}</div>
+          </div>
+          <div class="t-duration">\${t.duration || ''}</div>
+          <div class="t-actions">
+            <button class="play" title="Tocar na call" onclick="playTrack(event)">▶️</button>
+            <button class="fav \${fav ? 'active' : ''}" title="Favoritar" onclick="toggleFavorite(event)">\${fav ? '💚' : '🤍'}</button>
+            <button title="Adicionar à playlist" onclick="openAddToPlaylistModal(event)">➕</button>
+            \${removeBtn}
+          </div>
+        </div>\`;
+    }
+
+    function getTrackFromEl(evtOrEl) {
+      const el = evtOrEl.target ? evtOrEl.target.closest('.track-row') : evtOrEl;
+      return JSON.parse(decodeURIComponent(el.getAttribute('data-track')));
+    }
+
+    async function playTrack(evt) {
+      const t = getTrackFromEl(evt);
+      if (!window.isDiscordActivity || !window.discordChannelId || !window.discordGuildId) {
+        showToast('🎧 Pra tocar de verdade, abra essa tela pelo foguetinho 🚀 dentro de uma call do Discord!');
+        return;
+      }
+      showToast('▶️ Chamando ' + t.title + '...');
+      try {
+        const res = await fetch('/api/activities/music/play', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url: t.url, title: t.title, channelId: window.discordChannelId, guildId: window.discordGuildId }),
+        });
+        const data = await res.json();
+        if (!res.ok) return showToast('❌ ' + (data.error || 'Erro ao tocar.'));
+        showToast('🎶 Tocando: ' + data.title);
+      } catch (e) {
+        showToast('❌ Erro de conexão ao tentar tocar.');
+      }
+    }
+
+    async function toggleFavorite(evt) {
+      const t = getTrackFromEl(evt);
+      const res = await fetch('/api/activities/music/favorites/toggle', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(t),
+      });
+      const data = await res.json();
+      await loadFavorites();
+      if (data.favorited) showToast('💚 Adicionado às favoritas');
+      else showToast('Removido das favoritas');
+      if (currentView === 'search') refreshSearchFavIcons();
+      if (currentView === 'favorites') renderFavoritesView();
+    }
+
+    function refreshSearchFavIcons() {
+      document.querySelectorAll('#content .track-row').forEach(row => {
+        const t = JSON.parse(decodeURIComponent(row.getAttribute('data-track')));
+        const btn = row.querySelector('.fav');
+        if (!btn) return;
+        const fav = isFavorited(t.url);
+        btn.classList.toggle('active', fav);
+        btn.textContent = fav ? '💚' : '🤍';
+      });
+    }
+
+    function openAddToPlaylistModal(evt) {
+      pendingTrackForPlaylist = getTrackFromEl(evt);
+      const pick = document.getElementById('plPick');
+      if (playlists.length === 0) {
+        pick.innerHTML = '<div class="empty-hint" style="padding:10px 0;">Você ainda não tem playlists. Crie uma primeiro!</div>';
+      } else {
+        pick.innerHTML = playlists.map(p => \`<button onclick="confirmAddToPlaylist('\${p.id}')">\${p.name} (\${p.tracks.length})</button>\`).join('');
+      }
+      document.getElementById('addToPlaylistModal').classList.add('show');
+    }
+    function closeAddToPlaylistModal() {
+      document.getElementById('addToPlaylistModal').classList.remove('show');
+      pendingTrackForPlaylist = null;
+    }
+    async function confirmAddToPlaylist(playlistId) {
+      if (!pendingTrackForPlaylist) return;
+      await fetch('/api/activities/music/playlists/' + playlistId + '/tracks', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(pendingTrackForPlaylist),
+      });
+      showToast('✅ Adicionado à playlist');
+      closeAddToPlaylistModal();
+      await loadPlaylists();
+    }
+
+    function openNewPlaylistModal() {
+      document.getElementById('newPlaylistName').value = '';
+      document.getElementById('playlistModal').classList.add('show');
+      document.getElementById('newPlaylistName').focus();
+    }
+    function closeNewPlaylistModal() {
+      document.getElementById('playlistModal').classList.remove('show');
+    }
+    async function confirmNewPlaylist() {
+      const name = document.getElementById('newPlaylistName').value.trim();
+      if (!name) return;
+      const res = await fetch('/api/activities/music/playlists', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name }),
+      });
+      const data = await res.json();
+      closeNewPlaylistModal();
+      await loadPlaylists();
+      showToast('✅ Playlist criada');
+    }
+
+    async function deletePlaylist(id, evt) {
+      evt.stopPropagation();
+      if (!confirm('Apagar essa playlist?')) return;
+      await fetch('/api/activities/music/playlists/' + id, { method: 'DELETE' });
+      if (currentPlaylistId === id) showView('search');
+      await loadPlaylists();
+    }
+
+    async function removeFromCurrentPlaylist(trackId, evt) {
+      evt.stopPropagation();
+      if (!currentPlaylistId || !trackId) return;
+      await fetch('/api/activities/music/playlists/' + currentPlaylistId + '/tracks/' + trackId, { method: 'DELETE' });
+      await loadPlaylists();
+      openPlaylist(currentPlaylistId);
+    }
+
+    async function loadFavorites() {
+      const res = await fetch('/api/activities/music/favorites');
+      const data = await res.json();
+      favorites = data.favorites || [];
+    }
+
+    async function loadPlaylists() {
+      const res = await fetch('/api/activities/music/playlists');
+      const data = await res.json();
+      playlists = data.playlists || [];
+      renderPlaylistSidebar();
+      if (currentView === 'playlist' && currentPlaylistId) {
+        openPlaylist(currentPlaylistId, true);
+      }
+    }
+
+    function renderPlaylistSidebar() {
+      const el = document.getElementById('plList');
+      if (playlists.length === 0) {
+        el.innerHTML = '';
+        return;
+      }
+      el.innerHTML = playlists.map(p => \`
+        <div class="pl-item \${currentView === 'playlist' && currentPlaylistId === p.id ? 'active' : ''}" onclick="openPlaylist('\${p.id}')">
+          <span>\${p.name}</span>
+          <span class="del" onclick="deletePlaylist('\${p.id}', event)">✕</span>
+        </div>\`).join('');
+    }
+
+    function showView(view) {
+      currentView = view;
+      currentPlaylistId = null;
+      document.getElementById('navSearch').classList.toggle('active', view === 'search');
+      document.getElementById('navFavorites').classList.toggle('active', view === 'favorites');
+      renderPlaylistSidebar();
+      if (view === 'search') {
+        document.getElementById('content').innerHTML = document.getElementById('searchInput').value.trim()
+          ? document.getElementById('content').innerHTML
+          : '<div class="empty-hint">Digite algo na busca pra começar 🎧</div>';
+      } else if (view === 'favorites') {
+        renderFavoritesView();
+      }
+    }
+
+    function renderFavoritesView() {
+      const content = document.getElementById('content');
+      content.innerHTML = '<h2>💚 Suas Favoritas</h2>';
+      if (favorites.length === 0) {
+        content.innerHTML += '<div class="empty-hint">Você ainda não favoritou nenhuma música.</div>';
+        return;
+      }
+      content.innerHTML += favorites.map(f => trackRowHtml(f)).join('');
+    }
+
+    function openPlaylist(id, silent) {
+      currentView = 'playlist';
+      currentPlaylistId = id;
+      document.getElementById('navSearch').classList.remove('active');
+      document.getElementById('navFavorites').classList.remove('active');
+      renderPlaylistSidebar();
+      const playlist = playlists.find(p => p.id === id);
+      const content = document.getElementById('content');
+      if (!playlist) { content.innerHTML = '<div class="empty-hint">Playlist não encontrada.</div>'; return; }
+      content.innerHTML = '<h2>🎼 ' + playlist.name + '</h2>';
+      if (playlist.tracks.length === 0) {
+        content.innerHTML += '<div class="empty-hint">Essa playlist ainda está vazia. Adicione músicas pela busca!</div>';
+      } else {
+        content.innerHTML += playlist.tracks.map(t => trackRowHtml(t, { removableFromPlaylist: true })).join('');
+      }
+    }
+
+    let searchTimeout = null;
+    document.getElementById('searchInput').addEventListener('input', (e) => {
+      const q = e.target.value.trim();
+      clearTimeout(searchTimeout);
+      if (!q) {
+        showView('search');
+        return;
+      }
+      searchTimeout = setTimeout(() => doSearch(q), 500);
+    });
+
+    async function doSearch(q) {
+      currentView = 'search';
+      currentPlaylistId = null;
+      document.getElementById('navSearch').classList.add('active');
+      document.getElementById('navFavorites').classList.remove('active');
+      renderPlaylistSidebar();
+      const content = document.getElementById('content');
+      content.innerHTML = '<div class="loading">Buscando "' + q + '"...</div>';
+      try {
+        const res = await fetch('/api/activities/music/search?q=' + encodeURIComponent(q));
+        const data = await res.json();
+        const tracks = data.tracks || [];
+        if (tracks.length === 0) {
+          content.innerHTML = '<div class="empty-hint">Nada encontrado pra "' + q + '". Tente outro termo.</div>';
+          return;
+        }
+        content.innerHTML = '<h2>Resultados pra "' + q + '"</h2>' + tracks.map(t => trackRowHtml(t)).join('');
+      } catch (e) {
+        content.innerHTML = '<div class="empty-hint">❌ Erro ao buscar. Tente de novo.</div>';
+      }
+    }
+
+    (async () => {
+      await window.activityReady;
+      await Promise.all([loadFavorites(), loadPlaylists()]);
+    })();
+  </script>
+</body>
+</html>`);
   });
 
   // ----- RPG: Ficha + Batalha (engine real do jogo) -----

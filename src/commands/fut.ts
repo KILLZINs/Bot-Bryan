@@ -2,7 +2,7 @@
 // COMANDO /fut — Sistema "Rachão" (fase 2: clãs + partidas por modo)
 // ═══════════════════════════════════════════════════════════════════════
 
-import { SlashCommandBuilder, ChatInputCommandInteraction, EmbedBuilder } from 'discord.js';
+import { SlashCommandBuilder, ChatInputCommandInteraction, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
 import { Command } from '../types';
 import { errorEmbed, successEmbed, COLORS } from '../utils/embeds';
 import {
@@ -11,8 +11,9 @@ import {
   listTeams, createTeam, deleteTeam, setMemberTeam,
   createPartida, getOpenPartida, getPartidaById, deletePartida, listPartidaHistory,
   joinPartida, addOfflinePlayer, setTeam, autoBalanceTeams, startPartida, recordEvent, finishPartida,
-  getProfile, getRanking, getUserProfile, setUserPosition,
-  type FutEventType, type FutMode,
+  getProfile, getRanking, getUserProfile, setUserPosition, listGoalVideos,
+  createChamada, listChamadas, deleteChamada, respondChamada,
+  type FutEventType, type FutMode, type FutRsvpStatus,
 } from '../fut/services/pelada';
 
 function playerRefFrom(interaction: ChatInputCommandInteraction) {
@@ -116,7 +117,10 @@ export default {
         .addUserOption((o) => o.setName('jogador').setDescription('Quem fez o gol'))
         .addStringOption((o) => o.setName('apelido').setDescription('Apelido (jogador offline)'))
         .addUserOption((o) => o.setName('assistencia_de').setDescription('Quem deu a assistência (opcional)'))
-        .addStringOption((o) => o.setName('assistencia_apelido').setDescription('Apelido de quem assistiu (opcional)')))
+        .addStringOption((o) => o.setName('assistencia_apelido').setDescription('Apelido de quem assistiu (opcional)'))
+        .addStringOption((o) => o.setName('video').setDescription('Link do vídeo do gol (opcional, ex: YouTube)')))
+      .addSubcommand((sub) => sub.setName('gols').setDescription('Lista os gols com vídeo salvos na partida')
+        .addStringOption((o) => o.setName('cla').setDescription('Nome do clã').setRequired(true)))
       .addSubcommand((sub) => sub.setName('defesa').setDescription('Registra uma defesa')
         .addStringOption((o) => o.setName('cla').setDescription('Nome do clã').setRequired(true))
         .addUserOption((o) => o.setName('jogador').setDescription('Quem defendeu'))
@@ -149,7 +153,20 @@ export default {
     .addSubcommand((sub) => sub.setName('posicao').setDescription('Define sua posição preferida (usada como padrão ao entrar em partidas)')
       .addStringOption((o) => o.setName('modo').setDescription('Futsal ou campo').setRequired(true)
         .addChoices({ name: 'Futsal', value: 'futsal' }, { name: 'Campo', value: 'campo' }))
-      .addStringOption((o) => o.setName('posicao').setDescription('Ex: Goleiro, Zagueiro, Meia, Atacante, Pivô...').setRequired(true))),
+      .addStringOption((o) => o.setName('posicao').setDescription('Ex: Goleiro, Zagueiro, Meia, Atacante, Pivô...').setRequired(true)))
+    .addSubcommand((sub) => sub.setName('chamar').setDescription('Chama o fut! Anuncia local, horário, PIX e link pro clã')
+      .addStringOption((o) => o.setName('cla').setDescription('Nome do clã').setRequired(true))
+      .addStringOption((o) => o.setName('local').setDescription('Onde vai ser').setRequired(true))
+      .addStringOption((o) => o.setName('horario').setDescription('Quando (ex: "Hoje 20h", "Sáb 09/08 16h")').setRequired(true))
+      .addStringOption((o) => o.setName('pix').setDescription('Chave PIX pra dividir a quadra (opcional)'))
+      .addStringOption((o) => o.setName('link').setDescription('Link do grupo/WhatsApp/outra plataforma (opcional)'))
+      .addStringOption((o) => o.setName('mensagem').setDescription('Mensagem extra (opcional)')))
+    .addSubcommand((sub) => sub.setName('chamadas').setDescription('Mostra as últimas chamadas do clã e quem confirmou')
+      .addStringOption((o) => o.setName('cla').setDescription('Nome do clã').setRequired(true)))
+    .addSubcommand((sub) => sub.setName('confirmar').setDescription('Confirma presença na última chamada do clã')
+      .addStringOption((o) => o.setName('cla').setDescription('Nome do clã').setRequired(true))
+      .addStringOption((o) => o.setName('status').setDescription('Sua resposta').setRequired(true)
+        .addChoices({ name: '✅ Vou', value: 'vou' }, { name: '🤔 Talvez', value: 'talvez' }, { name: '❌ Não vou', value: 'nao_vou' }))),
 
   async execute(interaction: ChatInputCommandInteraction) {
     const group = interaction.options.getSubcommandGroup(false);
@@ -270,6 +287,18 @@ export default {
           return;
         }
 
+        if (sub === 'gols') {
+          const clan = await resolveClan(interaction);
+          const partidaAtual = await getOpenPartida(clan.id) ?? (await listPartidaHistory(clan.id, 1))[0];
+          if (!partidaAtual) { await interaction.reply({ embeds: [errorEmbed('Nenhuma partida ainda', 'Esse clã ainda não tem nenhuma partida.')], ephemeral: true }); return; }
+          const videos = await listGoalVideos(partidaAtual.id);
+          if (!videos.length) { await interaction.reply({ embeds: [errorEmbed('Sem vídeos ainda', 'Nenhum gol com vídeo salvo nessa partida. Use `video:` ao registrar um gol.')], ephemeral: true }); return; }
+          const embed = new EmbedBuilder().setColor(COLORS.GOLD).setTitle(`🎬 Gols com vídeo — ${partidaAtual.name || 'Partida'}`)
+            .setDescription(videos.map((v, i) => `**${i + 1}.** ${v.player?.displayName || 'Desconhecido'} — [assistir](${v.videoUrl})`).join('\n'));
+          await interaction.reply({ embeds: [embed] });
+          return;
+        }
+
         const clan = await resolveClan(interaction);
         const partida = await getOpenPartida(clan.id);
         if (!partida && sub !== 'deletar') {
@@ -325,16 +354,19 @@ export default {
           if (!ref.discordId && !ref.apelido) { await interaction.reply({ embeds: [errorEmbed('Faltou o jogador', 'Informe `jogador` ou `apelido`.')], ephemeral: true }); return; }
 
           let assistRef: { discordId?: string; apelido?: string } | undefined;
+          let videoUrl: string | undefined;
           if (sub === 'gol') {
             const assistUser = interaction.options.getUser('assistencia_de');
             const assistApelido = interaction.options.getString('assistencia_apelido');
             if (assistUser || assistApelido) assistRef = { discordId: assistUser?.id, apelido: assistApelido ?? undefined };
+            videoUrl = interaction.options.getString('video') ?? undefined;
           }
 
-          const { player, assistPlayer } = await recordEvent(partida!.id, ref, sub as FutEventType, assistRef);
+          const { player, assistPlayer } = await recordEvent(partida!.id, ref, sub as FutEventType, assistRef, videoUrl);
           const labelMap: Record<string, string> = { gol: '⚽ Gol', defesa: '🧤 Defesa', concedido: '🥅 Gol concedido', erro: '⚠️ Erro grave' };
           let desc = `${labelMap[sub]} de **${player.displayName}**`;
           if (assistPlayer) desc += ` (assistência de **${assistPlayer.displayName}**)`;
+          if (videoUrl) desc += `\n🎬 [Ver vídeo](${videoUrl})`;
           await interaction.reply({ embeds: [successEmbed('Evento registrado', desc), buildPartidaEmbed(await getPartidaById(partida!.id), clan.name)] });
           return;
         }
@@ -382,6 +414,70 @@ export default {
             { name: 'Erros Graves', value: `${profile.errosGraves}`, inline: true },
           );
         await interaction.reply({ embeds: [embed] });
+        return;
+      }
+
+      if (sub === 'chamar') {
+        const clan = await resolveClan(interaction);
+        const local = interaction.options.getString('local', true);
+        const horario = interaction.options.getString('horario', true);
+        const pix = interaction.options.getString('pix') ?? undefined;
+        const link = interaction.options.getString('link') ?? undefined;
+        const mensagem = interaction.options.getString('mensagem') ?? undefined;
+
+        const chamada = await createChamada(clan.id, interaction.user.id, { local, horario, pix, link, mensagem });
+
+        const embed = new EmbedBuilder()
+          .setColor(COLORS.GOLD)
+          .setTitle(`📣 Vai ter fut! — ${clan.name}`)
+          .setDescription(mensagem || `${interaction.user.username} tá chamando o pessoal pra jogar!`)
+          .addFields(
+            { name: '📍 Local', value: local, inline: true },
+            { name: '🕒 Horário', value: horario, inline: true },
+          );
+        if (pix) embed.addFields({ name: '💸 PIX (dividir a quadra)', value: `\`${pix}\``, inline: false });
+        if (link) embed.addFields({ name: '🔗 Link', value: link, inline: false });
+        embed.setFooter({ text: `Confirme presença com /fut confirmar cla:${clan.name}` });
+
+        const siteUrl = process.env.SITE_URL;
+        const components = siteUrl
+          ? [new ActionRowBuilder<ButtonBuilder>().addComponents(
+              new ButtonBuilder().setStyle(ButtonStyle.Link).setLabel('📣 Confirmar no site').setURL(`${siteUrl.replace(/\/$/, '')}/atividades/fut`),
+            )]
+          : [];
+
+        await interaction.reply({ embeds: [embed], components });
+        return;
+      }
+
+      if (sub === 'chamadas') {
+        const clan = await resolveClan(interaction);
+        const chamadas = await listChamadas(clan.id, 5);
+        if (!chamadas.length) { await interaction.reply({ embeds: [errorEmbed('Nenhuma chamada ainda', 'Use `/fut chamar` pra marcar um fut.')], ephemeral: true }); return; }
+
+        const embed = new EmbedBuilder().setColor(COLORS.PRIMARY).setTitle(`📣 Últimas chamadas — ${clan.name}`);
+        for (const c of chamadas) {
+          const vou = c.respostas.filter((r) => r.status === 'vou').length;
+          const talvez = c.respostas.filter((r) => r.status === 'talvez').length;
+          const naoVou = c.respostas.filter((r) => r.status === 'nao_vou').length;
+          embed.addFields({
+            name: `${c.local} — ${c.horario}`,
+            value: `✅ ${vou} vão · 🤔 ${talvez} talvez · ❌ ${naoVou} não vão`,
+          });
+        }
+        await interaction.reply({ embeds: [embed] });
+        return;
+      }
+
+      if (sub === 'confirmar') {
+        const clan = await resolveClan(interaction);
+        const status = interaction.options.getString('status', true) as FutRsvpStatus;
+        const chamadas = await listChamadas(clan.id, 1);
+        if (!chamadas.length) { await interaction.reply({ embeds: [errorEmbed('Nenhuma chamada ainda', 'Ninguém chamou o fut nesse clã ainda.')], ephemeral: true }); return; }
+
+        await respondChamada(chamadas[0].id, interaction.user.id, interaction.user.username, status);
+        const labelMap: Record<FutRsvpStatus, string> = { vou: '✅ Você confirmou presença!', talvez: '🤔 Você marcou como talvez.', nao_vou: '❌ Você marcou que não vai.' };
+        await interaction.reply({ embeds: [successEmbed('Resposta registrada', labelMap[status])], ephemeral: true });
         return;
       }
 

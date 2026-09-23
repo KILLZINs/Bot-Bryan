@@ -34,6 +34,7 @@ import { getActiveBuffs, formatBuffList } from '../rpg/services/temp-buffs';
 import { getDayPhase, PHASE_INFO } from '../rpg/services/day-night';
 import {
   FutError, createClan, joinClan, listClans, getClanByName, getClanById, deleteClan,
+  listTeams as listFutTeams, createTeam as createFutTeam, deleteTeam as deleteFutTeam, setMemberTeam as setFutMemberTeam,
   createPartida, getOpenPartida, getPartidaById, deletePartida, listPartidaHistory, joinPartida, addOfflinePlayer,
   setTeam, autoBalanceTeams, startPartida, recordEvent, finishPartida, getProfile as getFutProfile, getRanking as getFutRanking,
   getUserProfile as getFutUserProfile, setUserPosition as setFutUserPosition,
@@ -1501,16 +1502,37 @@ ${activitySdkBootstrap(clientId!)}
   // cada jogador separadas por modo. Reaproveita 100% da mesma engine de
   // src/fut/services/pelada.ts que o comando /fut usa.
   // =====================================================================
-  function serializeFutClan(clan: NonNullable<Awaited<ReturnType<typeof getClanById>>>) {
+  // Resolve a URL do avatar de alguém pelo ID do Discord, pra mostrar a foto
+  // real da pessoa no site (jogador de clã, elenco, partida, ranking...).
+  async function getAvatarUrl(discordId: string | null): Promise<string | null> {
+    if (!discordId) return null;
+    const user = await discordClient.users.fetch(discordId).catch(() => null);
+    return user ? user.displayAvatarURL({ size: 128 }) : null;
+  }
+
+  async function serializeFutClan(clan: NonNullable<Awaited<ReturnType<typeof getClanById>>>) {
+    const members = await Promise.all(clan.members.map(async (m) => ({
+      id: m.id,
+      discordId: m.discordId,
+      displayName: m.displayName,
+      teamId: m.teamId,
+      avatarUrl: await getAvatarUrl(m.discordId),
+    })));
     return {
       id: clan.id,
       name: clan.name,
       creatorId: clan.creatorId,
-      members: clan.members.map((m) => ({ discordId: m.discordId, displayName: m.displayName })),
+      members,
+      teams: clan.teams.map((t) => ({ id: t.id, name: t.name, color: t.color })),
     };
   }
 
-  function serializeFutPartida(partida: NonNullable<Awaited<ReturnType<typeof getPartidaById>>>) {
+  async function serializeFutPartida(partida: NonNullable<Awaited<ReturnType<typeof getPartidaById>>>) {
+    const players = await Promise.all(partida.players.map(async (p) => ({
+      id: p.id, discordId: p.discordId, displayName: p.displayName, position: p.position, team: p.team,
+      goals: p.goals, assists: p.assists, defesas: p.defesas, golsConcedidos: p.golsConcedidos, errosGraves: p.errosGraves,
+      nota: p.nota, avatarUrl: await getAvatarUrl(p.discordId),
+    })));
     return {
       id: partida.id,
       clanId: partida.clanId,
@@ -1521,10 +1543,7 @@ ${activitySdkBootstrap(clientId!)}
       scoreB: partida.scoreB,
       resultado: partida.resultado,
       creatorId: partida.creatorId,
-      players: partida.players.map((p) => ({
-        id: p.id, discordId: p.discordId, displayName: p.displayName, position: p.position, team: p.team,
-        goals: p.goals, assists: p.assists, defesas: p.defesas, golsConcedidos: p.golsConcedidos, errosGraves: p.errosGraves,
-      })),
+      players,
     };
   }
 
@@ -1538,7 +1557,7 @@ ${activitySdkBootstrap(clientId!)}
     const guildId = await resolveGuildId(typeof req.query.guildId === 'string' ? req.query.guildId : undefined);
     if (!guildId) return res.status(400).json({ error: 'Nenhum servidor da Aliança configurado ainda.' });
     const clans = await listClans(guildId);
-    res.json({ clans: clans.map(serializeFutClan), meId: req.cookies!.player_userid });
+    res.json({ clans: await Promise.all(clans.map(serializeFutClan)), meId: req.cookies!.player_userid });
   });
 
   app.post('/api/activities/fut/clans', requirePlayerAuth, async (req, res) => {
@@ -1548,7 +1567,7 @@ ${activitySdkBootstrap(clientId!)}
       const userId = req.cookies!.player_userid as string;
       const username = (req.cookies!.player_username as string) || 'Jogador';
       const clan = await createClan(guildId, userId, username, String(req.body?.name || ''));
-      res.json({ clan: serializeFutClan(clan) });
+      res.json({ clan: await serializeFutClan(clan) });
     } catch (err) { handleFutError(res, err); }
   });
 
@@ -1557,7 +1576,7 @@ ${activitySdkBootstrap(clientId!)}
       const userId = req.cookies!.player_userid as string;
       const username = (req.cookies!.player_username as string) || 'Jogador';
       await joinClan(req.params.id, userId, username);
-      res.json({ clan: serializeFutClan((await getClanById(req.params.id))!) });
+      res.json({ clan: await serializeFutClan((await getClanById(req.params.id))!) });
     } catch (err) { handleFutError(res, err); }
   });
 
@@ -1569,9 +1588,49 @@ ${activitySdkBootstrap(clientId!)}
     } catch (err) { handleFutError(res, err); }
   });
 
+  // ── Elenco: times internos e fixos do clã (ex: Time Amarelo x Time Azul) ─
+  // Diferente do "team" A/B abaixo, que é só o lado de UMA partida.
+  app.get('/api/activities/fut/clans/:id/teams', requirePlayerAuth, async (req, res) => {
+    const teams = await listFutTeams(req.params.id);
+    const withAvatars = await Promise.all(teams.map(async (t) => ({
+      id: t.id,
+      name: t.name,
+      color: t.color,
+      members: await Promise.all(t.members.map(async (m) => ({
+        id: m.id, discordId: m.discordId, displayName: m.displayName, avatarUrl: await getAvatarUrl(m.discordId),
+      }))),
+    })));
+    res.json({ teams: withAvatars });
+  });
+
+  app.post('/api/activities/fut/clans/:id/teams', requirePlayerAuth, async (req, res) => {
+    try {
+      const userId = req.cookies!.player_userid as string;
+      const team = await createFutTeam(req.params.id, userId, String(req.body?.name || ''), req.body?.color || undefined);
+      res.json({ team });
+    } catch (err) { handleFutError(res, err); }
+  });
+
+  app.delete('/api/activities/fut/clans/:id/teams/:teamId', requirePlayerAuth, async (req, res) => {
+    try {
+      const userId = req.cookies!.player_userid as string;
+      await deleteFutTeam(req.params.teamId, userId);
+      res.json({ ok: true });
+    } catch (err) { handleFutError(res, err); }
+  });
+
+  app.post('/api/activities/fut/clans/:id/members/team', requirePlayerAuth, async (req, res) => {
+    try {
+      const ref = { discordId: req.body?.discordId || undefined, apelido: req.body?.apelido || undefined };
+      const teamId = req.body?.teamId || null;
+      await setFutMemberTeam(req.params.id, ref, teamId);
+      res.json({ clan: await serializeFutClan((await getClanById(req.params.id))!) });
+    } catch (err) { handleFutError(res, err); }
+  });
+
   app.get('/api/activities/fut/clans/:id/partida', requirePlayerAuth, async (req, res) => {
     const partida = await getOpenPartida(req.params.id);
-    res.json({ partida: partida ? serializeFutPartida(partida) : null, meId: req.cookies!.player_userid });
+    res.json({ partida: partida ? await serializeFutPartida(partida) : null, meId: req.cookies!.player_userid });
   });
 
   app.post('/api/activities/fut/clans/:id/partida', requirePlayerAuth, async (req, res) => {
@@ -1583,7 +1642,7 @@ ${activitySdkBootstrap(clientId!)}
       const userId = req.cookies!.player_userid as string;
       const username = (req.cookies!.player_username as string) || 'Jogador';
       const partida = await createPartida(clan.id, userId, username, modo, nome);
-      res.json({ partida: serializeFutPartida(partida) });
+      res.json({ partida: await serializeFutPartida(partida) });
     } catch (err) { handleFutError(res, err); }
   });
 
@@ -1610,7 +1669,7 @@ ${activitySdkBootstrap(clientId!)}
       const userId = req.cookies!.player_userid as string;
       const username = (req.cookies!.player_username as string) || 'Jogador';
       await joinPartida(partida.id, userId, username, req.body?.posicao || undefined);
-      res.json({ partida: serializeFutPartida((await getPartidaById(partida.id))!) });
+      res.json({ partida: await serializeFutPartida((await getPartidaById(partida.id))!) });
     } catch (err) { handleFutError(res, err); }
   });
 
@@ -1620,7 +1679,7 @@ ${activitySdkBootstrap(clientId!)}
       if (!partida) return;
       const apelido = String(req.body?.apelido || '');
       await addOfflinePlayer(partida.id, apelido, req.body?.posicao || undefined);
-      res.json({ partida: serializeFutPartida((await getPartidaById(partida.id))!) });
+      res.json({ partida: await serializeFutPartida((await getPartidaById(partida.id))!) });
     } catch (err) { handleFutError(res, err); }
   });
 
@@ -1630,7 +1689,7 @@ ${activitySdkBootstrap(clientId!)}
       if (!partida) return;
       const team = req.body?.team === 'B' ? 'B' : 'A';
       await setTeam(partida.id, { discordId: req.body?.discordId || undefined, apelido: req.body?.apelido || undefined }, team as FutTeam);
-      res.json({ partida: serializeFutPartida((await getPartidaById(partida.id))!) });
+      res.json({ partida: await serializeFutPartida((await getPartidaById(partida.id))!) });
     } catch (err) { handleFutError(res, err); }
   });
 
@@ -1640,7 +1699,7 @@ ${activitySdkBootstrap(clientId!)}
       if (!partida) return;
       const userId = req.cookies!.player_userid as string;
       const balanced = await autoBalanceTeams(partida.id, userId);
-      res.json({ partida: serializeFutPartida(balanced!) });
+      res.json({ partida: await serializeFutPartida(balanced!) });
     } catch (err) { handleFutError(res, err); }
   });
 
@@ -1650,7 +1709,7 @@ ${activitySdkBootstrap(clientId!)}
       if (!partida) return;
       const userId = req.cookies!.player_userid as string;
       await startPartida(partida.id, userId);
-      res.json({ partida: serializeFutPartida((await getPartidaById(partida.id))!) });
+      res.json({ partida: await serializeFutPartida((await getPartidaById(partida.id))!) });
     } catch (err) { handleFutError(res, err); }
   });
 
@@ -1667,7 +1726,7 @@ ${activitySdkBootstrap(clientId!)}
         : undefined;
 
       await recordEvent(partida.id, ref, type, assistRef);
-      res.json({ partida: serializeFutPartida((await getPartidaById(partida.id))!) });
+      res.json({ partida: await serializeFutPartida((await getPartidaById(partida.id))!) });
     } catch (err) { handleFutError(res, err); }
   });
 
@@ -1678,7 +1737,7 @@ ${activitySdkBootstrap(clientId!)}
       const userId = req.cookies!.player_userid as string;
       const resultado = req.body?.resultado as FutResultado | undefined;
       const finished = await finishPartida(partida.id, userId, resultado || undefined);
-      res.json({ partida: serializeFutPartida(finished) });
+      res.json({ partida: await serializeFutPartida(finished) });
     } catch (err) { handleFutError(res, err); }
   });
 
@@ -1695,14 +1754,14 @@ ${activitySdkBootstrap(clientId!)}
     const ranking = await getFutRanking(req.params.id, mode, 10);
     const withNames = await Promise.all(ranking.map(async (p) => {
       const user = await discordClient.users.fetch(p.discordId).catch(() => null);
-      return { ...p, displayName: user?.username || p.discordId };
+      return { ...p, displayName: user?.username || p.discordId, avatarUrl: user ? user.displayAvatarURL({ size: 64 }) : null };
     }));
     res.json({ ranking: withNames });
   });
 
   app.get('/api/activities/fut/clans/:id/historico', requirePlayerAuth, async (req, res) => {
     const partidas = await listPartidaHistory(req.params.id, 10);
-    res.json({ partidas: partidas.map(serializeFutPartida) });
+    res.json({ partidas: await Promise.all(partidas.map(serializeFutPartida)) });
   });
 
   // Perfil PESSOAL (posição preferida) — global, não depende de clã.
@@ -1865,11 +1924,13 @@ ${activitySdkBootstrap(clientId!)}
       <div class="crumb"><button onclick="voltarParaClanList()">← Clãs</button><span id="clanBreadcrumb"></span></div>
       <div class="tabs">
         <button class="tab active" id="tabPelada" onclick="showTab('pelada')">Partida</button>
+        <button class="tab" id="tabElenco" onclick="showTab('elenco')">Elenco</button>
         <button class="tab" id="tabHistorico" onclick="showTab('historico')">Histórico</button>
         <button class="tab" id="tabPerfil" onclick="showTab('perfil')">Perfil</button>
         <button class="tab" id="tabRanking" onclick="showTab('ranking')">Ranking</button>
       </div>
       <div id="panelPelada"></div>
+      <div id="panelElenco" style="display:none"></div>
       <div id="panelHistorico" style="display:none"></div>
       <div id="panelPerfil" style="display:none"></div>
       <div id="panelRanking" style="display:none"></div>
@@ -1938,7 +1999,7 @@ ${activitySdkBootstrap(clientId!)}
       if (!clans.length) { el.innerHTML = '<div class="empty-hint">Nenhum clã ainda. Crie o primeiro!</div>'; return; }
       el.innerHTML = clans.map(c => \`
         <div class="clan-item" onclick="abrirClan('\${c.id}')">
-          <div><strong>\${c.name}</strong><div class="meta">\${c.members.length} membro(s)</div></div>
+          <div><strong>\${c.name}</strong><div class="meta">\${c.members.slice(0, 5).map(m => avatarHtml(m.avatarUrl, m.displayName, 20)).join('')}\${c.members.length} membro(s)\${c.teams && c.teams.length ? ' · ' + c.teams.length + ' time(s)' : ''}</div></div>
           <div class="actions">\${c.creatorId === ME_ID ? '<button class="btn danger" onclick="event.stopPropagation();deletarClan(\\''+c.id+'\\')">Deletar</button>' : ''}</div>
         </div>\`).join('');
     }
@@ -1982,17 +2043,27 @@ ${activitySdkBootstrap(clientId!)}
     function showTab(tab) {
       currentTab = tab;
       document.getElementById('tabPelada').classList.toggle('active', tab === 'pelada');
+      document.getElementById('tabElenco').classList.toggle('active', tab === 'elenco');
       document.getElementById('tabHistorico').classList.toggle('active', tab === 'historico');
       document.getElementById('tabPerfil').classList.toggle('active', tab === 'perfil');
       document.getElementById('tabRanking').classList.toggle('active', tab === 'ranking');
       document.getElementById('panelPelada').style.display = tab === 'pelada' ? 'block' : 'none';
+      document.getElementById('panelElenco').style.display = tab === 'elenco' ? 'block' : 'none';
       document.getElementById('panelHistorico').style.display = tab === 'historico' ? 'block' : 'none';
       document.getElementById('panelPerfil').style.display = tab === 'perfil' ? 'block' : 'none';
       document.getElementById('panelRanking').style.display = tab === 'ranking' ? 'block' : 'none';
       if (tab === 'pelada') refreshPartida();
+      if (tab === 'elenco') loadElenco();
       if (tab === 'historico') loadHistorico();
       if (tab === 'perfil') loadPerfil();
       if (tab === 'ranking') loadRanking();
+    }
+
+    function avatarHtml(url, name, size) {
+      const s = size || 28;
+      if (url) return '<img src="' + url + '" alt="" style="width:' + s + 'px;height:' + s + 'px;border-radius:50%;object-fit:cover;vertical-align:middle;margin-right:6px;">';
+      const letter = (name || '?').trim().charAt(0).toUpperCase() || '?';
+      return '<span style="display:inline-flex;align-items:center;justify-content:center;width:' + s + 'px;height:' + s + 'px;border-radius:50%;background:#262A40;color:#9aa0c0;font-size:' + Math.round(s*0.45) + 'px;vertical-align:middle;margin-right:6px;">' + letter + '</span>';
     }
 
     function setMode(mode) {
@@ -2041,7 +2112,8 @@ ${activitySdkBootstrap(clientId!)}
       const statusLabel = partida.status === 'aberta' ? '🟡 Aberta' : partida.status === 'em_andamento' ? '🟢 Em andamento' : '🔴 Finalizada';
 
       function playerRowHtml(p) {
-        return \`<div class="player-row"><span>\${p.displayName}</span><span class="stats">⚽\${p.goals} 🅰️\${p.assists} 🧤\${p.defesas} 🥅\${p.golsConcedidos} ⚠️\${p.errosGraves}</span></div>\`;
+        const notaTxt = (partida.status === 'finalizada' && p.nota != null) ? ' <strong style="color:#ffd166;">⭐' + p.nota.toFixed(1) + '</strong>' : '';
+        return \`<div class="player-row"><span>\${avatarHtml(p.avatarUrl, p.displayName, 22)}\${p.displayName}\${p.position ? ' <small style="color:var(--text-muted);">(' + p.position + ')</small>' : ''}</span><span class="stats">⚽\${p.goals} 🅰️\${p.assists} 🧤\${p.defesas} 🥅\${p.golsConcedidos} ⚠️\${p.errosGraves}\${notaTxt}</span></div>\`;
       }
 
       let html = \`
@@ -2201,6 +2273,7 @@ ${activitySdkBootstrap(clientId!)}
             <h2>Suas estatísticas (\${currentMode})</h2>
             <table class="stats-table">
               <tr><td>Posição</td><td style="text-align:right;">\${posicao}</td></tr>
+              <tr><td>Nota média</td><td style="text-align:right;">⭐ \${p.notaMedia.toFixed(1)}</td></tr>
               <tr><td>Partidas</td><td style="text-align:right;">\${p.totalPartidas}</td></tr>
               <tr><td>Vitórias / Derrotas / Empates</td><td style="text-align:right;">\${p.vitorias} / \${p.derrotas} / \${p.empates}</td></tr>
               <tr><td>XP</td><td style="text-align:right;">\${p.xp}</td></tr>
@@ -2221,8 +2294,93 @@ ${activitySdkBootstrap(clientId!)}
         const data = await api('/api/activities/fut/clans/' + currentClan.id + '/ranking?mode=' + currentMode);
         if (!data.ranking.length) { panel.innerHTML = modeToggleHtml() + '<div class="card"><div class="empty-hint">Ninguém finalizou uma partida de ' + currentMode + ' ainda.</div></div>'; return; }
         panel.innerHTML = modeToggleHtml() + '<div class="card"><h2>🏆 Ranking (' + currentMode + ')</h2>' + data.ranking.map((p, i) => \`
-          <div class="rank-item"><span>\${i + 1}. \${p.displayName}</span><span>\${p.xp} XP</span></div>\`).join('') + '</div>';
+          <div class="rank-item"><span>\${i + 1}. \${avatarHtml(p.avatarUrl, p.displayName, 24)}\${p.displayName}</span><span>\${p.xp} XP · ⭐\${p.notaMedia.toFixed(1)}</span></div>\`).join('') + '</div>';
       } catch (e) { panel.innerHTML = modeToggleHtml() + '<div class="card"><div class="empty-hint">❌ ' + e.message + '</div></div>'; }
+    }
+
+    // ── Elenco: times internos e fixos do clã ────────────────────────────
+    async function loadElenco() {
+      const panel = document.getElementById('panelElenco');
+      panel.innerHTML = '<div class="empty-hint">Carregando...</div>';
+      try {
+        const [teamsData] = await Promise.all([api('/api/activities/fut/clans/' + currentClan.id + '/teams')]);
+        renderElenco(teamsData.teams);
+      } catch (e) { panel.innerHTML = '<div class="card"><div class="empty-hint">❌ ' + e.message + '</div></div>'; }
+    }
+
+    function renderElenco(teams) {
+      const panel = document.getElementById('panelElenco');
+      const souCriador = currentClan.creatorId === ME_ID;
+      const todosMembros = currentClan.members || [];
+      const idsComTime = new Set();
+      teams.forEach(t => t.members.forEach(m => idsComTime.add(m.id)));
+      const semTime = todosMembros.filter(m => !idsComTime.has(m.id));
+
+      const teamOptionsHtml = '<option value="">Sem time</option>' + teams.map(t => \`<option value="\${t.id}">\${t.name}</option>\`).join('');
+
+      function memberChipHtml(m) {
+        return \`<span class="chip">\${avatarHtml(m.avatarUrl, m.displayName, 20)}\${m.displayName}
+          \${souCriador ? \`<select onchange="definirElenco(this.value, '\${m.discordId || ''}', '\${m.displayName}')" style="margin-left:6px;">\${teamOptionsHtml}</select>\` : ''}
+        </span>\`;
+      }
+
+      let html = '<div class="card"><div class="row" style="justify-content:space-between;align-items:center;"><h2 style="margin:0;">👕 Elenco</h2></div>';
+      html += '<p style="color:var(--text-muted);font-size:0.85rem;margin-bottom:14px;">Times fixos do clã (diferente do time A/B de uma partida específica).</p>';
+
+      if (souCriador) {
+        html += \`<div class="row"><input id="newTeamName" type="text" placeholder="Nome do time (ex: Amarelo)"><input id="newTeamColor" type="text" placeholder="Cor (opcional)" style="width:140px;"><button class="btn" onclick="criarElencoTime()">Criar time</button></div>\`;
+      }
+
+      if (!teams.length) {
+        html += '<div class="empty-hint" style="margin-top:10px;">Nenhum time interno ainda.</div>';
+      } else {
+        for (const t of teams) {
+          html += \`<div class="team-col" style="margin-top:14px;">
+            <div class="row" style="justify-content:space-between;align-items:center;">
+              <h3 style="margin:0;">\${t.name}\${t.color ? ' <small style="color:var(--text-muted);">(' + t.color + ')</small>' : ''}</h3>
+              \${souCriador ? \`<button class="btn danger" onclick="deletarElencoTime('\${t.id}','\${t.name}')">Deletar</button>\` : ''}
+            </div>
+            <div class="unassigned" style="margin-top:8px;">\${t.members.length ? t.members.map(memberChipHtml).join('') : '<span class="empty-hint">vazio</span>'}</div>
+          </div>\`;
+        }
+      }
+
+      if (semTime.length) {
+        html += \`<h3 style="margin-top:14px;">Sem time</h3><div class="unassigned">\${semTime.map(memberChipHtml).join('')}</div>\`;
+      }
+
+      html += '</div>';
+      panel.innerHTML = html;
+    }
+
+    async function criarElencoTime() {
+      const name = document.getElementById('newTeamName').value.trim();
+      const color = document.getElementById('newTeamColor').value.trim();
+      if (!name) return;
+      try {
+        await api('/api/activities/fut/clans/' + currentClan.id + '/teams', { method: 'POST', body: JSON.stringify({ name, color }) });
+        showToast('✅ Time criado!');
+        loadElenco();
+      } catch (e) { showToast('❌ ' + e.message); }
+    }
+
+    async function deletarElencoTime(teamId, name) {
+      if (!confirm('Deletar o time "' + name + '"?')) return;
+      try {
+        await api('/api/activities/fut/clans/' + currentClan.id + '/teams/' + teamId, { method: 'DELETE' });
+        showToast('🗑️ Time deletado.');
+        loadElenco();
+      } catch (e) { showToast('❌ ' + e.message); }
+    }
+
+    async function definirElenco(teamId, discordId, displayName) {
+      try {
+        const body = { teamId: teamId || null };
+        if (discordId) body.discordId = discordId; else body.apelido = displayName;
+        await api('/api/activities/fut/clans/' + currentClan.id + '/members/team', { method: 'POST', body: JSON.stringify(body) });
+        showToast('✅ Elenco atualizado!');
+        loadElenco();
+      } catch (e) { showToast('❌ ' + e.message); }
     }
 
     (async () => {

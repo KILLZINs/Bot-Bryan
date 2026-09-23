@@ -976,10 +976,29 @@ model FutClan {
   members  FutClanMember[]
   partidas FutPartida[]
   stats    FutClanPlayerStats[]
+  teams    FutTeam[]
 
   @@unique([guildId, name])
   @@index([guildId])
   @@map("fut_clans")
+}
+
+// Time INTERNO e permanente dentro do clã (ex: "Time Amarelo" x "Time Azul").
+// Diferente do "team" A/B da FutPartidaPlayer, que é só o lado de uma partida
+// específica — isso aqui é uma divisão fixa do próprio grupo, tipo elenco.
+model FutTeam {
+  id        String   @id @default(cuid())
+  clanId    String
+  name      String
+  color     String?
+  createdAt DateTime @default(now())
+
+  clan    FutClan         @relation(fields: [clanId], references: [id], onDelete: Cascade)
+  members FutClanMember[]
+
+  @@unique([clanId, name])
+  @@index([clanId])
+  @@map("fut_teams")
 }
 
 model FutClanMember {
@@ -987,12 +1006,15 @@ model FutClanMember {
   clanId      String
   discordId   String?  // opcional — membro sem conta vinculada (offline)
   displayName String
+  teamId      String?  // time interno do clã ao qual o jogador pertence (opcional)
   joinedAt    DateTime @default(now())
 
-  clan FutClan @relation(fields: [clanId], references: [id], onDelete: Cascade)
+  clan FutClan  @relation(fields: [clanId], references: [id], onDelete: Cascade)
+  team FutTeam? @relation(fields: [teamId], references: [id], onDelete: SetNull)
 
   @@unique([clanId, discordId])
   @@index([clanId])
+  @@index([teamId])
   @@map("fut_clan_members")
 }
 
@@ -1030,6 +1052,7 @@ model FutPartidaPlayer {
   defesas        Int     @default(0)
   golsConcedidos Int     @default(0)
   errosGraves    Int     @default(0)
+  nota           Float?  // nota estilo Sofascore (0.0-10.0), calculada ao finalizar a partida
   createdAt      DateTime @default(now())
 
   partida FutPartida      @relation(fields: [partidaId], references: [id], onDelete: Cascade)
@@ -1071,6 +1094,8 @@ model FutClanPlayerStats {
   golsConcedidos Int      @default(0)
   errosGraves    Int      @default(0)
   xp             Int      @default(0)
+  notaMedia      Float    @default(0) // média das notas (estilo Sofascore) de todas as partidas nesse modo
+  notaCount      Int      @default(0) // quantas partidas entraram na média (pra recalcular incremental)
   updatedAt      DateTime @updatedAt
 
   clan FutClan @relation(fields: [clanId], references: [id], onDelete: Cascade)

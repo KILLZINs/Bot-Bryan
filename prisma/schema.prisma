@@ -977,6 +977,7 @@ model FutClan {
   partidas FutPartida[]
   stats    FutClanPlayerStats[]
   teams    FutTeam[]
+  chamadas FutChamada[]
 
   @@unique([guildId, name])
   @@index([guildId])
@@ -1068,6 +1069,7 @@ model FutMatchEvent {
   partidaId String
   playerId  String?
   type      String   // gol | assistencia | defesa | concedido | erro
+  videoUrl  String?  // link do vídeo do lance (opcional, geralmente só em 'gol')
   createdAt DateTime @default(now())
 
   partida FutPartida        @relation(fields: [partidaId], references: [id], onDelete: Cascade)
@@ -1117,4 +1119,41 @@ model FutUserProfile {
   updatedAt      DateTime @updatedAt
 
   @@map("fut_user_profiles")
+}
+
+// "Chamar o fut" — convite pra combinar uma pelada: local, horário, PIX (pra
+// dividir o custo da quadra) e um link (grupo de WhatsApp, outra plataforma,
+// etc). Postado no Discord (anúncio) e confirmável pelo site (RSVP), que é
+// onde a "chamada" realmente vive.
+model FutChamada {
+  id         String   @id @default(cuid())
+  clanId     String
+  creatorId  String
+  local      String
+  horario    String   // texto livre (ex: "Hoje 20h", "Sábado 09/08 às 16h") — não força um formato de data
+  pix        String?
+  link       String?
+  mensagem   String?
+  createdAt  DateTime @default(now())
+
+  clan      FutClan               @relation(fields: [clanId], references: [id], onDelete: Cascade)
+  respostas FutChamadaResposta[]
+
+  @@index([clanId])
+  @@map("fut_chamadas")
+}
+
+model FutChamadaResposta {
+  id          String   @id @default(cuid())
+  chamadaId   String
+  discordId   String
+  displayName String
+  status      String   // 'vou' | 'talvez' | 'nao_vou'
+  respondedAt DateTime @default(now())
+
+  chamada FutChamada @relation(fields: [chamadaId], references: [id], onDelete: Cascade)
+
+  @@unique([chamadaId, discordId])
+  @@index([chamadaId])
+  @@map("fut_chamada_respostas")
 }

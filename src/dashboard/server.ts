@@ -33,7 +33,7 @@ import { MEDITATION_OPTIONS, startMeditation, collectMeditation } from '../rpg/p
 import { getActiveBuffs, formatBuffList } from '../rpg/services/temp-buffs';
 import { getDayPhase, PHASE_INFO } from '../rpg/services/day-night';
 import {
-  FutError, createClan, joinClan, listClans, getClanByName, getClanById, getClanByJoinCode, deleteClan,
+  FutError, createClan, joinClan, listClans, countClans as countFutClans, maxClansPerGuild, getClanByName, getClanById, getClanByJoinCode, deleteClan,
   listTeams as listFutTeams, createTeam as createFutTeam, deleteTeam as deleteFutTeam, setMemberTeam as setFutMemberTeam,
   createPartida, getOpenPartida, getPartidaById, deletePartida, listPartidaHistory, joinPartida, addOfflinePlayer,
   setTeam, autoBalanceTeams, startPartida, recordEvent, finishPartida, getProfile as getFutProfile, getRanking as getFutRanking,
@@ -1596,8 +1596,8 @@ ${activitySdkBootstrap(clientId!)}
     const guildId = await resolveGuildId(typeof req.query.guildId === 'string' ? req.query.guildId : undefined, req.cookies?.selected_guild as string | undefined);
     if (!guildId) return res.status(400).json({ error: 'Nenhum servidor da Aliança configurado ainda.' });
     const userId = req.cookies!.player_userid as string;
-    const clans = await listClans(guildId, userId);
-    res.json({ clans: await Promise.all(clans.map((c) => serializeFutClan(c, userId))), meId: userId });
+    const [clans, totalClans] = await Promise.all([listClans(guildId, userId), countFutClans(guildId)]);
+    res.json({ clans: await Promise.all(clans.map((c) => serializeFutClan(c, userId))), meId: userId, totalClans, maxClans: maxClansPerGuild() });
   });
 
   app.post('/api/activities/fut/clans', requirePlayerAuth, async (req, res) => {
@@ -2022,7 +2022,7 @@ ${activitySdkBootstrap(clientId!)}
         </div>
       </div>
       <div class="card">
-        <h2>Seus clãs</h2>
+        <h2>Seus clãs <small id="clanSlotCount" style="color:var(--text-muted);font-weight:normal;"></small></h2>
         <div class="row">
           <input id="newClanName" type="text" placeholder="Nome do novo clã" style="flex:1;min-width:160px;">
           <select id="newClanVisibility" style="width:140px;">
@@ -2111,16 +2111,21 @@ ${activitySdkBootstrap(clientId!)}
     }
 
     // ── Lista de clãs ──────────────────────────────────────────────────
+    let clanSlots = { total: 0, max: 3 };
+
     async function loadClans() {
       try {
         const data = await api('/api/activities/fut/clans');
         clans = data.clans;
+        clanSlots = { total: data.totalClans ?? clans.length, max: data.maxClans ?? 3 };
         renderClanList();
       } catch (e) { showToast('❌ ' + e.message); }
     }
 
     function renderClanList() {
       const el = document.getElementById('clanList');
+      const slotEl = document.getElementById('clanSlotCount');
+      if (slotEl) slotEl.textContent = '(' + clanSlots.total + '/' + clanSlots.max + ' slots usados)';
       if (!clans.length) { el.innerHTML = '<div class="empty-hint">Nenhum clã ainda. Crie o primeiro!</div>'; return; }
       el.innerHTML = clans.map(c => \`
         <div class="clan-item" onclick="abrirClan('\${c.id}')">
@@ -2228,6 +2233,19 @@ ${activitySdkBootstrap(clientId!)}
       return '<span style="display:inline-flex;align-items:center;justify-content:center;width:' + s + 'px;height:' + s + 'px;border-radius:50%;background:#262A40;color:#9aa0c0;font-size:' + Math.round(s*0.45) + 'px;vertical-align:middle;margin-right:6px;">' + letter + '</span>';
     }
 
+    // Badge colorido pra nota (estilo Sofascore/Betano) — mesma faixa que o
+    // Discord usa em emoji (notaBand em src/fut/services/pelada.ts), só que
+    // aqui como cor de verdade: <6 vermelho, 6-6.9 laranja, 7-7.9 verde, 8+ dourado.
+    function notaBadgeHtml(nota) {
+      if (nota == null) return '';
+      const n = Number(nota);
+      let bg = '#e74c3c', fg = '#fff';
+      if (n >= 8) { bg = '#f1c40f'; fg = '#1a1a1a'; }
+      else if (n >= 7) { bg = '#2ecc71'; fg = '#0a2a12'; }
+      else if (n >= 6) { bg = '#f39c12'; fg = '#1a1a1a'; }
+      return '<span style="display:inline-block;min-width:32px;padding:2px 6px;border-radius:6px;background:' + bg + ';color:' + fg + ';font-weight:700;font-size:0.78rem;text-align:center;">' + n.toFixed(1) + '</span>';
+    }
+
     function setMode(mode) {
       currentMode = mode;
       if (currentTab === 'perfil') loadPerfil();
@@ -2274,7 +2292,7 @@ ${activitySdkBootstrap(clientId!)}
       const statusLabel = partida.status === 'aberta' ? '🟡 Aberta' : partida.status === 'em_andamento' ? '🟢 Em andamento' : '🔴 Finalizada';
 
       function playerRowHtml(p) {
-        const notaTxt = (partida.status === 'finalizada' && p.nota != null) ? ' <strong style="color:#ffd166;">⭐' + p.nota.toFixed(1) + '</strong>' : '';
+        const notaTxt = (partida.status === 'finalizada' && p.nota != null) ? ' ' + notaBadgeHtml(p.nota) : '';
         return \`<div class="player-row"><span>\${avatarHtml(p.avatarUrl, p.displayName, 22)}\${p.displayName}\${p.position ? ' <small style="color:var(--text-muted);">(' + p.position + ')</small>' : ''}</span><span class="stats">⚽\${p.goals} 🅰️\${p.assists} 🧤\${p.defesas} 🥅\${p.golsConcedidos} ⚠️\${p.errosGraves}\${notaTxt}</span></div>\`;
       }
 
@@ -2455,7 +2473,7 @@ ${activitySdkBootstrap(clientId!)}
             <h2>Suas estatísticas (\${currentMode})</h2>
             <table class="stats-table">
               <tr><td>Posição</td><td style="text-align:right;">\${posicao}</td></tr>
-              <tr><td>Nota média</td><td style="text-align:right;">⭐ \${p.notaMedia.toFixed(1)}</td></tr>
+              <tr><td>Nota média</td><td style="text-align:right;">\${notaBadgeHtml(p.notaMedia)}</td></tr>
               <tr><td>Partidas</td><td style="text-align:right;">\${p.totalPartidas}</td></tr>
               <tr><td>Vitórias / Derrotas / Empates</td><td style="text-align:right;">\${p.vitorias} / \${p.derrotas} / \${p.empates}</td></tr>
               <tr><td>XP</td><td style="text-align:right;">\${p.xp}</td></tr>
@@ -2476,7 +2494,7 @@ ${activitySdkBootstrap(clientId!)}
         const data = await api('/api/activities/fut/clans/' + currentClan.id + '/ranking?mode=' + currentMode);
         if (!data.ranking.length) { panel.innerHTML = modeToggleHtml() + '<div class="card"><div class="empty-hint">Ninguém finalizou uma partida de ' + currentMode + ' ainda.</div></div>'; return; }
         panel.innerHTML = modeToggleHtml() + '<div class="card"><h2>🏆 Ranking (' + currentMode + ')</h2>' + data.ranking.map((p, i) => \`
-          <div class="rank-item"><span>\${i + 1}. \${avatarHtml(p.avatarUrl, p.displayName, 24)}\${p.displayName}</span><span>\${p.xp} XP · ⭐\${p.notaMedia.toFixed(1)}</span></div>\`).join('') + '</div>';
+          <div class="rank-item"><span>\${i + 1}. \${avatarHtml(p.avatarUrl, p.displayName, 24)}\${p.displayName}</span><span>\${p.xp} XP · \${notaBadgeHtml(p.notaMedia)}</span></div>\`).join('') + '</div>';
       } catch (e) { panel.innerHTML = modeToggleHtml() + '<div class="card"><div class="empty-hint">❌ ' + e.message + '</div></div>'; }
     }
 

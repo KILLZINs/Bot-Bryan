@@ -13,7 +13,7 @@ import {
   joinPartida, addOfflinePlayer, setTeam, autoBalanceTeams, startPartida, recordEvent, finishPartida,
   getProfile, getRanking, getUserProfile, setUserPosition, listGoalVideos,
   createChamada, listChamadas, deleteChamada, respondChamada,
-  type FutEventType, type FutMode, type FutRsvpStatus,
+  type FutEventType, type FutMode, type FutRsvpStatus, type FutVisibility,
 } from '../fut/services/pelada';
 
 function playerRefFrom(interaction: ChatInputCommandInteraction) {
@@ -62,9 +62,12 @@ export default {
       .setName('cla')
       .setDescription('Gerenciar clãs (grupos persistentes de rachão)')
       .addSubcommand((sub) => sub.setName('criar').setDescription('Cria um novo clã')
-        .addStringOption((o) => o.setName('nome').setDescription('Nome do clã').setRequired(true)))
+        .addStringOption((o) => o.setName('nome').setDescription('Nome do clã').setRequired(true))
+        .addStringOption((o) => o.setName('visibilidade').setDescription('Público (padrão) ou privado (só entra com código)')
+          .addChoices({ name: 'Público', value: 'publico' }, { name: 'Privado', value: 'privado' })))
       .addSubcommand((sub) => sub.setName('entrar').setDescription('Entra em um clã existente')
-        .addStringOption((o) => o.setName('nome').setDescription('Nome do clã').setRequired(true)))
+        .addStringOption((o) => o.setName('nome').setDescription('Nome do clã').setRequired(true))
+        .addStringOption((o) => o.setName('codigo').setDescription('Código de convite (só pra clãs privados)')))
       .addSubcommand((sub) => sub.setName('listar').setDescription('Lista os clãs deste servidor'))
       .addSubcommand((sub) => sub.setName('deletar').setDescription('Deleta um clã (só quem criou)')
         .addStringOption((o) => o.setName('nome').setDescription('Nome do clã').setRequired(true))))
@@ -178,26 +181,31 @@ export default {
       if (group === 'cla') {
         if (sub === 'criar') {
           const nome = interaction.options.getString('nome', true);
-          const clan = await createClan(guildId, interaction.user.id, interaction.user.username, nome);
-          await interaction.reply({ embeds: [successEmbed('Clã criado!', `**${clan.name}** — use \`/fut partida criar\` pra começar uma partida.`)] });
+          const visibilidade = (interaction.options.getString('visibilidade') ?? 'publico') as FutVisibility;
+          const clan = await createClan(guildId, interaction.user.id, interaction.user.username, nome, visibilidade);
+          const desc = clan.visibility === 'privado'
+            ? `**${clan.name}** (privado) — use \`/fut partida criar\` pra começar. Código de convite: \`${clan.joinCode}\` (compartilhe só com quem quiser trazer).`
+            : `**${clan.name}** — use \`/fut partida criar\` pra começar uma partida.`;
+          await interaction.reply({ embeds: [successEmbed('Clã criado!', desc)], ephemeral: clan.visibility === 'privado' });
           return;
         }
         if (sub === 'entrar') {
           const nome = interaction.options.getString('nome', true);
+          const codigo = interaction.options.getString('codigo') ?? undefined;
           const clan = await getClanByName(guildId, nome);
           if (!clan) throw new FutError(`Não achei nenhum clã chamado **${nome}**.`);
-          await joinClan(clan.id, interaction.user.id, interaction.user.username);
+          await joinClan(clan.id, interaction.user.id, interaction.user.username, codigo);
           await interaction.reply({ embeds: [successEmbed('Você entrou no clã!', `Bem-vindo ao **${clan.name}**.`)] });
           return;
         }
         if (sub === 'listar') {
-          const clans = await listClans(guildId);
+          const clans = await listClans(guildId, interaction.user.id);
           if (!clans.length) {
             await interaction.reply({ embeds: [errorEmbed('Nenhum clã ainda', 'Crie um com `/fut cla criar`.')], ephemeral: true });
             return;
           }
           const embed = new EmbedBuilder().setColor(COLORS.PRIMARY).setTitle('⚽ Clãs do servidor')
-            .setDescription(clans.map((c) => `**${c.name}** — ${c.members.length} membro(s)`).join('\n'));
+            .setDescription(clans.map((c) => `**${c.name}**${c.visibility === 'privado' ? ' 🔒' : ''} — ${c.members.length} membro(s)`).join('\n'));
           await interaction.reply({ embeds: [embed] });
           return;
         }

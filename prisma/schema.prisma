@@ -1079,3 +1079,17 @@ model FutClanPlayerStats {
   @@index([clanId])
   @@map("fut_clan_player_stats")
 }
+
+// Perfil PESSOAL do jogador — global (não depende de clã nem de servidor),
+// igual a identidade do Discord. Guarda a posição preferida de cada um por
+// modo, pra não precisar digitar de novo toda vez que entra numa partida
+// (mas ainda dá pra sobrescrever pontualmente ao entrar).
+model FutUserProfile {
+  id             String   @id @default(cuid())
+  discordId      String   @unique
+  positionFutsal String?
+  positionCampo  String?
+  updatedAt      DateTime @updatedAt
+
+  @@map("fut_user_profiles")
+}

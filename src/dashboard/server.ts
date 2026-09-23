@@ -34,8 +34,8 @@ import { getActiveBuffs, formatBuffList } from '../rpg/services/temp-buffs';
 import { getDayPhase, PHASE_INFO } from '../rpg/services/day-night';
 import {
   FutError, createClan, joinClan, listClans, getClanByName, getClanById, deleteClan,
-  createPartida, getOpenPartida, getPartidaById, deletePartida, joinPartida, addOfflinePlayer,
-  setTeam, startPartida, recordEvent, finishPartida, getProfile as getFutProfile, getRanking as getFutRanking,
+  createPartida, getOpenPartida, getPartidaById, deletePartida, listPartidaHistory, joinPartida, addOfflinePlayer,
+  setTeam, autoBalanceTeams, startPartida, recordEvent, finishPartida, getProfile as getFutProfile, getRanking as getFutRanking,
   type FutEventType, type FutMode, type FutTeam, type FutResultado,
 } from '../fut/services/pelada';
 
@@ -1633,6 +1633,16 @@ ${activitySdkBootstrap(clientId!)}
     } catch (err) { handleFutError(res, err); }
   });
 
+  app.post('/api/activities/fut/clans/:id/auto-balance', requirePlayerAuth, async (req, res) => {
+    try {
+      const partida = await currentFutPartidaOr400(req, res);
+      if (!partida) return;
+      const userId = req.cookies!.player_userid as string;
+      const balanced = await autoBalanceTeams(partida.id, userId);
+      res.json({ partida: serializeFutPartida(balanced!) });
+    } catch (err) { handleFutError(res, err); }
+  });
+
   app.post('/api/activities/fut/clans/:id/start', requirePlayerAuth, async (req, res) => {
     try {
       const partida = await currentFutPartidaOr400(req, res);
@@ -1686,6 +1696,11 @@ ${activitySdkBootstrap(clientId!)}
       return { ...p, displayName: user?.username || p.discordId };
     }));
     res.json({ ranking: withNames });
+  });
+
+  app.get('/api/activities/fut/clans/:id/historico', requirePlayerAuth, async (req, res) => {
+    const partidas = await listPartidaHistory(req.params.id, 10);
+    res.json({ partidas: partidas.map(serializeFutPartida) });
   });
 
   app.get('/atividades/fut', (req, res) => {
@@ -1823,10 +1838,12 @@ ${activitySdkBootstrap(clientId!)}
       <div class="crumb"><button onclick="voltarParaClanList()">← Clãs</button><span id="clanBreadcrumb"></span></div>
       <div class="tabs">
         <button class="tab active" id="tabPelada" onclick="showTab('pelada')">Partida</button>
+        <button class="tab" id="tabHistorico" onclick="showTab('historico')">Histórico</button>
         <button class="tab" id="tabPerfil" onclick="showTab('perfil')">Perfil</button>
         <button class="tab" id="tabRanking" onclick="showTab('ranking')">Ranking</button>
       </div>
       <div id="panelPelada"></div>
+      <div id="panelHistorico" style="display:none"></div>
       <div id="panelPerfil" style="display:none"></div>
       <div id="panelRanking" style="display:none"></div>
     </div>
@@ -1919,12 +1936,15 @@ ${activitySdkBootstrap(clientId!)}
     function showTab(tab) {
       currentTab = tab;
       document.getElementById('tabPelada').classList.toggle('active', tab === 'pelada');
+      document.getElementById('tabHistorico').classList.toggle('active', tab === 'historico');
       document.getElementById('tabPerfil').classList.toggle('active', tab === 'perfil');
       document.getElementById('tabRanking').classList.toggle('active', tab === 'ranking');
       document.getElementById('panelPelada').style.display = tab === 'pelada' ? 'block' : 'none';
+      document.getElementById('panelHistorico').style.display = tab === 'historico' ? 'block' : 'none';
       document.getElementById('panelPerfil').style.display = tab === 'perfil' ? 'block' : 'none';
       document.getElementById('panelRanking').style.display = tab === 'ranking' ? 'block' : 'none';
       if (tab === 'pelada') refreshPartida();
+      if (tab === 'historico') loadHistorico();
       if (tab === 'perfil') loadPerfil();
       if (tab === 'ranking') loadRanking();
     }
@@ -2000,7 +2020,7 @@ ${activitySdkBootstrap(clientId!)}
       }
 
       if (partida.status === 'aberta') {
-        html += \`<div class="row">\${souEu ? '' : '<button class="btn" onclick="entrarPartida()">Entrar na partida</button>'}<button class="btn secondary" onclick="iniciarPartida()">Iniciar partida</button></div>\`;
+        html += \`<div class="row">\${souEu ? '' : '<button class="btn" onclick="entrarPartida()">Entrar na partida</button>'}<button class="btn secondary" onclick="iniciarPartida()">Iniciar partida</button>\${souCriador ? '<button class="btn secondary" onclick="autoEquilibrar()">🎲 Auto-equilibrar times</button>' : ''}</div>\`;
         html += \`<div class="row"><input id="offlineApelido" type="text" placeholder="Apelido (jogador sem Discord)"><input id="offlinePosicao" type="text" placeholder="Posição (opcional)" style="width:140px;"><button class="btn secondary" onclick="adicionarOffline()">Adicionar</button></div>\`;
       }
 
@@ -2077,6 +2097,11 @@ ${activitySdkBootstrap(clientId!)}
       catch (e) { showToast('❌ ' + e.message); }
     }
 
+    async function autoEquilibrar() {
+      try { await api('/api/activities/fut/clans/' + currentClan.id + '/auto-balance', { method: 'POST', body: '{}' }); showToast('🎲 Times equilibrados pelo XP de cada um!'); refreshPartida(); }
+      catch (e) { showToast('❌ ' + e.message); }
+    }
+
     async function registrarEvento(type) {
       const playerVal = document.getElementById('eventPlayer').value;
       const assistVal = document.getElementById('eventAssist').value;
@@ -2096,6 +2121,22 @@ ${activitySdkBootstrap(clientId!)}
       if (!confirm('Finalizar a partida e salvar as estatísticas de todo mundo?')) return;
       try { const data = await api('/api/activities/fut/clans/' + currentClan.id + '/finish', { method: 'POST', body: '{}' }); showToast('🏁 Partida finalizada!'); renderPartida(data.partida); }
       catch (e) { showToast('❌ ' + e.message); }
+    }
+
+    async function loadHistorico() {
+      const panel = document.getElementById('panelHistorico');
+      panel.innerHTML = '<div class="empty-hint">Carregando...</div>';
+      try {
+        const data = await api('/api/activities/fut/clans/' + currentClan.id + '/historico');
+        if (!data.partidas.length) { panel.innerHTML = '<div class="card"><div class="empty-hint">Nenhuma partida finalizada nesse clã ainda.</div></div>'; return; }
+        panel.innerHTML = '<div class="card"><h2>📜 Histórico</h2>' + data.partidas.map(p => {
+          const resLabel = p.resultado === 'empate' ? 'Empate' : p.resultado === 'vitoria_a' ? 'Vitória do Time A' : 'Vitória do Time B';
+          return \`<div class="rank-item">
+            <span>\${p.name || 'Partida'} <span class="status-badge" style="text-transform:capitalize;">\${p.mode}</span></span>
+            <span>\${p.scoreA} x \${p.scoreB} — \${resLabel}</span>
+          </div>\`;
+        }).join('') + '</div>';
+      } catch (e) { panel.innerHTML = '<div class="card"><div class="empty-hint">❌ ' + e.message + '</div></div>'; }
     }
 
     async function loadPerfil() {

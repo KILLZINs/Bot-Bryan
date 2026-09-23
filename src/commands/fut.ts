@@ -439,12 +439,12 @@ export default {
         if (link) embed.addFields({ name: '🔗 Link', value: link, inline: false });
         embed.setFooter({ text: `Confirme presença com /fut confirmar cla:${clan.name}` });
 
-        const siteUrl = process.env.SITE_URL;
-        const components = siteUrl
-          ? [new ActionRowBuilder<ButtonBuilder>().addComponents(
-              new ButtonBuilder().setStyle(ButtonStyle.Link).setLabel('📣 Confirmar no site').setURL(`${siteUrl.replace(/\/$/, '')}/atividades/fut`),
-            )]
-          : [];
+        // Mesma variável usada pro OAuth do dashboard (src/dashboard/server.ts) —
+        // um único lugar define o domínio do site pra tudo (login, /fut, etc).
+        const siteUrl = process.env.DASHBOARD_URL || 'https://bryanfut.up.railway.app';
+        const components = [new ActionRowBuilder<ButtonBuilder>().addComponents(
+          new ButtonBuilder().setStyle(ButtonStyle.Link).setLabel('📣 Confirmar no site').setURL(`${siteUrl.replace(/\/$/, '')}/atividades/fut`),
+        )];
 
         await interaction.reply({ embeds: [embed], components });
         return;

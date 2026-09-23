@@ -26,20 +26,22 @@ const XP_BONUS_VITORIA = 20;
 
 // ── Clã ──────────────────────────────────────────────────────────────────
 
+const CLAN_INCLUDE = { members: { include: { team: true } }, teams: { orderBy: { createdAt: 'asc' as const } } };
+
 export async function listClans(guildId: string) {
-  return prisma.futClan.findMany({ where: { guildId }, orderBy: { createdAt: 'desc' }, include: { members: true } });
+  return prisma.futClan.findMany({ where: { guildId }, orderBy: { createdAt: 'desc' }, include: CLAN_INCLUDE });
 }
 
 export async function getClanByName(guildId: string, name: string) {
   const clean = name.trim();
   return prisma.futClan.findFirst({
     where: { guildId, name: { equals: clean, mode: 'insensitive' } },
-    include: { members: true },
+    include: CLAN_INCLUDE,
   });
 }
 
 export async function getClanById(clanId: string) {
-  return prisma.futClan.findUnique({ where: { id: clanId }, include: { members: true } });
+  return prisma.futClan.findUnique({ where: { id: clanId }, include: CLAN_INCLUDE });
 }
 
 export async function createClan(guildId: string, creatorId: string, creatorName: string, name: string) {
@@ -75,6 +77,63 @@ export async function deleteClan(clanId: string, requesterId: string) {
 
   await prisma.futClan.delete({ where: { id: clanId } });
   return clan;
+}
+
+// ── Times internos do clã (elenco fixo, tipo "Time Amarelo" x "Time Azul") ─
+// Isso é diferente do "team" A/B de uma partida específica: aqui é uma
+// divisão permanente do grupo, e os jogadores ficam salvos dentro do time.
+
+export async function listTeams(clanId: string) {
+  return prisma.futTeam.findMany({ where: { clanId }, orderBy: { createdAt: 'asc' }, include: { members: true } });
+}
+
+export async function createTeam(clanId: string, requesterId: string, name: string, color?: string) {
+  const clan = await getClanById(clanId);
+  if (!clan) throw new FutError('Clã não encontrado.');
+  if (clan.creatorId !== requesterId) throw new FutError('Só quem criou o clã pode criar times internos.');
+
+  const clean = name.trim().slice(0, 30);
+  if (!clean) throw new FutError('Dê um nome válido pro time.');
+
+  const existing = await prisma.futTeam.findFirst({ where: { clanId, name: { equals: clean, mode: 'insensitive' } } });
+  if (existing) throw new FutError(`Já existe um time chamado **${existing.name}** nesse clã.`);
+
+  return prisma.futTeam.create({ data: { clanId, name: clean, color: color?.trim().slice(0, 20) || null } });
+}
+
+export async function deleteTeam(teamId: string, requesterId: string) {
+  const team = await prisma.futTeam.findUnique({ where: { id: teamId }, include: { clan: true } });
+  if (!team) throw new FutError('Time não encontrado.');
+  if (team.clan.creatorId !== requesterId) throw new FutError('Só quem criou o clã pode deletar times.');
+
+  await prisma.futTeam.delete({ where: { id: teamId } });
+  return team;
+}
+
+function resolveMember(clan: { members: { id: string; discordId: string | null; displayName: string }[] }, ref: { discordId?: string; apelido?: string }) {
+  let member = null;
+  if (ref.discordId) {
+    member = clan.members.find((m) => m.discordId === ref.discordId) || null;
+  } else if (ref.apelido) {
+    const clean = ref.apelido.trim().toLowerCase();
+    member = clan.members.find((m) => m.displayName.toLowerCase() === clean) || null;
+  }
+  if (!member) throw new FutError('Não achei esse jogador nesse clã. Confira o apelido/menção ou use `entrar` primeiro.');
+  return member;
+}
+
+// Coloca (ou tira, com teamId=null) um membro do clã dentro de um time interno.
+export async function setMemberTeam(clanId: string, memberRef: { discordId?: string; apelido?: string }, teamId: string | null) {
+  const clan = await getClanById(clanId);
+  if (!clan) throw new FutError('Clã não encontrado.');
+  const member = resolveMember(clan, memberRef);
+
+  if (teamId) {
+    const team = await prisma.futTeam.findUnique({ where: { id: teamId } });
+    if (!team || team.clanId !== clanId) throw new FutError('Esse time não pertence a esse clã.');
+  }
+
+  return prisma.futClanMember.update({ where: { id: member.id }, data: { teamId } });
 }
 
 // ── Partida (dentro de um clã) ──────────────────────────────────────────
@@ -301,6 +360,26 @@ export async function recordEvent(partidaId: string, playerRef: { discordId?: st
   return { player, assistPlayer };
 }
 
+// Nota estilo Sofascore/Betano (0.0 a 10.0), calculada a partir do
+// desempenho na partida. Começa numa base "de jogo normal" (6.0) e sobe ou
+// desce conforme os números da partida — parecido com o que os sites de
+// futebol fazem, sem ser exatamente igual (eles usam dados que a gente não
+// tem, tipo passes certos e desarmes).
+function calcNota(p: { goals: number; assists: number; defesas: number; golsConcedidos: number; errosGraves: number }, resultLabel: 'vitorias' | 'derrotas' | 'empates') {
+  let nota = 6.0
+    + p.goals * 1.0
+    + p.assists * 0.6
+    + p.defesas * 0.25
+    - p.golsConcedidos * 0.25
+    - p.errosGraves * 0.7;
+
+  if (resultLabel === 'vitorias') nota += 0.3;
+  else if (resultLabel === 'derrotas') nota -= 0.3;
+
+  nota = Math.max(0, Math.min(10, nota));
+  return Math.round(nota * 10) / 10;
+}
+
 export async function finishPartida(partidaId: string, requesterId: string, resultadoOverride?: FutResultado) {
   const partida = await getPartidaById(partidaId);
   if (!partida) throw new FutError('Partida não encontrada.');
@@ -336,6 +415,17 @@ export async function finishPartida(partidaId: string, requesterId: string, resu
       + p.errosGraves * XP_POR_ERRO
       + (resultLabel === 'vitorias' ? XP_BONUS_VITORIA : 0));
 
+    const nota = calcNota(p, resultLabel);
+    await prisma.futPartidaPlayer.update({ where: { id: p.id }, data: { nota } });
+
+    const existingStats = await prisma.futClanPlayerStats.findUnique({
+      where: { clanId_discordId_mode: { clanId: updated.clanId, discordId: p.discordId, mode } },
+    });
+    const novoCount = (existingStats?.notaCount ?? 0) + 1;
+    const novaMedia = existingStats
+      ? Math.round(((existingStats.notaMedia * existingStats.notaCount + nota) / novoCount) * 100) / 100
+      : nota;
+
     await prisma.futClanPlayerStats.upsert({
       where: { clanId_discordId_mode: { clanId: updated.clanId, discordId: p.discordId, mode } },
       create: {
@@ -352,6 +442,8 @@ export async function finishPartida(partidaId: string, requesterId: string, resu
         golsConcedidos: p.golsConcedidos,
         errosGraves: p.errosGraves,
         xp: xpGain,
+        notaMedia: novaMedia,
+        notaCount: novoCount,
       },
       update: {
         totalPartidas: { increment: 1 },
@@ -364,6 +456,8 @@ export async function finishPartida(partidaId: string, requesterId: string, resu
         golsConcedidos: { increment: p.golsConcedidos },
         errosGraves: { increment: p.errosGraves },
         xp: { increment: xpGain },
+        notaMedia: novaMedia,
+        notaCount: novoCount,
       },
     });
   }

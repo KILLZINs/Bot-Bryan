@@ -958,3 +958,84 @@ model MusicPlaylistTrack {
   @@index([playlistId])
   @@map("music_playlist_tracks")
 }
+
+// ═══════════════════════════════════════════════════════════════════════
+// SISTEMA "RACHÃO" (/fut) — FASE 1: núcleo (criar pelada + estatísticas)
+// ═══════════════════════════════════════════════════════════════════════
+model FutPelada {
+  id         String   @id @default(cuid())
+  guildId    String
+  creatorId  String
+  name       String?
+  mode       String   // 'futsal' | 'campo'
+  status     String   @default("aberta") // aberta | em_andamento | finalizada
+  scoreA     Int      @default(0)
+  scoreB     Int      @default(0)
+  resultado  String?  // vitoria_a | vitoria_b | empate — preenchido ao finalizar
+  createdAt  DateTime @default(now())
+  startedAt  DateTime?
+  finishedAt DateTime?
+
+  players FutPeladaPlayer[]
+  events  FutMatchEvent[]
+
+  @@index([guildId])
+  @@map("fut_peladas")
+}
+
+model FutPeladaPlayer {
+  id             String  @id @default(cuid())
+  peladaId       String
+  discordId      String? // opcional — jogador sem conta vinculada (offline)
+  displayName    String
+  position       String?
+  team           String? // 'A' | 'B' | null
+  goals          Int     @default(0)
+  assists        Int     @default(0)
+  defesas        Int     @default(0)
+  golsConcedidos Int     @default(0)
+  errosGraves    Int     @default(0)
+  createdAt      DateTime @default(now())
+
+  pelada FutPelada       @relation(fields: [peladaId], references: [id], onDelete: Cascade)
+  events FutMatchEvent[] @relation("PlayerEvents")
+
+  @@index([peladaId])
+  @@index([discordId])
+  @@map("fut_pelada_players")
+}
+
+model FutMatchEvent {
+  id        String   @id @default(cuid())
+  peladaId  String
+  playerId  String?
+  type      String   // gol | assistencia | defesa | concedido | erro
+  note      String?
+  createdAt DateTime @default(now())
+
+  pelada FutPelada        @relation(fields: [peladaId], references: [id], onDelete: Cascade)
+  player FutPeladaPlayer? @relation("PlayerEvents", fields: [playerId], references: [id], onDelete: SetNull)
+
+  @@index([peladaId])
+  @@map("fut_match_events")
+}
+
+model FutPlayerProfile {
+  id             String   @id @default(cuid())
+  guildId        String
+  discordId      String
+  totalPeladas   Int      @default(0)
+  vitorias       Int      @default(0)
+  derrotas       Int      @default(0)
+  empates        Int      @default(0)
+  goals          Int      @default(0)
+  assists        Int      @default(0)
+  defesas        Int      @default(0)
+  golsConcedidos Int      @default(0)
+  errosGraves    Int      @default(0)
+  xp             Int      @default(0)
+  updatedAt      DateTime @updatedAt
+
+  @@unique([guildId, discordId])
+  @@map("fut_player_profiles")
+}

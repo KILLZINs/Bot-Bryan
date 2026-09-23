@@ -383,13 +383,33 @@ function sanitizeVideoUrl(url?: string | null): string | null {
   return clean.slice(0, 300);
 }
 
-export async function recordEvent(partidaId: string, playerRef: { discordId?: string; apelido?: string }, type: FutEventType, assistRef?: { discordId?: string; apelido?: string }, videoUrl?: string) {
+// Coordenadas do mapa de chute (só fazem sentido em gols), estilo
+// Sofascore/Betano: shotX/shotY = de onde saiu o chute (0-100, 0=fundo
+// próprio, 100=fundo adversário); goalX/goalY = onde a bola entrou no gol
+// (0-100, 0=canto esquerdo/embaixo, 100=canto direito/em cima).
+export interface FutShotCoords {
+  shotX?: number;
+  shotY?: number;
+  goalX?: number;
+  goalY?: number;
+}
+
+function clampPct(n: number | undefined): number | null {
+  if (n === undefined || n === null || Number.isNaN(n)) return null;
+  return Math.max(0, Math.min(100, n));
+}
+
+export async function recordEvent(partidaId: string, playerRef: { discordId?: string; apelido?: string }, type: FutEventType, assistRef?: { discordId?: string; apelido?: string }, videoUrl?: string, shot?: FutShotCoords) {
   const partida = await getPartidaById(partidaId);
   if (!partida) throw new FutError('Partida não encontrada.');
   if (partida.status !== 'em_andamento') throw new FutError('A partida precisa estar em andamento (`iniciar`) pra registrar eventos.');
 
   const player = await resolvePlayer(partidaId, playerRef);
   const cleanVideoUrl = type === 'gol' ? sanitizeVideoUrl(videoUrl) : null;
+  const shotX = type === 'gol' ? clampPct(shot?.shotX) : null;
+  const shotY = type === 'gol' ? clampPct(shot?.shotY) : null;
+  const goalX = type === 'gol' ? clampPct(shot?.goalX) : null;
+  const goalY = type === 'gol' ? clampPct(shot?.goalY) : null;
 
   switch (type) {
     case 'gol':
@@ -408,7 +428,7 @@ export async function recordEvent(partidaId: string, playerRef: { discordId?: st
       await prisma.futPartidaPlayer.update({ where: { id: player.id }, data: { errosGraves: { increment: 1 } } });
       break;
   }
-  await prisma.futMatchEvent.create({ data: { partidaId, playerId: player.id, type, videoUrl: cleanVideoUrl } });
+  const event = await prisma.futMatchEvent.create({ data: { partidaId, playerId: player.id, type, videoUrl: cleanVideoUrl, shotX, shotY, goalX, goalY } });
 
   if (type === 'gol' && player.team) {
     await prisma.futPartida.update({
@@ -424,7 +444,81 @@ export async function recordEvent(partidaId: string, playerRef: { discordId?: st
     await prisma.futMatchEvent.create({ data: { partidaId, playerId: assistPlayer.id, type: 'assistencia' } });
   }
 
-  return { player, assistPlayer };
+  return { player, assistPlayer, event };
+}
+
+// ── Mapa de gols (estilo Sofascore/Betano) ──────────────────────────────
+// Todos os gols de uma partida que têm coordenadas de chute registradas.
+export async function listGoalMap(partidaId: string) {
+  const events = await prisma.futMatchEvent.findMany({
+    where: { partidaId, type: 'gol', shotX: { not: null } },
+    orderBy: { createdAt: 'asc' },
+    include: { player: true },
+  });
+  return events.map((e) => ({
+    id: e.id,
+    player: e.player,
+    shotX: e.shotX!,
+    shotY: e.shotY!,
+    goalX: e.goalX,
+    goalY: e.goalY,
+    videoUrl: e.videoUrl,
+    createdAt: e.createdAt,
+  }));
+}
+
+// Reverte o efeito estatístico de um evento (usado tanto pra desfazer
+// durante o jogo quanto pra reabrir uma partida já finalizada).
+async function revertEventEffect(playerId: string, type: FutEventType) {
+  switch (type) {
+    case 'gol':
+      await prisma.futPartidaPlayer.update({ where: { id: playerId }, data: { goals: { decrement: 1 } } });
+      break;
+    case 'assistencia':
+      await prisma.futPartidaPlayer.update({ where: { id: playerId }, data: { assists: { decrement: 1 } } });
+      break;
+    case 'defesa':
+      await prisma.futPartidaPlayer.update({ where: { id: playerId }, data: { defesas: { decrement: 1 } } });
+      break;
+    case 'concedido':
+      await prisma.futPartidaPlayer.update({ where: { id: playerId }, data: { golsConcedidos: { decrement: 1 } } });
+      break;
+    case 'erro':
+      await prisma.futPartidaPlayer.update({ where: { id: playerId }, data: { errosGraves: { decrement: 1 } } });
+      break;
+  }
+}
+
+// Desfaz o último evento registrado na partida (em andamento) — cobre o
+// "subtrair coisa durante o jogo em caso de erro". Só quem criou a partida
+// pode desfazer. Um gol com assistência conta como 2 eventos (1 chamada
+// desfaz o mais recente dos dois por vez).
+export async function undoLastEvent(partidaId: string, requesterId: string) {
+  const partida = await getPartidaById(partidaId);
+  if (!partida) throw new FutError('Partida não encontrada.');
+  if (partida.creatorId !== requesterId) throw new FutError('Só quem criou a partida pode desfazer um evento.');
+  if (partida.status !== 'em_andamento') throw new FutError('Só dá pra desfazer eventos de uma partida em andamento.');
+
+  const lastEvent = await prisma.futMatchEvent.findFirst({
+    where: { partidaId },
+    orderBy: { createdAt: 'desc' },
+    include: { player: true },
+  });
+  if (!lastEvent) throw new FutError('Não tem nenhum evento registrado nessa partida ainda.');
+  if (!lastEvent.playerId || !lastEvent.player) throw new FutError('Não foi possível identificar o jogador desse evento.');
+
+  await revertEventEffect(lastEvent.playerId, lastEvent.type as FutEventType);
+
+  if (lastEvent.type === 'gol' && lastEvent.player.team) {
+    await prisma.futPartida.update({
+      where: { id: partidaId },
+      data: lastEvent.player.team === 'A' ? { scoreA: { decrement: 1 } } : { scoreB: { decrement: 1 } },
+    });
+  }
+
+  await prisma.futMatchEvent.delete({ where: { id: lastEvent.id } });
+
+  return { type: lastEvent.type, player: lastEvent.player };
 }
 
 // Nota estilo Sofascore/Betano (0.0 a 10.0), calculada a partir do
@@ -543,12 +637,119 @@ export async function finishPartida(partidaId: string, requesterId: string, resu
   return updated;
 }
 
+// Reabre uma partida já finalizada pra editar gols/estatísticas/resultado
+// ("no pós partida, tudo pode ser capaz de ser alterado"). Reverte
+// exatamente o que `finishPartida` aplicou (XP, nota média, agregados do
+// clã) e volta o status pra 'em_andamento' — depois de editar, é só
+// finalizar de novo (`finalizar`) que os números são recalculados do zero.
+export async function reopenPartida(partidaId: string, requesterId: string) {
+  const partida = await getPartidaById(partidaId);
+  if (!partida) throw new FutError('Partida não encontrada.');
+  if (partida.creatorId !== requesterId) throw new FutError('Só quem criou a partida pode reabrir ela pra editar.');
+  if (partida.status !== 'finalizada') throw new FutError('Essa partida não está finalizada.');
+
+  const mode = partida.mode as FutMode;
+  const resultado = partida.resultado as FutResultado | null;
+
+  for (const p of partida.players) {
+    if (!p.discordId || p.nota == null) continue;
+
+    let resultLabel: 'vitorias' | 'derrotas' | 'empates' = 'empates';
+    if (resultado && resultado !== 'empate' && p.team) {
+      const won = (resultado === 'vitoria_a' && p.team === 'A') || (resultado === 'vitoria_b' && p.team === 'B');
+      resultLabel = won ? 'vitorias' : 'derrotas';
+    }
+
+    const xpGain = Math.max(0, XP_PARTICIPACAO
+      + p.goals * XP_POR_GOL
+      + p.assists * XP_POR_ASSIST
+      + p.defesas * XP_POR_DEFESA
+      + p.errosGraves * XP_POR_ERRO
+      + (resultLabel === 'vitorias' ? XP_BONUS_VITORIA : 0));
+
+    const existingStats = await prisma.futClanPlayerStats.findUnique({
+      where: { clanId_discordId_mode: { clanId: partida.clanId, discordId: p.discordId, mode } },
+    });
+    if (!existingStats) continue;
+
+    const novoCount = Math.max(0, existingStats.notaCount - 1);
+    const novaMedia = novoCount > 0
+      ? Math.round(((existingStats.notaMedia * existingStats.notaCount - p.nota) / novoCount) * 100) / 100
+      : 0;
+
+    await prisma.futClanPlayerStats.update({
+      where: { clanId_discordId_mode: { clanId: partida.clanId, discordId: p.discordId, mode } },
+      data: {
+        totalPartidas: { decrement: 1 },
+        vitorias: { decrement: resultLabel === 'vitorias' ? 1 : 0 },
+        derrotas: { decrement: resultLabel === 'derrotas' ? 1 : 0 },
+        empates: { decrement: resultLabel === 'empates' ? 1 : 0 },
+        goals: { decrement: p.goals },
+        assists: { decrement: p.assists },
+        defesas: { decrement: p.defesas },
+        golsConcedidos: { decrement: p.golsConcedidos },
+        errosGraves: { decrement: p.errosGraves },
+        xp: { decrement: xpGain },
+        notaMedia: novaMedia,
+        notaCount: novoCount,
+      },
+    });
+
+    await prisma.futPartidaPlayer.update({ where: { id: p.id }, data: { nota: null } });
+  }
+
+  return prisma.futPartida.update({
+    where: { id: partidaId },
+    data: { status: 'em_andamento', finishedAt: null, resultado: null },
+    include: { players: true },
+  });
+}
+
 export async function getProfile(clanId: string, discordId: string, mode: FutMode) {
   return prisma.futClanPlayerStats.findUnique({ where: { clanId_discordId_mode: { clanId, discordId, mode } } });
 }
 
 export async function getRanking(clanId: string, mode: FutMode, limit = 10) {
   return prisma.futClanPlayerStats.findMany({ where: { clanId, mode }, orderBy: { xp: 'desc' }, take: limit });
+}
+
+// Estatísticas de TODO o elenco (sem limite) — usado na visão "estatísticas
+// do clã inteiro" do item 4, tanto no Discord quanto no site.
+export async function listFullClanStats(clanId: string, mode: FutMode) {
+  return prisma.futClanPlayerStats.findMany({ where: { clanId, mode }, orderBy: { xp: 'desc' } });
+}
+
+// Visão geral agregada do clã: totais somados de todo o elenco + destaques
+// (artilheiro, garçom, melhor nota). Junto com `listFullClanStats`, cobre o
+// item 4: "salvar tanto os da pelada inteira quanto individualmente".
+export async function getClanOverview(clanId: string, mode: FutMode) {
+  const [agg, totalPartidas, artilheiro, garcom, melhorNota] = await Promise.all([
+    prisma.futClanPlayerStats.aggregate({
+      where: { clanId, mode },
+      _sum: { goals: true, assists: true, defesas: true, golsConcedidos: true, errosGraves: true, vitorias: true, derrotas: true, empates: true },
+      _count: { _all: true },
+    }),
+    prisma.futPartida.count({ where: { clanId, mode, status: 'finalizada' } }),
+    prisma.futClanPlayerStats.findFirst({ where: { clanId, mode, goals: { gt: 0 } }, orderBy: { goals: 'desc' } }),
+    prisma.futClanPlayerStats.findFirst({ where: { clanId, mode, assists: { gt: 0 } }, orderBy: { assists: 'desc' } }),
+    prisma.futClanPlayerStats.findFirst({ where: { clanId, mode, notaCount: { gt: 0 } }, orderBy: { notaMedia: 'desc' } }),
+  ]);
+
+  return {
+    totalPartidas,
+    totalJogadores: agg._count._all,
+    totalGols: agg._sum.goals ?? 0,
+    totalAssists: agg._sum.assists ?? 0,
+    totalDefesas: agg._sum.defesas ?? 0,
+    totalConcedidos: agg._sum.golsConcedidos ?? 0,
+    totalErros: agg._sum.errosGraves ?? 0,
+    totalVitorias: agg._sum.vitorias ?? 0,
+    totalDerrotas: agg._sum.derrotas ?? 0,
+    totalEmpates: agg._sum.empates ?? 0,
+    artilheiro,
+    garcom,
+    melhorNota,
+  };
 }
 
 // ── Vídeos de gol ────────────────────────────────────────────────────────

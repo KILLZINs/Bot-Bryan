@@ -33,7 +33,7 @@ import { MEDITATION_OPTIONS, startMeditation, collectMeditation } from '../rpg/p
 import { getActiveBuffs, formatBuffList } from '../rpg/services/temp-buffs';
 import { getDayPhase, PHASE_INFO } from '../rpg/services/day-night';
 import {
-  FutError, createClan, joinClan, addClanMember as addFutClanMember, listClans, countClans as countFutClans, maxClansPerGuild, getClanByName, getClanById, getClanByJoinCode, deleteClan,
+  FutError, createClan, joinClan, addClanMember as addFutClanMember, removeClanMember as removeFutClanMember, listClans, countClans as countFutClans, maxClansPerGuild, getClanByName, getClanById, getClanByJoinCode, deleteClan,
   listTeams as listFutTeams, createTeam as createFutTeam, deleteTeam as deleteFutTeam, setMemberTeam as setFutMemberTeam,
   createPartida, getOpenPartida, getPartidaById, deletePartida, listPartidaHistory, joinPartida, addOfflinePlayer,
   setTeam, autoBalanceTeams, startPartida, recordEvent, finishPartida, getProfile as getFutProfile, getRanking as getFutRanking,
@@ -1810,6 +1810,21 @@ ${activitySdkBootstrap(clientId!)}
     } catch (err) { handleFutError(res, err); }
   });
 
+  // Remove alguém do elenco do clã — só quem criou o clã.
+  app.delete('/api/activities/fut/clans/:id/members/:memberId', requirePlayerAuth, async (req, res) => {
+    try {
+      const userId = req.cookies!.player_userid as string;
+      const clan = await getClanById(req.params.id);
+      if (!clan) return res.status(404).json({ error: 'Clã não encontrado.' });
+      const alvo = clan.members.find((m) => m.id === req.params.memberId);
+      if (!alvo) return res.status(404).json({ error: 'Membro não encontrado nesse clã.' });
+
+      await removeFutClanMember(clan.id, userId, { discordId: alvo.discordId ?? undefined, apelido: alvo.discordId ? undefined : alvo.displayName });
+      const updated = await getClanById(req.params.id);
+      res.json({ clan: updated ? await serializeFutClan(updated, userId) : null });
+    } catch (err) { handleFutError(res, err); }
+  });
+
   // Detalhe completo de UMA partida específica (aberta, em andamento ou já
   // finalizada) — "acessar as estatísticas da partida após ela terminar".
   app.get('/api/activities/fut/clans/:id/partidas/:partidaId', requirePlayerAuth, async (req, res) => {
@@ -2944,8 +2959,10 @@ ${activitySdkBootstrap(clientId!)}
       const teamOptionsHtml = '<option value="">Sem time</option>' + teams.map(t => \`<option value="\${t.id}">\${t.name}</option>\`).join('');
 
       function memberChipHtml(m) {
+        const ehCriador = m.discordId && m.discordId === currentClan.creatorId;
         return \`<span class="chip">\${avatarHtml(m.avatarUrl, m.displayName, 20)}\${m.displayName}
           \${souCriador ? \`<select onchange="definirElenco(this.value, '\${m.discordId || ''}', '\${m.displayName}')" style="margin-left:6px;">\${teamOptionsHtml}</select>\` : ''}
+          \${souCriador && !ehCriador ? \`<button class="btn danger" style="padding:2px 8px;margin-left:4px;" onclick="removerMembro('\${m.id}')" title="Remover do elenco">✕</button>\` : ''}
         </span>\`;
       }
 
@@ -3014,6 +3031,18 @@ ${activitySdkBootstrap(clientId!)}
         document.getElementById('newMemberNome').value = '';
         document.getElementById('newMemberId').value = '';
         showToast('✅ ' + nome + ' entrou no elenco!');
+        await refreshCurrentClan();
+        loadElenco();
+      } catch (e) { showToast('❌ ' + e.message); }
+    }
+
+    async function removerMembro(memberId) {
+      const membro = (currentClan.members || []).find(m => m.id === memberId);
+      const nome = membro ? membro.displayName : 'essa pessoa';
+      if (!confirm('Remover ' + nome + ' do elenco?')) return;
+      try {
+        await api('/api/activities/fut/clans/' + currentClan.id + '/members/' + memberId, { method: 'DELETE' });
+        showToast('🗑️ ' + nome + ' removido(a) do elenco.');
         await refreshCurrentClan();
         loadElenco();
       } catch (e) { showToast('❌ ' + e.message); }

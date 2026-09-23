@@ -11,10 +11,17 @@ import {
   listTeams, createTeam, deleteTeam, setMemberTeam,
   createPartida, getOpenPartida, getPartidaById, deletePartida, listPartidaHistory,
   joinPartida, addOfflinePlayer, setTeam, autoBalanceTeams, startPartida, recordEvent, finishPartida,
-  getProfile, getRanking, getUserProfile, setUserPosition, listGoalVideos,
+  getProfile, getRanking, getUserProfile, setUserPosition, listGoalVideos, notaBand,
   createChamada, listChamadas, deleteChamada, respondChamada,
   type FutEventType, type FutMode, type FutRsvpStatus, type FutVisibility,
 } from '../fut/services/pelada';
+
+// Mesma faixa (notaBand) usada no site, só que como emoji colorido — pra
+// bater a mesma cor pro mesmo número nos dois lugares.
+const NOTA_EMOJI: Record<ReturnType<typeof notaBand>, string> = { ruim: '🟥', mediano: '🟧', bom: '🟩', excelente: '🟨' };
+function notaTag(nota: number): string {
+  return `${NOTA_EMOJI[notaBand(nota)]} ${nota.toFixed(1)}`;
+}
 
 function playerRefFrom(interaction: ChatInputCommandInteraction) {
   const user = interaction.options.getUser('jogador');
@@ -37,7 +44,7 @@ function buildPartidaEmbed(partida: Awaited<ReturnType<typeof getPartidaById>>, 
   const semTime = partida.players.filter((p) => !p.team);
   const statusLabel = partida.status === 'aberta' ? '🟡 Aberta (inscrições)' : partida.status === 'em_andamento' ? '🟢 Em andamento' : '🔴 Finalizada';
   const finalizada = partida.status === 'finalizada';
-  const notaTxt = (p: (typeof partida.players)[number]) => (finalizada && p.nota != null ? ` — ⭐${p.nota.toFixed(1)}` : '');
+  const notaTxt = (p: (typeof partida.players)[number]) => (finalizada && p.nota != null ? ` — ${notaTag(p.nota)}` : '');
 
   const embed = new EmbedBuilder()
     .setColor(COLORS.PRIMARY)
@@ -411,7 +418,7 @@ export default {
           .setThumbnail(target.displayAvatarURL())
           .addFields(
             { name: 'Posição', value: posicao, inline: true },
-            { name: 'Nota média', value: `⭐ ${profile.notaMedia.toFixed(1)}`, inline: true },
+            { name: 'Nota média', value: notaTag(profile.notaMedia), inline: true },
             { name: 'Partidas', value: `${profile.totalPartidas}`, inline: true },
             { name: 'V / D / E', value: `${profile.vitorias} / ${profile.derrotas} / ${profile.empates}`, inline: true },
             { name: 'XP', value: `${profile.xp}`, inline: true },
@@ -504,7 +511,7 @@ export default {
         if (!ranking.length) { await interaction.reply({ embeds: [errorEmbed('Ranking vazio', `Ninguém finalizou uma partida de ${modo} nesse clã ainda.`)], ephemeral: true }); return; }
         const lines = await Promise.all(ranking.map(async (p, i) => {
           const user = await interaction.client.users.fetch(p.discordId).catch(() => null);
-          return `**${i + 1}.** ${user ? user.username : p.discordId} — ${p.xp} XP — ⭐${p.notaMedia.toFixed(1)} (${p.vitorias}V/${p.derrotas}D/${p.empates}E, ⚽${p.goals})`;
+          return `**${i + 1}.** ${user ? user.username : p.discordId} — ${p.xp} XP — ${notaTag(p.notaMedia)} (${p.vitorias}V/${p.derrotas}D/${p.empates}E, ⚽${p.goals})`;
         }));
         const embed = new EmbedBuilder().setColor(COLORS.GOLD).setTitle(`🏆 Ranking — ${clan.name} (${modo})`).setDescription(lines.join('\n'));
         await interaction.reply({ embeds: [embed] });

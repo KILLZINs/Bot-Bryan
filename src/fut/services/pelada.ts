@@ -58,7 +58,7 @@ export async function createClan(guildId: string, creatorId: string, creatorName
       name: clean,
       members: { create: [{ discordId: creatorId, displayName: creatorName.slice(0, 40) }] },
     },
-    include: { members: true },
+    include: CLAN_INCLUDE,
   });
 }
 

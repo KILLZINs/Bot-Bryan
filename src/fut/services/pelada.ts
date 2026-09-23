@@ -14,6 +14,7 @@ export type FutMode = 'futsal' | 'campo';
 export type FutEventType = 'gol' | 'assistencia' | 'defesa' | 'concedido' | 'erro';
 export type FutTeam = 'A' | 'B';
 export type FutResultado = 'vitoria_a' | 'vitoria_b' | 'empate';
+export type FutVisibility = 'publico' | 'privado';
 
 export class FutError extends Error {}
 
@@ -28,8 +29,15 @@ const XP_BONUS_VITORIA = 20;
 
 const CLAN_INCLUDE = { members: { include: { team: true } }, teams: { orderBy: { createdAt: 'asc' as const } } };
 
-export async function listClans(guildId: string) {
-  return prisma.futClan.findMany({ where: { guildId }, orderBy: { createdAt: 'desc' }, include: CLAN_INCLUDE });
+// Clã público: qualquer um do servidor vê na lista e entra direto.
+// Clã privado: só aparece na lista pra quem já é membro — pra entrar,
+// precisa do código (fut_clans.joinCode), tipo um convite. É a forma de
+// dar "só amigos veem" sem precisar de um sistema de amizade de verdade:
+// quem tem o código foi convidado por alguém de dentro.
+export async function listClans(guildId: string, viewerId?: string) {
+  const clans = await prisma.futClan.findMany({ where: { guildId }, orderBy: { createdAt: 'desc' }, include: CLAN_INCLUDE });
+  if (!viewerId) return clans.filter((c) => c.visibility !== 'privado');
+  return clans.filter((c) => c.visibility !== 'privado' || c.members.some((m) => m.discordId === viewerId));
 }
 
 export async function getClanByName(guildId: string, name: string) {
@@ -44,28 +52,58 @@ export async function getClanById(clanId: string) {
   return prisma.futClan.findUnique({ where: { id: clanId }, include: CLAN_INCLUDE });
 }
 
-export async function createClan(guildId: string, creatorId: string, creatorName: string, name: string) {
+export async function getClanByJoinCode(joinCode: string) {
+  return prisma.futClan.findUnique({ where: { joinCode: joinCode.trim().toUpperCase() }, include: CLAN_INCLUDE });
+}
+
+const JOIN_CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // sem 0/O/1/I pra não confundir
+function generateJoinCode(): string {
+  let code = '';
+  for (let i = 0; i < 6; i++) code += JOIN_CODE_CHARS[Math.floor(Math.random() * JOIN_CODE_CHARS.length)];
+  return code;
+}
+
+async function uniqueJoinCode(): Promise<string> {
+  for (let i = 0; i < 10; i++) {
+    const code = generateJoinCode();
+    const existing = await prisma.futClan.findUnique({ where: { joinCode: code } });
+    if (!existing) return code;
+  }
+  throw new FutError('Não consegui gerar um código único, tenta de novo.');
+}
+
+export async function createClan(guildId: string, creatorId: string, creatorName: string, name: string, visibility: FutVisibility = 'publico') {
   const clean = name.trim().slice(0, 40);
   if (!clean) throw new FutError('Dê um nome válido pro clã.');
 
   const existing = await getClanByName(guildId, clean);
   if (existing) throw new FutError(`Já existe um clã chamado **${existing.name}** neste servidor.`);
 
+  const joinCode = visibility === 'privado' ? await uniqueJoinCode() : null;
+
   return prisma.futClan.create({
     data: {
       guildId,
       creatorId,
       name: clean,
+      visibility,
+      joinCode,
       members: { create: [{ discordId: creatorId, displayName: creatorName.slice(0, 40) }] },
     },
     include: CLAN_INCLUDE,
   });
 }
 
-export async function joinClan(clanId: string, discordId: string, displayName: string) {
+export async function joinClan(clanId: string, discordId: string, displayName: string, joinCode?: string) {
   const clan = await getClanById(clanId);
   if (!clan) throw new FutError('Clã não encontrado.');
   if (clan.members.some((m) => m.discordId === discordId)) throw new FutError('Você já faz parte desse clã.');
+
+  if (clan.visibility === 'privado') {
+    if (!joinCode || joinCode.trim().toUpperCase() !== clan.joinCode) {
+      throw new FutError('Esse clã é privado — peça o código de convite pra quem já é membro.');
+    }
+  }
 
   return prisma.futClanMember.create({ data: { clanId, discordId, displayName: displayName.slice(0, 40) } });
 }

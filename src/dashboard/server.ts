@@ -33,15 +33,16 @@ import { MEDITATION_OPTIONS, startMeditation, collectMeditation } from '../rpg/p
 import { getActiveBuffs, formatBuffList } from '../rpg/services/temp-buffs';
 import { getDayPhase, PHASE_INFO } from '../rpg/services/day-night';
 import {
-  FutError, createClan, joinClan, listClans, countClans as countFutClans, maxClansPerGuild, getClanByName, getClanById, getClanByJoinCode, deleteClan,
+  FutError, createClan, joinClan, addClanMember as addFutClanMember, listClans, countClans as countFutClans, maxClansPerGuild, getClanByName, getClanById, getClanByJoinCode, deleteClan,
   listTeams as listFutTeams, createTeam as createFutTeam, deleteTeam as deleteFutTeam, setMemberTeam as setFutMemberTeam,
   createPartida, getOpenPartida, getPartidaById, deletePartida, listPartidaHistory, joinPartida, addOfflinePlayer,
   setTeam, autoBalanceTeams, startPartida, recordEvent, finishPartida, getProfile as getFutProfile, getRanking as getFutRanking,
   getUserProfile as getFutUserProfile, setUserPosition as setFutUserPosition, listGoalVideos,
   createChamada as createFutChamada, listChamadas as listFutChamadas, deleteChamada as deleteFutChamada, respondChamada as respondFutChamada,
-  undoLastEvent as undoFutLastEvent, reopenPartida as reopenFutPartida, listGoalMap as listFutGoalMap,
+  undoLastEvent as undoFutLastEvent, reopenPartida as reopenFutPartida,
+  listPartidaGoals as listFutPartidaGoals, saveGoalAnimation as saveFutGoalAnimation, getGoalAnimation as getFutGoalAnimation, listMatchEvents as listFutMatchEvents,
   getClanOverview as getFutClanOverview, listFullClanStats as listFullFutClanStats,
-  type FutEventType, type FutMode, type FutTeam, type FutResultado, type FutRsvpStatus, type FutVisibility, type FutShotCoords,
+  type FutEventType, type FutMode, type FutTeam, type FutResultado, type FutRsvpStatus, type FutVisibility,
 } from '../fut/services/pelada';
 
 const BOT_OWNER_ID = '1195254699943796791';
@@ -1777,14 +1778,8 @@ ${activitySdkBootstrap(clientId!)}
         ? { discordId: req.body?.assistDiscordId || undefined, apelido: req.body?.assistApelido || undefined }
         : undefined;
       const videoUrl = typeof req.body?.videoUrl === 'string' ? req.body.videoUrl : undefined;
-      const shot: FutShotCoords | undefined = type === 'gol' && req.body?.shot ? {
-        shotX: typeof req.body.shot.shotX === 'number' ? req.body.shot.shotX : undefined,
-        shotY: typeof req.body.shot.shotY === 'number' ? req.body.shot.shotY : undefined,
-        goalX: typeof req.body.shot.goalX === 'number' ? req.body.shot.goalX : undefined,
-        goalY: typeof req.body.shot.goalY === 'number' ? req.body.shot.goalY : undefined,
-      } : undefined;
 
-      await recordEvent(partida.id, ref, type, assistRef, videoUrl, shot);
+      await recordEvent(partida.id, ref, type, assistRef, videoUrl);
       res.json({ partida: await serializeFutPartida((await getPartidaById(partida.id))!) });
     } catch (err) { handleFutError(res, err); }
   });
@@ -1801,14 +1796,38 @@ ${activitySdkBootstrap(clientId!)}
     } catch (err) { handleFutError(res, err); }
   });
 
-  // Reabre a última partida finalizada do clã pra corrigir gols/estatísticas/
-  // resultado — "no pós partida, tudo pode ser capaz de ser alterado".
-  app.post('/api/activities/fut/clans/:id/reopen', requirePlayerAuth, async (req, res) => {
+  // Adiciona alguém DIRETO no elenco do clã (nome + ID, se tiver) — cobre o
+  // caso de clã público: a visibilidade é só pública, mas isso não bota
+  // ninguém no elenco sozinho, o criador precisa poder trazer gente à mão.
+  app.post('/api/activities/fut/clans/:id/members', requirePlayerAuth, async (req, res) => {
     try {
-      const ultima = (await listPartidaHistory(req.params.id, 1))[0];
-      if (!ultima) return res.status(400).json({ error: 'Esse clã não tem nenhuma partida finalizada.' });
       const userId = req.cookies!.player_userid as string;
-      const reaberta = await reopenFutPartida(ultima.id, userId);
+      const displayName = typeof req.body?.displayName === 'string' ? req.body.displayName : '';
+      const discordId = typeof req.body?.discordId === 'string' && req.body.discordId.trim() ? req.body.discordId : undefined;
+      await addFutClanMember(req.params.id, userId, { discordId, displayName });
+      const clan = await getClanById(req.params.id);
+      res.json({ clan: clan ? await serializeFutClan(clan, userId) : null });
+    } catch (err) { handleFutError(res, err); }
+  });
+
+  // Detalhe completo de UMA partida específica (aberta, em andamento ou já
+  // finalizada) — "acessar as estatísticas da partida após ela terminar".
+  app.get('/api/activities/fut/clans/:id/partidas/:partidaId', requirePlayerAuth, async (req, res) => {
+    const partida = await getPartidaById(req.params.partidaId);
+    if (!partida || partida.clanId !== req.params.id) return res.status(404).json({ error: 'Partida não encontrada nesse clã.' });
+    const events = await listFutMatchEvents(partida.id);
+    res.json({ partida: await serializeFutPartida(partida), events });
+  });
+
+  // Reabre UMA partida específica (qualquer uma do histórico, não só a mais
+  // recente) pra corrigir gols/estatísticas/resultado — "no pós partida,
+  // tudo pode ser capaz de ser alterado".
+  app.post('/api/activities/fut/clans/:id/partidas/:partidaId/reopen', requirePlayerAuth, async (req, res) => {
+    try {
+      const alvo = await getPartidaById(req.params.partidaId);
+      if (!alvo || alvo.clanId !== req.params.id) return res.status(404).json({ error: 'Partida não encontrada nesse clã.' });
+      const userId = req.cookies!.player_userid as string;
+      const reaberta = await reopenFutPartida(alvo.id, userId);
       res.json({ partida: await serializeFutPartida(reaberta) });
     } catch (err) { handleFutError(res, err); }
   });
@@ -1820,12 +1839,30 @@ ${activitySdkBootstrap(clientId!)}
     res.json({ videos: videos.map((v) => ({ id: v.id, videoUrl: v.videoUrl, displayName: v.player?.displayName || 'Desconhecido' })) });
   });
 
-  // Mapa de gols (estilo Sofascore/Betano): local do chute + região do gol.
-  app.get('/api/activities/fut/clans/:id/mapa-gols', requirePlayerAuth, async (req, res) => {
-    const partida = await getOpenPartida(req.params.id) ?? (await listPartidaHistory(req.params.id, 1))[0];
-    if (!partida) return res.json({ gols: [] });
-    const gols = await listFutGoalMap(partida.id);
-    res.json({ gols: gols.map((g) => ({ id: g.id, displayName: g.player?.displayName || 'Desconhecido', shotX: g.shotX, shotY: g.shotY, goalX: g.goalX, goalY: g.goalY, videoUrl: g.videoUrl })) });
+  // Gols de uma partida específica — pra escolher qual animar no editor.
+  app.get('/api/activities/fut/clans/:id/partidas/:partidaId/gols', requirePlayerAuth, async (req, res) => {
+    const partida = await getPartidaById(req.params.partidaId);
+    if (!partida || partida.clanId !== req.params.id) return res.status(404).json({ error: 'Partida não encontrada nesse clã.' });
+    const gols = await listFutPartidaGoals(partida.id);
+    res.json({ gols });
+  });
+
+  // Animação do gol (montada por frames arrastáveis, no pós-partida).
+  app.get('/api/activities/fut/clans/:id/events/:eventId/animation', requirePlayerAuth, async (req, res) => {
+    try {
+      const anim = await getFutGoalAnimation(req.params.eventId);
+      if (anim.clanId !== req.params.id) return res.status(404).json({ error: 'Gol não encontrado nesse clã.' });
+      const userId = req.cookies!.player_userid as string;
+      res.json({ ...anim, souCriador: anim.creatorId === userId });
+    } catch (err) { handleFutError(res, err); }
+  });
+
+  app.post('/api/activities/fut/clans/:id/events/:eventId/animation', requirePlayerAuth, async (req, res) => {
+    try {
+      const userId = req.cookies!.player_userid as string;
+      const frames = await saveFutGoalAnimation(req.params.eventId, userId, req.body?.frames);
+      res.json({ frames });
+    } catch (err) { handleFutError(res, err); }
   });
 
   app.post('/api/activities/fut/clans/:id/finish', requirePlayerAuth, async (req, res) => {
@@ -2265,7 +2302,7 @@ ${activitySdkBootstrap(clientId!)}
       loadClans();
     }
 
-    function showTab(tab) {
+    function showTab(tab, skipLoad) {
       currentTab = tab;
       document.getElementById('tabPelada').classList.toggle('active', tab === 'pelada');
       document.getElementById('tabChamar').classList.toggle('active', tab === 'chamar');
@@ -2281,6 +2318,7 @@ ${activitySdkBootstrap(clientId!)}
       document.getElementById('panelPerfil').style.display = tab === 'perfil' ? 'block' : 'none';
       document.getElementById('panelRanking').style.display = tab === 'ranking' ? 'block' : 'none';
       document.getElementById('panelStats').style.display = tab === 'stats' ? 'block' : 'none';
+      if (skipLoad) return;
       if (tab === 'pelada') refreshPartida();
       if (tab === 'chamar') loadChamadas();
       if (tab === 'elenco') loadElenco();
@@ -2393,34 +2431,6 @@ ${activitySdkBootstrap(clientId!)}
             <select id="eventAssist"><option value="">Sem assistência</option>\${playerOptionsHtml(partida)}</select>
           </div>
           <div class="row"><input id="eventVideo" type="text" placeholder="Link do vídeo do gol (opcional)" style="flex:1;min-width:200px;"></div>
-          <div class="row" title="Mapa do chute (opcional) — de onde saiu e onde a bola entrou no gol">
-            <select id="eventShotDist">
-              <option value="">Chute de onde? (opcional)</option>
-              <option value="pequena_area">Pequena área</option>
-              <option value="grande_area">Grande área</option>
-              <option value="entrada_area">Entrada da área</option>
-              <option value="fora_area">Fora da área</option>
-              <option value="meio_campo">Meio de campo ou mais longe</option>
-            </select>
-            <select id="eventShotSide">
-              <option value="">Lado (opcional)</option>
-              <option value="esquerda">Esquerda</option>
-              <option value="centro">Centro</option>
-              <option value="direita">Direita</option>
-            </select>
-            <select id="eventGoalRegion">
-              <option value="">Onde entrou no gol? (opcional)</option>
-              <option value="inferior_esquerdo">Canto inferior esquerdo</option>
-              <option value="inferior_meio">Embaixo no meio</option>
-              <option value="inferior_direito">Canto inferior direito</option>
-              <option value="meio_esquerdo">Meia altura, esquerda</option>
-              <option value="centro">Centro do gol</option>
-              <option value="meio_direito">Meia altura, direita</option>
-              <option value="superior_esquerdo">Canto superior esquerdo</option>
-              <option value="superior_meio">Em cima no meio</option>
-              <option value="superior_direito">Canto superior direito</option>
-            </select>
-          </div>
           <div class="row">
             <button class="btn" onclick="registrarEvento('gol')">⚽ Gol</button>
             <button class="btn secondary" onclick="registrarEvento('defesa')">🧤 Defesa</button>
@@ -2437,7 +2447,8 @@ ${activitySdkBootstrap(clientId!)}
         const resLabel = partida.resultado === 'empate' ? 'Empate' : partida.resultado === 'vitoria_a' ? 'Vitória do Time A' : 'Vitória do Time B';
         html += \`<p style="text-align:center;color:var(--text-muted);">\${resLabel} — estatísticas salvas em \${partida.mode}. Crie uma nova partida quando quiser.</p>
           <div class="row" style="justify-content:center;">
-            \${souCriador ? '<button class="btn secondary" onclick="reabrirPartida()" title="Corrigir gols, estatísticas ou resultado dessa partida">✏️ Reabrir pra editar</button>' : ''}
+            \${souCriador ? '<button class="btn secondary" onclick="reabrirPartida(\\''+partida.id+'\\')" title="Corrigir gols, estatísticas ou resultado dessa partida">✏️ Reabrir pra editar</button>' : ''}
+            <button class="btn secondary" onclick="abrirDetalhesPartida('\${partida.id}')">📋 Ver detalhes / animação dos gols</button>
             <button class="btn" onclick="criarPartida()">Criar nova partida</button>
           </div>\`;
       }
@@ -2445,8 +2456,7 @@ ${activitySdkBootstrap(clientId!)}
       if (partida.status !== 'aberta') {
         html += \`<div class="row" style="justify-content:center;margin-top:8px;">
           <button class="btn secondary" onclick="verVideosGol()">🎬 Vídeos de gol</button>
-          <button class="btn secondary" onclick="verMapaGols()">🗺️ Mapa de gols</button>
-        </div><div id="videosGolBox"></div><div id="mapaGolsBox"></div>\`;
+        </div><div id="videosGolBox"></div>\`;
       }
 
       html += '</div>';
@@ -2517,16 +2527,6 @@ ${activitySdkBootstrap(clientId!)}
       catch (e) { showToast('❌ ' + e.message); }
     }
 
-    // Mesmo mapeamento amigável usado no comando /fut (src/commands/fut.ts)
-    // pra converter as escolhas do mapa de chute em coordenadas percentuais.
-    const SHOT_DIST_MAP = { pequena_area: 92, grande_area: 82, entrada_area: 70, fora_area: 55, meio_campo: 35 };
-    const SHOT_SIDE_MAP = { esquerda: 20, centro: 50, direita: 80 };
-    const GOAL_REGION_MAP = {
-      inferior_esquerdo: { x: 15, y: 15 }, inferior_meio: { x: 50, y: 15 }, inferior_direito: { x: 85, y: 15 },
-      meio_esquerdo: { x: 15, y: 50 }, centro: { x: 50, y: 50 }, meio_direito: { x: 85, y: 50 },
-      superior_esquerdo: { x: 15, y: 85 }, superior_meio: { x: 50, y: 85 }, superior_direito: { x: 85, y: 85 },
-    };
-
     async function registrarEvento(type) {
       const playerVal = document.getElementById('eventPlayer').value;
       const assistVal = document.getElementById('eventAssist').value;
@@ -2541,21 +2541,12 @@ ${activitySdkBootstrap(clientId!)}
         }
         const videoEl = document.getElementById('eventVideo');
         if (videoEl && videoEl.value.trim()) body.videoUrl = videoEl.value.trim();
-
-        const dist = document.getElementById('eventShotDist') ? document.getElementById('eventShotDist').value : '';
-        const side = document.getElementById('eventShotSide') ? document.getElementById('eventShotSide').value : '';
-        const region = document.getElementById('eventGoalRegion') ? document.getElementById('eventGoalRegion').value : '';
-        if (dist || side || region) {
-          body.shot = {
-            shotX: dist ? SHOT_DIST_MAP[dist] : undefined,
-            shotY: side ? SHOT_SIDE_MAP[side] : undefined,
-            goalX: region ? GOAL_REGION_MAP[region].x : undefined,
-            goalY: region ? GOAL_REGION_MAP[region].y : undefined,
-          };
-        }
       }
-      try { await api('/api/activities/fut/clans/' + currentClan.id + '/event', { method: 'POST', body: JSON.stringify(body) }); showToast('✅ Evento registrado!'); refreshPartida(); }
-      catch (e) { showToast('❌ ' + e.message); }
+      try {
+        await api('/api/activities/fut/clans/' + currentClan.id + '/event', { method: 'POST', body: JSON.stringify(body) });
+        showToast(type === 'gol' ? '✅ Gol registrado! Monte a animação dele depois, em "Ver detalhes".' : '✅ Evento registrado!');
+        refreshPartida();
+      } catch (e) { showToast('❌ ' + e.message); }
     }
 
     async function desfazerEvento() {
@@ -2567,12 +2558,13 @@ ${activitySdkBootstrap(clientId!)}
       } catch (e) { showToast('❌ ' + e.message); }
     }
 
-    async function reabrirPartida() {
-      if (!confirm('Reabrir a última partida finalizada pra editar? As estatísticas dela serão revertidas do clã até você finalizar de novo.')) return;
+    async function reabrirPartida(partidaId) {
+      if (!confirm('Reabrir essa partida pra editar? As estatísticas dela serão revertidas do clã até você finalizar de novo.')) return;
       try {
-        const data = await api('/api/activities/fut/clans/' + currentClan.id + '/reopen', { method: 'POST', body: '{}' });
+        const data = await api('/api/activities/fut/clans/' + currentClan.id + '/partidas/' + partidaId + '/reopen', { method: 'POST', body: '{}' });
         showToast('✏️ Partida reaberta! Edite o que precisar e finalize de novo quando terminar.');
         renderPartida(data.partida);
+        showTab('pelada');
       } catch (e) { showToast('❌ ' + e.message); }
     }
 
@@ -2582,53 +2574,264 @@ ${activitySdkBootstrap(clientId!)}
       catch (e) { showToast('❌ ' + e.message); }
     }
 
-    // ── Mapa de gols (estilo Sofascore/Betano): mini-campo + gol, com os
-    // pontos de onde saiu o chute e onde a bola entrou. ────────────────────
-    async function verMapaGols() {
-      const box = document.getElementById('mapaGolsBox');
-      if (!box) return;
-      box.innerHTML = '<div class="empty-hint">Carregando...</div>';
-      try {
-        const data = await api('/api/activities/fut/clans/' + currentClan.id + '/mapa-gols');
-        if (!data.gols.length) { box.innerHTML = '<div class="empty-hint">Nenhum gol com local de chute registrado ainda.</div>'; return; }
-
-        const comChute = data.gols.filter(g => g.shotX != null);
-        const comRegiao = data.gols.filter(g => g.goalX != null);
-
-        let campoSvg = '<svg viewBox="0 0 100 60" style="width:100%;max-width:260px;background:#12331f;border-radius:6px;">' +
-          '<rect x="1" y="1" width="98" height="58" fill="none" stroke="#3a6b4a" stroke-width="1"/>' +
-          '<line x1="50" y1="1" x2="50" y2="59" stroke="#3a6b4a" stroke-width="0.6"/>' +
-          '<rect x="82" y="16" width="17" height="28" fill="none" stroke="#3a6b4a" stroke-width="0.6"/>' +
-          comChute.map(g => '<circle cx="' + g.shotX + '" cy="' + (g.shotY != null ? g.shotY * 0.6 : 30) + '" r="1.6" fill="#f1c40f" stroke="#fff" stroke-width="0.3"><title>' + g.displayName + '</title></circle>').join('') +
-          '</svg>';
-
-        let golSvg = '<svg viewBox="0 0 100 100" style="width:100%;max-width:180px;background:#1b1e2e;border-radius:6px;">' +
-          '<rect x="4" y="4" width="92" height="92" fill="none" stroke="#555b7a" stroke-width="2"/>' +
-          comRegiao.map(g => '<circle cx="' + g.goalX + '" cy="' + (100 - g.goalY) + '" r="4" fill="#e74c3c" stroke="#fff" stroke-width="1"><title>' + g.displayName + '</title></circle>').join('') +
-          '</svg>';
-
-        box.innerHTML = '<div class="row" style="align-items:flex-start;gap:20px;margin-top:8px;">' +
-          '<div><p style="font-size:0.78rem;color:var(--text-muted);margin-bottom:4px;">De onde saiu o chute</p>' + campoSvg + '</div>' +
-          '<div><p style="font-size:0.78rem;color:var(--text-muted);margin-bottom:4px;">Onde a bola entrou no gol</p>' + golSvg + '</div>' +
-          '</div>' +
-          '<div class="unassigned" style="margin-top:8px;">' + data.gols.map(g => '<span class="chip">⚽ ' + g.displayName + '</span>').join('') + '</div>';
-      } catch (e) { box.innerHTML = '<div class="empty-hint">❌ ' + e.message + '</div>'; }
-    }
-
+    // ── Histórico: lista clicável de partidas finalizadas ────────────────
     async function loadHistorico() {
       const panel = document.getElementById('panelHistorico');
       panel.innerHTML = '<div class="empty-hint">Carregando...</div>';
       try {
         const data = await api('/api/activities/fut/clans/' + currentClan.id + '/historico');
         if (!data.partidas.length) { panel.innerHTML = '<div class="card"><div class="empty-hint">Nenhuma partida finalizada nesse clã ainda.</div></div>'; return; }
-        panel.innerHTML = '<div class="card"><h2>📜 Histórico</h2>' + data.partidas.map(p => {
+        panel.innerHTML = '<div class="card"><h2>📜 Histórico</h2><p style="color:var(--text-muted);font-size:0.8rem;margin-bottom:10px;">Clique numa partida pra ver detalhes, editar ou montar a animação dos gols.</p>' + data.partidas.map(p => {
           const resLabel = p.resultado === 'empate' ? 'Empate' : p.resultado === 'vitoria_a' ? 'Vitória do Time A' : 'Vitória do Time B';
-          return \`<div class="rank-item">
+          return \`<div class="rank-item" style="cursor:pointer;" onclick="abrirDetalhesPartida('\${p.id}')">
             <span>\${p.name || 'Partida'} <span class="status-badge" style="text-transform:capitalize;">\${p.mode}</span></span>
-            <span>\${p.scoreA} x \${p.scoreB} — \${resLabel}</span>
+            <span>\${p.scoreA} x \${p.scoreB} — \${resLabel} ›</span>
           </div>\`;
         }).join('') + '</div>';
       } catch (e) { panel.innerHTML = '<div class="card"><div class="empty-hint">❌ ' + e.message + '</div></div>'; }
+    }
+
+    // Detalhe de uma partida específica (aberta, em andamento ou finalizada):
+    // estatísticas completas, play-by-play e, por gol, o editor de animação.
+    async function abrirDetalhesPartida(partidaId) {
+      showTab('historico', true);
+      const panel = document.getElementById('panelHistorico');
+      panel.innerHTML = '<div class="empty-hint">Carregando...</div>';
+      try {
+        const data = await api('/api/activities/fut/clans/' + currentClan.id + '/partidas/' + partidaId);
+        const partida = data.partida;
+        const souCriador = partida.creatorId === ME_ID;
+        const resLabel = partida.resultado === 'empate' ? 'Empate' : partida.resultado === 'vitoria_a' ? 'Vitória do Time A' : partida.resultado === 'vitoria_b' ? 'Vitória do Time B' : '—';
+        const timeA = partida.players.filter(p => p.team === 'A');
+        const timeB = partida.players.filter(p => p.team === 'B');
+
+        function rowHtml(p) {
+          const notaTxt = p.nota != null ? ' ' + notaBadgeHtml(p.nota) : '';
+          return \`<div class="player-row"><span>\${avatarHtml(p.avatarUrl, p.displayName, 22)}\${p.displayName}</span><span class="stats">⚽\${p.goals} 🅰️\${p.assists} 🧤\${p.defesas} 🥅\${p.golsConcedidos} ⚠️\${p.errosGraves}\${notaTxt}</span></div>\`;
+        }
+
+        const golEvents = data.events.filter(e => e.type === 'gol');
+        const eventIcon = { gol: '⚽', assistencia: '🅰️', defesa: '🧤', concedido: '🥅', erro: '⚠️' };
+        const eventosHtml = data.events.length ? data.events.map(e => {
+          const animBtn = e.type === 'gol' ? '<button class="btn secondary" onclick="abrirAnimacaoGol(\\'' + e.id + '\\')">' + (e.hasAnimation ? '🎬 Ver animação' : '🎬 Montar animação') + '</button>' : '';
+          const videoLink = e.videoUrl ? ' <a href="' + e.videoUrl + '" target="_blank" rel="noopener">vídeo</a>' : '';
+          return \`<div class="rank-item"><span>\${eventIcon[e.type] || '•'} \${e.displayName}</span><span>\${animBtn}\${videoLink}</span></div>\`;
+        }).join('') : '<div class="empty-hint">Nenhum evento registrado.</div>';
+
+        panel.innerHTML = \`
+          <div class="crumb"><button onclick="loadHistorico()">← Histórico</button></div>
+          <div class="card">
+            <h2>\${partida.name || 'Partida'} <span class="status-badge \${partida.status}">\${partida.status === 'finalizada' ? '🔴 Finalizada' : partida.status === 'em_andamento' ? '🟢 Em andamento' : '🟡 Aberta'}</span></h2>
+            <p style="color:var(--text-muted);font-size:0.82rem;">Modo: <strong>\${partida.mode === 'futsal' ? 'Futsal' : 'Campo'}</strong>\${partida.status === 'finalizada' ? ' · ' + resLabel : ''}</p>
+            <div class="score-big">\${partida.scoreA} x \${partida.scoreB}</div>
+            <div class="teams">
+              <div class="team-col"><h3>Time A</h3>\${timeA.length ? timeA.map(rowHtml).join('') : '<div class="empty-hint">vazio</div>'}</div>
+              <div class="team-col"><h3>Time B</h3>\${timeB.length ? timeB.map(rowHtml).join('') : '<div class="empty-hint">vazio</div>'}</div>
+            </div>
+            \${souCriador ? \`<div class="row" style="justify-content:center;margin-top:10px;"><button class="btn secondary" onclick="reabrirPartida('\${partida.id}')">✏️ Reabrir pra editar (gols/estatísticas/resultado)</button></div>\` : ''}
+          </div>
+          <div class="card">
+            <h2>📋 Eventos da partida</h2>
+            \${eventosHtml}
+          </div>
+          <div id="animEditorCard"></div>\`;
+      } catch (e) { panel.innerHTML = '<div class="card"><div class="empty-hint">❌ ' + e.message + '</div></div>'; }
+    }
+
+    // ── Editor de animação do gol: frames arrastáveis (bola, jogadores,
+    // seta de direção) montados no PÓS-PARTIDA. Cada frame é uma "foto" da
+    // jogada; reproduzindo os frames em sequência, vira a animação. ───────
+    let animEventId = null;
+    let animFrames = [[]];
+    let animFrameIdx = 0;
+    let animSelectedId = null;
+    let animSouCriador = false;
+    let animPlaying = false;
+
+    const ANIM_TOKEN_LABEL = { bola: '⚽', jogadorA: '🟡', jogadorB: '🔵', seta: '➡️' };
+
+    async function abrirAnimacaoGol(eventId) {
+      const card = document.getElementById('animEditorCard');
+      if (!card) return;
+      card.innerHTML = '<div class="card"><div class="empty-hint">Carregando...</div></div>';
+      try {
+        const data = await api('/api/activities/fut/clans/' + currentClan.id + '/events/' + eventId + '/animation');
+        animEventId = eventId;
+        animFrames = (data.frames && data.frames.length) ? data.frames : [[]];
+        animFrameIdx = 0;
+        animSelectedId = null;
+        animSouCriador = !!data.souCriador;
+        renderAnimEditor(data.displayName);
+        card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      } catch (e) { card.innerHTML = '<div class="card"><div class="empty-hint">❌ ' + e.message + '</div></div>'; }
+    }
+
+    function renderAnimEditor(displayName) {
+      const card = document.getElementById('animEditorCard');
+      if (!card) return;
+      card.innerHTML = \`
+        <div class="card">
+          <h2>🎬 Animação do gol — \${displayName}</h2>
+          <p style="color:var(--text-muted);font-size:0.8rem;">\${animSouCriador ? 'Arraste os itens pro campo pra montar o frame atual. Arraste um item já colocado pra reposicionar. Clique 2x nele pra remover. Clique 1x numa seta pra ajustar o ângulo.' : 'Modo visualização — só quem criou a partida pode editar.'}</p>
+          <div class="row" style="align-items:flex-start;gap:20px;flex-wrap:wrap;">
+            <div>
+              <div id="animPitch" style="position:relative;width:300px;height:190px;background:#12331f;border-radius:8px;border:2px solid #3a6b4a;overflow:hidden;"
+                   ondragover="animAllowDrop(event)" ondrop="animDrop(event)">
+                <div style="position:absolute;left:50%;top:0;bottom:0;width:1px;background:#3a6b4a;"></div>
+                <div style="position:absolute;right:0;top:30%;bottom:30%;width:14%;border:1px solid #3a6b4a;"></div>
+                <div style="position:absolute;left:0;top:30%;bottom:30%;width:14%;border:1px solid #3a6b4a;"></div>
+              </div>
+              \${animSouCriador ? \`<div class="row" style="margin-top:8px;">
+                <span class="chip" draggable="true" ondragstart="animDragStart(event,'bola')" title="Arraste pro campo">⚽ Bola</span>
+                <span class="chip" draggable="true" ondragstart="animDragStart(event,'jogadorA')" title="Arraste pro campo">🟡 Jogador A</span>
+                <span class="chip" draggable="true" ondragstart="animDragStart(event,'jogadorB')" title="Arraste pro campo">🔵 Jogador B</span>
+                <span class="chip" draggable="true" ondragstart="animDragStart(event,'seta')" title="Arraste pro campo">➡️ Direção</span>
+              </div>\` : ''}
+            </div>
+            <div style="min-width:200px;">
+              <p style="font-size:0.82rem;">Frame <strong id="animFrameIdx">1</strong> / <strong id="animFrameTotal">1</strong></p>
+              <div class="row">
+                <button class="btn secondary" onclick="animPrevFrame()">◀</button>
+                <button class="btn secondary" onclick="animNextFrame()">▶</button>
+                \${animSouCriador ? '<button class="btn secondary" onclick="animAddFrame()">+ Frame</button>' : ''}
+                \${animSouCriador ? '<button class="btn danger" onclick="animDeleteFrame()">🗑️</button>' : ''}
+              </div>
+              <div class="row">
+                <button class="btn secondary" onclick="animPlay()">▶️ Reproduzir</button>
+                \${animSouCriador ? '<button class="btn" onclick="animSave()">💾 Salvar</button>' : ''}
+              </div>
+              <div class="row" id="animAngleRow" style="display:none;align-items:center;">
+                <label style="font-size:0.75rem;color:var(--text-muted);">Ângulo da seta:</label>
+                <input id="animAngleInput" type="range" min="0" max="359" oninput="animSetAngle(this.value)" style="flex:1;">
+              </div>
+            </div>
+          </div>
+        </div>\`;
+      renderAnimFrame();
+    }
+
+    function renderAnimFrame() {
+      const pitch = document.getElementById('animPitch');
+      const idxEl = document.getElementById('animFrameIdx');
+      const totalEl = document.getElementById('animFrameTotal');
+      if (!pitch) return;
+      if (idxEl) idxEl.textContent = String(animFrameIdx + 1);
+      if (totalEl) totalEl.textContent = String(animFrames.length);
+
+      // Remove tokens antigos (mantém as linhas de fundo do campo, que são
+      // os 3 primeiros filhos fixos criados no renderAnimEditor).
+      Array.from(pitch.querySelectorAll('.anim-token')).forEach(el => el.remove());
+
+      const frame = animFrames[animFrameIdx] || [];
+      frame.forEach(tok => {
+        const el = document.createElement('div');
+        el.className = 'anim-token';
+        el.draggable = animSouCriador;
+        el.style.cssText = 'position:absolute;transform:translate(-50%,-50%) rotate(' + (tok.type === 'seta' ? tok.angle : 0) + 'deg);left:' + tok.x + '%;top:' + tok.y + '%;font-size:20px;cursor:' + (animSouCriador ? 'grab' : 'default') + ';user-select:none;';
+        el.textContent = ANIM_TOKEN_LABEL[tok.type] || '⚽';
+        el.title = tok.type;
+        if (animSouCriador) {
+          el.addEventListener('dragstart', (ev) => animDragStart(ev, null, tok.id));
+          el.addEventListener('click', (ev) => { ev.stopPropagation(); animSelectToken(tok.id); });
+          el.addEventListener('dblclick', (ev) => { ev.stopPropagation(); animRemoveToken(tok.id); });
+        }
+        pitch.appendChild(el);
+      });
+    }
+
+    function animAllowDrop(ev) { ev.preventDefault(); }
+
+    function animDragStart(ev, newType, existingId) {
+      const payload = existingId ? { id: existingId } : { type: newType };
+      ev.dataTransfer.setData('text/plain', JSON.stringify(payload));
+    }
+
+    function animDrop(ev) {
+      ev.preventDefault();
+      if (!animSouCriador) return;
+      const pitch = document.getElementById('animPitch');
+      const rect = pitch.getBoundingClientRect();
+      const x = Math.max(0, Math.min(100, ((ev.clientX - rect.left) / rect.width) * 100));
+      const y = Math.max(0, Math.min(100, ((ev.clientY - rect.top) / rect.height) * 100));
+      let data;
+      try { data = JSON.parse(ev.dataTransfer.getData('text/plain')); } catch (e) { return; }
+
+      const frame = animFrames[animFrameIdx];
+      if (data.id) {
+        const tok = frame.find(t => t.id === data.id);
+        if (tok) { tok.x = x; tok.y = y; }
+      } else {
+        frame.push({ id: Math.random().toString(36).slice(2, 10), type: data.type, x, y, angle: 0 });
+      }
+      renderAnimFrame();
+    }
+
+    function animSelectToken(id) {
+      animSelectedId = id;
+      const frame = animFrames[animFrameIdx];
+      const tok = frame.find(t => t.id === id);
+      const row = document.getElementById('animAngleRow');
+      if (tok && tok.type === 'seta') {
+        row.style.display = 'flex';
+        document.getElementById('animAngleInput').value = tok.angle;
+      } else if (row) {
+        row.style.display = 'none';
+      }
+    }
+
+    function animSetAngle(val) {
+      const frame = animFrames[animFrameIdx];
+      const tok = frame.find(t => t.id === animSelectedId);
+      if (tok) { tok.angle = Number(val); renderAnimFrame(); }
+    }
+
+    function animRemoveToken(id) {
+      animFrames[animFrameIdx] = animFrames[animFrameIdx].filter(t => t.id !== id);
+      renderAnimFrame();
+    }
+
+    function animPrevFrame() { if (animFrameIdx > 0) { animFrameIdx--; renderAnimFrame(); } }
+    function animNextFrame() { if (animFrameIdx < animFrames.length - 1) { animFrameIdx++; renderAnimFrame(); } }
+
+    function animAddFrame() {
+      if (!animSouCriador) return;
+      const copy = (animFrames[animFrameIdx] || []).map(t => Object.assign({}, t));
+      animFrames.splice(animFrameIdx + 1, 0, copy);
+      animFrameIdx++;
+      renderAnimFrame();
+    }
+
+    function animDeleteFrame() {
+      if (!animSouCriador || animFrames.length <= 1) return;
+      animFrames.splice(animFrameIdx, 1);
+      animFrameIdx = Math.max(0, animFrameIdx - 1);
+      renderAnimFrame();
+    }
+
+    function animPlay() {
+      if (animPlaying || animFrames.length < 2) { renderAnimFrame(); return; }
+      animPlaying = true;
+      const original = animFrameIdx;
+      let i = 0;
+      const timer = setInterval(() => {
+        animFrameIdx = i;
+        renderAnimFrame();
+        i++;
+        if (i >= animFrames.length) {
+          clearInterval(timer);
+          animPlaying = false;
+          animFrameIdx = original;
+          renderAnimFrame();
+        }
+      }, 700);
+    }
+
+    async function animSave() {
+      try {
+        const data = await api('/api/activities/fut/clans/' + currentClan.id + '/events/' + animEventId + '/animation', { method: 'POST', body: JSON.stringify({ frames: animFrames }) });
+        animFrames = data.frames;
+        showToast('💾 Animação salva!');
+      } catch (e) { showToast('❌ ' + e.message); }
     }
 
     async function loadPerfil() {
@@ -2747,6 +2950,21 @@ ${activitySdkBootstrap(clientId!)}
       }
 
       let html = '<div class="card"><div class="row" style="justify-content:space-between;align-items:center;"><h2 style="margin:0;">👕 Elenco</h2></div>';
+      html += '<p style="color:var(--text-muted);font-size:0.85rem;">Todo mundo que faz parte do clã (' + todosMembros.length + ' no total).</p>';
+
+      if (souCriador) {
+        html += \`<div class="card" style="background:rgba(255,255,255,0.03);margin:10px 0 16px;">
+          <p style="font-size:0.8rem;color:var(--text-muted);margin-bottom:6px;">➕ Adicionar alguém direto no elenco — o clã ser público é só pra visibilidade, não bota ninguém aqui sozinho.</p>
+          <div class="row">
+            <input id="newMemberNome" type="text" placeholder="Nome da pessoa" style="flex:1;min-width:140px;">
+            <input id="newMemberId" type="text" placeholder="ID do Discord (opcional)" style="width:180px;">
+            <button class="btn" onclick="adicionarMembro()">Adicionar</button>
+          </div>
+          <p style="font-size:0.72rem;color:var(--text-muted);margin-top:4px;">Pra pegar o ID: ative o Modo Desenvolvedor no Discord, clique com o botão direito na pessoa e "Copiar ID". Sem ID, a pessoa entra só com o nome (sem conta vinculada).</p>
+        </div>\`;
+      }
+
+      html += '<div class="unassigned" style="margin-bottom:14px;">' + (todosMembros.length ? todosMembros.map(memberChipHtml).join('') : '<span class="empty-hint">Ninguém no elenco ainda.</span>') + '</div>';
       html += '<p style="color:var(--text-muted);font-size:0.85rem;margin-bottom:14px;">Times fixos do clã (diferente do time A/B de uma partida específica).</p>';
 
       if (souCriador) {
@@ -2773,6 +2991,32 @@ ${activitySdkBootstrap(clientId!)}
 
       html += '</div>';
       panel.innerHTML = html;
+    }
+
+    // Recarrega a lista de clãs e atualiza a referência local (currentClan),
+    // sem trocar de tela — usado depois de ações que mudam o elenco.
+    async function refreshCurrentClan() {
+      if (!currentClan) return;
+      try {
+        const data = await api('/api/activities/fut/clans');
+        clans = data.clans;
+        clanSlots = { total: data.totalClans ?? clans.length, max: data.maxClans ?? 3 };
+        currentClan = clans.find(c => c.id === currentClan.id) || currentClan;
+      } catch (e) { /* silencioso */ }
+    }
+
+    async function adicionarMembro() {
+      const nome = document.getElementById('newMemberNome').value.trim();
+      const idDiscord = document.getElementById('newMemberId').value.trim();
+      if (!nome) return showToast('❌ Informe um nome.');
+      try {
+        await api('/api/activities/fut/clans/' + currentClan.id + '/members', { method: 'POST', body: JSON.stringify({ displayName: nome, discordId: idDiscord || undefined }) });
+        document.getElementById('newMemberNome').value = '';
+        document.getElementById('newMemberId').value = '';
+        showToast('✅ ' + nome + ' entrou no elenco!');
+        await refreshCurrentClan();
+        loadElenco();
+      } catch (e) { showToast('❌ ' + e.message); }
     }
 
     async function criarElencoTime() {

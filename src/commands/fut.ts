@@ -7,39 +7,15 @@ import { Command } from '../types';
 import { errorEmbed, successEmbed, COLORS } from '../utils/embeds';
 import {
   FutError,
-  createClan, joinClan, listClans, getClanByName, deleteClan,
+  createClan, joinClan, addClanMember, listClans, getClanByName, deleteClan,
   listTeams, createTeam, deleteTeam, setMemberTeam,
   createPartida, getOpenPartida, getPartidaById, deletePartida, listPartidaHistory,
   joinPartida, addOfflinePlayer, setTeam, autoBalanceTeams, startPartida, recordEvent, finishPartida,
   getProfile, getRanking, getUserProfile, setUserPosition, listGoalVideos, notaBand,
   createChamada, listChamadas, deleteChamada, respondChamada,
-  undoLastEvent, reopenPartida, listGoalMap, getClanOverview, listFullClanStats,
-  type FutEventType, type FutMode, type FutRsvpStatus, type FutVisibility, type FutShotCoords,
+  undoLastEvent, reopenPartida, getClanOverview, listFullClanStats,
+  type FutEventType, type FutMode, type FutRsvpStatus, type FutVisibility,
 } from '../fut/services/pelada';
-
-// Mapeia escolhas amigáveis do Discord (distância/lado do chute, região do
-// gol) pra coordenadas percentuais (0-100), pro mapa de chute estilo
-// Sofascore/Betano. Evita pedir números crus na hora de registrar o gol.
-const SHOT_DISTANCIA: Record<string, number> = {
-  pequena_area: 92, grande_area: 82, entrada_area: 70, fora_area: 55, meio_campo: 35,
-};
-const SHOT_LADO: Record<string, number> = { esquerda: 20, centro: 50, direita: 80 };
-const GOL_REGIAO: Record<string, { x: number; y: number }> = {
-  inferior_esquerdo: { x: 15, y: 15 }, inferior_meio: { x: 50, y: 15 }, inferior_direito: { x: 85, y: 15 },
-  meio_esquerdo: { x: 15, y: 50 }, centro: { x: 50, y: 50 }, meio_direito: { x: 85, y: 50 },
-  superior_esquerdo: { x: 15, y: 85 }, superior_meio: { x: 50, y: 85 }, superior_direito: { x: 85, y: 85 },
-};
-const GOL_REGIAO_LABEL: Record<string, string> = {
-  inferior_esquerdo: 'canto inferior esquerdo', inferior_meio: 'embaixo no meio', inferior_direito: 'canto inferior direito',
-  meio_esquerdo: 'meia altura, esquerda', centro: 'centro do gol', meio_direito: 'meia altura, direita',
-  superior_esquerdo: 'canto superior esquerdo', superior_meio: 'em cima no meio', superior_direito: 'canto superior direito',
-};
-const GOL_REGIAO_REVERSE = new Map(Object.entries(GOL_REGIAO).map(([key, v]) => [`${v.x},${v.y}`, key]));
-function golRegiaoLabel(x: number | null | undefined, y: number | null | undefined): string {
-  if (x == null || y == null) return '';
-  const key = GOL_REGIAO_REVERSE.get(`${x},${y}`);
-  return key ? ` → ${GOL_REGIAO_LABEL[key]}` : ' → região do gol registrada';
-}
 
 // Mesma faixa (notaBand) usada no site, só que como emoji colorido — pra
 // bater a mesma cor pro mesmo número nos dois lugares.
@@ -103,6 +79,11 @@ export default {
       .addSubcommand((sub) => sub.setName('listar').setDescription('Lista os clãs deste servidor'))
       .addSubcommand((sub) => sub.setName('deletar').setDescription('Deleta um clã (só quem criou)')
         .addStringOption((o) => o.setName('nome').setDescription('Nome do clã').setRequired(true)))
+      .addSubcommand((sub) => sub.setName('adicionar').setDescription('Adiciona alguém direto no elenco do clã, com nome e ID (só quem criou o clã)')
+        .addStringOption((o) => o.setName('nome').setDescription('Nome do clã').setRequired(true))
+        .addStringOption((o) => o.setName('apelido').setDescription('Nome/apelido da pessoa').setRequired(true))
+        .addUserOption((o) => o.setName('jogador').setDescription('A pessoa, se ela estiver nesse servidor (preenche o ID sozinho)'))
+        .addStringOption((o) => o.setName('id_discord').setDescription('ID do Discord da pessoa (se ela não aparecer em "jogador") — Copiar ID, com modo desenvolvedor ativado')))
       .addSubcommand((sub) => sub.setName('stats').setDescription('Estatísticas do clã inteiro (elenco completo) num modo')
         .addStringOption((o) => o.setName('nome').setDescription('Nome do clã').setRequired(true))
         .addStringOption((o) => o.setName('modo').setDescription('Futsal ou campo').setRequired(true)
@@ -157,29 +138,17 @@ export default {
         .addStringOption((o) => o.setName('apelido').setDescription('Apelido (jogador offline)'))
         .addUserOption((o) => o.setName('assistencia_de').setDescription('Quem deu a assistência (opcional)'))
         .addStringOption((o) => o.setName('assistencia_apelido').setDescription('Apelido de quem assistiu (opcional)'))
-        .addStringOption((o) => o.setName('video').setDescription('Link do vídeo do gol (opcional, ex: YouTube)'))
-        .addStringOption((o) => o.setName('chute_distancia').setDescription('De onde saiu o chute (opcional, pro mapa de gols)')
-          .addChoices(
-            { name: 'Pequena área', value: 'pequena_area' }, { name: 'Grande área', value: 'grande_area' },
-            { name: 'Entrada da área', value: 'entrada_area' }, { name: 'Fora da área', value: 'fora_area' },
-            { name: 'Meio de campo ou mais longe', value: 'meio_campo' },
-          ))
-        .addStringOption((o) => o.setName('chute_lado').setDescription('Lado de onde saiu o chute (opcional)')
-          .addChoices({ name: 'Esquerda', value: 'esquerda' }, { name: 'Centro', value: 'centro' }, { name: 'Direita', value: 'direita' }))
-        .addStringOption((o) => o.setName('gol_regiao').setDescription('Em que região do gol a bola entrou (opcional)')
-          .addChoices(
-            { name: 'Canto inferior esquerdo', value: 'inferior_esquerdo' }, { name: 'Embaixo no meio', value: 'inferior_meio' }, { name: 'Canto inferior direito', value: 'inferior_direito' },
-            { name: 'Meia altura, esquerda', value: 'meio_esquerdo' }, { name: 'Centro do gol', value: 'centro' }, { name: 'Meia altura, direita', value: 'meio_direito' },
-            { name: 'Canto superior esquerdo', value: 'superior_esquerdo' }, { name: 'Em cima no meio', value: 'superior_meio' }, { name: 'Canto superior direito', value: 'superior_direito' },
-          )))
+        .addStringOption((o) => o.setName('video').setDescription('Link do vídeo do gol (opcional, ex: YouTube)')))
       .addSubcommand((sub) => sub.setName('gols').setDescription('Lista os gols com vídeo salvos na partida')
-        .addStringOption((o) => o.setName('cla').setDescription('Nome do clã').setRequired(true)))
-      .addSubcommand((sub) => sub.setName('mapa').setDescription('Mostra o mapa de gols da partida (local do chute e região do gol)')
         .addStringOption((o) => o.setName('cla').setDescription('Nome do clã').setRequired(true)))
       .addSubcommand((sub) => sub.setName('desfazer').setDescription('Desfaz o último evento registrado (gol/defesa/erro/etc), em caso de engano')
         .addStringOption((o) => o.setName('cla').setDescription('Nome do clã').setRequired(true)))
       .addSubcommand((sub) => sub.setName('reabrir').setDescription('Reabre uma partida finalizada pra corrigir gols/estatísticas/resultado (só quem criou)')
-        .addStringOption((o) => o.setName('cla').setDescription('Nome do clã').setRequired(true)))
+        .addStringOption((o) => o.setName('cla').setDescription('Nome do clã').setRequired(true))
+        .addIntegerOption((o) => o.setName('posicao').setDescription('Qual partida do histórico (1 = mais recente, padrão). Veja `/fut partida historico`.').setMinValue(1)))
+      .addSubcommand((sub) => sub.setName('detalhes').setDescription('Mostra os detalhes/estatísticas completas de uma partida do histórico')
+        .addStringOption((o) => o.setName('cla').setDescription('Nome do clã').setRequired(true))
+        .addIntegerOption((o) => o.setName('posicao').setDescription('Qual partida do histórico (1 = mais recente, padrão). Veja `/fut partida historico`.').setMinValue(1)))
       .addSubcommand((sub) => sub.setName('defesa').setDescription('Registra uma defesa')
         .addStringOption((o) => o.setName('cla').setDescription('Nome do clã').setRequired(true))
         .addUserOption((o) => o.setName('jogador').setDescription('Quem defendeu'))
@@ -271,6 +240,22 @@ export default {
           if (!clan) throw new FutError(`Não achei nenhum clã chamado **${nome}**.`);
           await deleteClan(clan.id, interaction.user.id);
           await interaction.reply({ embeds: [successEmbed('Clã deletado', `**${clan.name}** e todas as partidas dele foram apagados.`)] });
+          return;
+        }
+        if (sub === 'adicionar') {
+          const nome = interaction.options.getString('nome', true);
+          const apelido = interaction.options.getString('apelido', true);
+          const jogador = interaction.options.getUser('jogador');
+          const idManual = interaction.options.getString('id_discord') ?? undefined;
+          const clan = await getClanByName(guildId, nome);
+          if (!clan) throw new FutError(`Não achei nenhum clã chamado **${nome}**.`);
+
+          const discordId = jogador?.id ?? idManual;
+          const member = await addClanMember(clan.id, interaction.user.id, { discordId, displayName: apelido });
+          const desc = member.discordId
+            ? `**${member.displayName}** (<@${member.discordId}>) agora faz parte do elenco de **${clan.name}**.`
+            : `**${member.displayName}** agora faz parte do elenco de **${clan.name}** (sem conta do Discord vinculada).`;
+          await interaction.reply({ embeds: [successEmbed('Membro adicionado!', desc)] });
           return;
         }
         if (sub === 'stats') {
@@ -402,25 +387,29 @@ export default {
           return;
         }
 
-        if (sub === 'mapa') {
+        if (sub === 'detalhes') {
           const clan = await resolveClan(interaction);
-          const partidaAtual = await getOpenPartida(clan.id) ?? (await listPartidaHistory(clan.id, 1))[0];
-          if (!partidaAtual) { await interaction.reply({ embeds: [errorEmbed('Nenhuma partida ainda', 'Esse clã ainda não tem nenhuma partida.')], ephemeral: true }); return; }
-          const gols = await listGoalMap(partidaAtual.id);
-          if (!gols.length) { await interaction.reply({ embeds: [errorEmbed('Sem mapa ainda', 'Nenhum gol com local de chute registrado nessa partida. Informe `chute_distancia`/`chute_lado`/`gol_regiao` ao registrar o gol.')], ephemeral: true }); return; }
+          const posicao = interaction.options.getInteger('posicao') ?? 1;
+          const historico = await listPartidaHistory(clan.id, Math.max(posicao, 20));
+          const alvo = historico[posicao - 1];
+          if (!alvo) { await interaction.reply({ embeds: [errorEmbed('Não encontrada', `Não achei a partida #${posicao} do histórico. Veja \`/fut partida historico\`.`)], ephemeral: true }); return; }
           const siteUrl = process.env.DASHBOARD_URL || 'https://bryanfut.up.railway.app';
-          const lines = gols.map((g, i) => `**${i + 1}.** ${g.player?.displayName || 'Desconhecido'} — chute a ${g.shotX?.toFixed(0)}% do campo${golRegiaoLabel(g.goalX, g.goalY)}`);
-          const embed = new EmbedBuilder().setColor(COLORS.GOLD).setTitle(`🗺️ Mapa de gols — ${partidaAtual.name || 'Partida'}`)
-            .setDescription(`${lines.join('\n')}\n\n👀 Veja o mapa visual completo no site: ${siteUrl.replace(/\/$/, '')}/atividades/fut`);
-          await interaction.reply({ embeds: [embed] });
+          const embed = buildPartidaEmbed(alvo, clan.name);
+          embed.setFooter({ text: `Partida #${posicao} do histórico · edite/veja a animação dos gols no site` });
+          const components = [new ActionRowBuilder<ButtonBuilder>().addComponents(
+            new ButtonBuilder().setStyle(ButtonStyle.Link).setLabel('🌐 Ver/editar no site').setURL(`${siteUrl.replace(/\/$/, '')}/atividades/fut`),
+          )];
+          await interaction.reply({ embeds: [embed], components });
           return;
         }
 
         if (sub === 'reabrir') {
           const clan = await resolveClan(interaction);
-          const ultima = (await listPartidaHistory(clan.id, 1))[0];
-          if (!ultima) { await interaction.reply({ embeds: [errorEmbed('Nenhuma partida finalizada', 'Esse clã ainda não tem nenhuma partida finalizada pra reabrir.')], ephemeral: true }); return; }
-          const reaberta = await reopenPartida(ultima.id, interaction.user.id);
+          const posicao = interaction.options.getInteger('posicao') ?? 1;
+          const historico = await listPartidaHistory(clan.id, Math.max(posicao, 20));
+          const alvo = historico[posicao - 1];
+          if (!alvo) { await interaction.reply({ embeds: [errorEmbed('Não encontrada', `Não achei a partida #${posicao} do histórico. Veja \`/fut partida historico\`.`)], ephemeral: true }); return; }
+          const reaberta = await reopenPartida(alvo.id, interaction.user.id);
           await interaction.reply({ embeds: [successEmbed('Partida reaberta!', 'As estatísticas dela foram revertidas do clã. Corrija o que precisar (`gol`, `defesa`, `desfazer`, `time`, etc.) e finalize de novo com `/fut partida finalizar` quando terminar.'), buildPartidaEmbed(reaberta, clan.name)] });
           return;
         }
@@ -481,32 +470,19 @@ export default {
 
           let assistRef: { discordId?: string; apelido?: string } | undefined;
           let videoUrl: string | undefined;
-          let shot: FutShotCoords | undefined;
           if (sub === 'gol') {
             const assistUser = interaction.options.getUser('assistencia_de');
             const assistApelido = interaction.options.getString('assistencia_apelido');
             if (assistUser || assistApelido) assistRef = { discordId: assistUser?.id, apelido: assistApelido ?? undefined };
             videoUrl = interaction.options.getString('video') ?? undefined;
-
-            const distancia = interaction.options.getString('chute_distancia');
-            const lado = interaction.options.getString('chute_lado');
-            const regiao = interaction.options.getString('gol_regiao');
-            if (distancia || lado || regiao) {
-              shot = {
-                shotX: distancia ? SHOT_DISTANCIA[distancia] : undefined,
-                shotY: lado ? SHOT_LADO[lado] : undefined,
-                goalX: regiao ? GOL_REGIAO[regiao].x : undefined,
-                goalY: regiao ? GOL_REGIAO[regiao].y : undefined,
-              };
-            }
           }
 
-          const { player, assistPlayer } = await recordEvent(partida!.id, ref, sub as FutEventType, assistRef, videoUrl, shot);
+          const { player, assistPlayer } = await recordEvent(partida!.id, ref, sub as FutEventType, assistRef, videoUrl);
           const labelMap: Record<string, string> = { gol: '⚽ Gol', defesa: '🧤 Defesa', concedido: '🥅 Gol concedido', erro: '⚠️ Erro grave' };
           let desc = `${labelMap[sub]} de **${player.displayName}**`;
           if (assistPlayer) desc += ` (assistência de **${assistPlayer.displayName}**)`;
           if (videoUrl) desc += `\n🎬 [Ver vídeo](${videoUrl})`;
-          if (shot?.goalX != null) desc += `\n🗺️ Bola entrou:${golRegiaoLabel(shot.goalX, shot.goalY)}`;
+          if (sub === 'gol') desc += `\n🎬 Monte a animação desse gol no site (pós-partida), em Histórico.`;
           await interaction.reply({ embeds: [successEmbed('Evento registrado', desc), buildPartidaEmbed(await getPartidaById(partida!.id), clan.name)] });
           return;
         }

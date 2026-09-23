@@ -914,3 +914,47 @@ model AiMemory {
   @@index([createdAt])
   @@map("ai_memory")
 }
+
+// ═══════════════════════════════════════════════════════════════════════
+// TELA DE MÚSICA DO SITE (estilo Spotify) — favoritos e playlists
+// ═══════════════════════════════════════════════════════════════════════
+model MusicFavorite {
+  id        String   @id @default(cuid())
+  userId    String
+  title     String
+  author    String?
+  url       String   @db.Text
+  thumbnail String?  @db.Text
+  duration  String?
+  createdAt DateTime @default(now())
+
+  @@unique([userId, url])
+  @@index([userId])
+  @@map("music_favorites")
+}
+
+model MusicPlaylist {
+  id        String   @id @default(cuid())
+  userId    String
+  name      String
+  createdAt DateTime @default(now())
+  tracks    MusicPlaylistTrack[]
+
+  @@index([userId])
+  @@map("music_playlists")
+}
+
+model MusicPlaylistTrack {
+  id         String   @id @default(cuid())
+  playlistId String
+  title      String
+  author     String?
+  url        String   @db.Text
+  thumbnail  String?  @db.Text
+  duration   String?
+  addedAt    DateTime @default(now())
+  playlist   MusicPlaylist @relation(fields: [playlistId], references: [id], onDelete: Cascade)
+
+  @@index([playlistId])
+  @@map("music_playlist_tracks")
+}

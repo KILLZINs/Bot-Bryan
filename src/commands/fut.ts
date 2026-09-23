@@ -83,7 +83,7 @@ export default {
         .addStringOption((o) => o.setName('nome').setDescription('Nome do clã').setRequired(true))
         .addStringOption((o) => o.setName('apelido').setDescription('Nome/apelido da pessoa').setRequired(true))
         .addUserOption((o) => o.setName('jogador').setDescription('A pessoa, se ela estiver nesse servidor (preenche o ID sozinho)'))
-        .addStringOption((o) => o.setName('id_discord').setDescription('ID do Discord da pessoa (se ela não aparecer em "jogador") — Copiar ID, com modo desenvolvedor ativado')))
+        .addStringOption((o) => o.setName('id_discord').setDescription('ID do Discord (se "jogador" não achar a pessoa) — modo dev + "Copiar ID"')))
       .addSubcommand((sub) => sub.setName('stats').setDescription('Estatísticas do clã inteiro (elenco completo) num modo')
         .addStringOption((o) => o.setName('nome').setDescription('Nome do clã').setRequired(true))
         .addStringOption((o) => o.setName('modo').setDescription('Futsal ou campo').setRequired(true)

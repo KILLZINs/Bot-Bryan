@@ -32,6 +32,11 @@ import { TRAIN_OPTIONS, doTrain } from '../rpg/panels/treinar';
 import { MEDITATION_OPTIONS, startMeditation, collectMeditation } from '../rpg/panels/meditar';
 import { getActiveBuffs, formatBuffList } from '../rpg/services/temp-buffs';
 import { getDayPhase, PHASE_INFO } from '../rpg/services/day-night';
+import {
+  FutError, createPelada, getOpenPelada, getPeladaById, joinPelada, addOfflinePlayer,
+  setTeam, startPelada, recordEvent, finishPelada, getProfile as getFutProfile, getRanking as getFutRanking,
+  type FutEventType, type FutMode, type FutTeam, type FutResultado,
+} from '../fut/services/pelada';
 
 const BOT_OWNER_ID = '1195254699943796791';
 const TMDB_KEY = '3fd2be6f0c70a2a598f084ddfb75487c'; 
@@ -63,6 +68,14 @@ const ACTIVITIES = [
     tagline: 'Busque músicas, favorite e monte playlists — login com Discord.',
     status: 'live',
     href: '/atividades/musica'
+  },
+  {
+    id: 'fut',
+    name: 'Rachão',
+    icon: '⚽',
+    tagline: 'Crie peladas, registre gols e acompanhe seu ranking — login com Discord.',
+    status: 'live',
+    href: '/atividades/fut'
   },
   {
     id: 'social',
@@ -145,6 +158,26 @@ function activitySdkBootstrap(clientId: string): string {
       console.error('[Discord Activity] Falha ao autenticar dentro da call:', err);
       return false;
     }
+  })();
+</script>
+<script>
+  // Propaga frame_id/instance_id (os parâmetros que identificam que estamos
+  // dentro do foguetinho) em toda navegação entre páginas de /atividades.
+  // Sem isso, ao clicar num card do hub (ou em "← Atividades"), a PRÓXIMA
+  // página perde esses parâmetros, acha que é um navegador comum, e mostra
+  // o botão de "Entrar com Discord" — que não funciona dentro da Activity
+  // (ela roda numa sandbox que não navega pra fora pro discord.com).
+  (function () {
+    var search = window.location.search;
+    if (!search) return;
+    function patch() {
+      document.querySelectorAll('a[href^="/atividades"]').forEach(function (a) {
+        var href = a.getAttribute('href');
+        if (href && href.indexOf('?') === -1) a.setAttribute('href', href + search);
+      });
+    }
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', patch);
+    else patch();
   })();
 </script>`;
 }
@@ -244,7 +277,7 @@ function requirePlayerAuth(req: express.Request, res: express.Response, next: ex
   return res.status(401).json({ error: 'Faça login com o Discord para continuar.', loginUrl: '/login/player' });
 }
 
-const PLAYER_REDIRECT_WHITELIST = new Set(['/atividades/rpg', '/atividades', '/atividades/chat', '/atividades/musica']);
+const PLAYER_REDIRECT_WHITELIST = new Set(['/atividades/rpg', '/atividades', '/atividades/chat', '/atividades/musica', '/atividades/fut']);
 function safePlayerRedirect(next: unknown): string {
   return typeof next === 'string' && PLAYER_REDIRECT_WHITELIST.has(next) ? next : '/atividades/rpg';
 }
@@ -1006,17 +1039,31 @@ ${activitySdkBootstrap(clientId!)}
 </style>
 </head>
 <body>
-  <div class="box">
-    <h1>🎵 Música do Bryan</h1>
-    <p>Pra buscar músicas, favoritar e montar suas playlists, entra com sua conta do Discord.</p>
-    <a class="btn" href="/login/player?next=/atividades/musica">Entrar com Discord</a>
+  <div class="box" id="gateBox">
+    <h1 id="gateTitle">🎵 Música do Bryan</h1>
+    <p id="gateDesc">Pra buscar músicas, favoritar e montar suas playlists, entra com sua conta do Discord.</p>
+    <a class="btn" id="gateBtn" href="/login/player?next=/atividades/musica">Entrar com Discord</a>
     <a class="back" href="/atividades">← Voltar às Atividades</a>
   </div>
   <script>
-    (async () => {
-      const ok = await window.activityReady;
-      if (ok) window.location.reload();
-    })();
+    // Dentro do foguetinho (Discord Activity) NÃO existe redirecionamento de
+    // página pro discord.com — não faz sentido mostrar o botão de login ali,
+    // porque clicar nele não funciona (a Activity roda numa sandbox que não
+    // navega pra fora). A autenticação acontece sozinha via SDK no bootstrap
+    // acima; aqui só escondemos o botão e mostramos o status.
+    window.activityReady.then((ok) => {
+      if (window.isDiscordActivity) {
+        document.getElementById('gateBtn').style.display = 'none';
+        if (ok) {
+          document.getElementById('gateTitle').innerText = '✅ Entrando...';
+          document.getElementById('gateDesc').innerText = 'Autenticado com sucesso, carregando...';
+          window.location.reload();
+        } else {
+          document.getElementById('gateTitle').innerText = '⚠️ Não deu pra autenticar automaticamente';
+          document.getElementById('gateDesc').innerText = 'Tenta fechar e abrir a Activity de novo.';
+        }
+      }
+    });
   </script>
 </body>
 </html>`);
@@ -1074,6 +1121,12 @@ ${activitySdkBootstrap(clientId!)}
   .t-actions button.fav.active { color: var(--primary); }
   .t-actions button.play { color: var(--primary); }
   .toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); background: var(--card2); border: 1px solid var(--border); padding: 12px 22px; border-radius: 10px; font-size: 0.88rem; opacity: 0; pointer-events: none; transition: .25s; z-index: 999; box-shadow: 0 8px 24px rgba(0,0,0,0.4); }
+  .web-player-bar { position: fixed; left: 0; right: 0; bottom: 0; background: var(--bg2); border-top: 1px solid var(--border); padding: 10px 16px; display: none; align-items: center; gap: 12px; z-index: 998; }
+  .web-player-bar.show { display: flex; }
+  .web-player-bar .wp-title { font-size: 0.85rem; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 220px; }
+  .web-player-bar iframe { flex: 1; height: 80px; border: none; border-radius: 8px; }
+  .web-player-bar .wp-close { background: none; border: none; color: var(--text-muted); font-size: 1.1rem; cursor: pointer; padding: 6px; }
+  .web-player-bar .wp-close:hover { color: white; }
   .toast.show { opacity: 1; transform: translateX(-50%) translateY(-6px); }
   .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.6); display: none; align-items: center; justify-content: center; z-index: 1000; }
   .modal-overlay.show { display: flex; }
@@ -1115,6 +1168,12 @@ ${activitySdkBootstrap(clientId!)}
   </div>
 
   <div class="toast" id="toast"></div>
+
+  <div class="web-player-bar" id="webPlayerBar">
+    <span class="wp-title" id="webPlayerTitle"></span>
+    <iframe id="webPlayerFrame" scrolling="no" frameborder="no" allow="autoplay"></iframe>
+    <button class="wp-close" onclick="closeWebPlayer()" title="Fechar player">✕</button>
+  </div>
 
   <div class="modal-overlay" id="playlistModal">
     <div class="modal">
@@ -1186,23 +1245,47 @@ ${activitySdkBootstrap(clientId!)}
 
     async function playTrack(evt) {
       const t = getTrackFromEl(evt);
-      if (!window.isDiscordActivity || !window.discordChannelId || !window.discordGuildId) {
-        showToast('🎧 Pra tocar de verdade, abra essa tela pelo foguetinho 🚀 dentro de uma call do Discord!');
+
+      // Dentro do foguetinho, numa call de voz: toca de verdade no canal,
+      // igual o /play do Discord. Fora disso (navegador normal, sem call),
+      // o som sai do próprio site — via o player embutido do SoundCloud.
+      if (window.isDiscordActivity && window.discordChannelId && window.discordGuildId) {
+        showToast('▶️ Chamando ' + t.title + '...');
+        try {
+          const res = await fetch('/api/activities/music/play', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ url: t.url, title: t.title, channelId: window.discordChannelId, guildId: window.discordGuildId }),
+          });
+          const data = await res.json();
+          if (!res.ok) return showToast('❌ ' + (data.error || 'Erro ao tocar.'));
+          showToast('🎶 Tocando na call: ' + data.title);
+        } catch (e) {
+          showToast('❌ Erro de conexão ao tentar tocar.');
+        }
         return;
       }
-      showToast('▶️ Chamando ' + t.title + '...');
-      try {
-        const res = await fetch('/api/activities/music/play', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ url: t.url, title: t.title, channelId: window.discordChannelId, guildId: window.discordGuildId }),
-        });
-        const data = await res.json();
-        if (!res.ok) return showToast('❌ ' + (data.error || 'Erro ao tocar.'));
-        showToast('🎶 Tocando: ' + data.title);
-      } catch (e) {
-        showToast('❌ Erro de conexão ao tentar tocar.');
+
+      playInBrowser(t);
+    }
+
+    function playInBrowser(t) {
+      const bar = document.getElementById('webPlayerBar');
+      const frame = document.getElementById('webPlayerFrame');
+      const titleEl = document.getElementById('webPlayerTitle');
+      if (!/soundcloud\\.com/i.test(t.url)) {
+        showToast('🎧 Essa faixa só toca dentro de uma call do Discord (não é do SoundCloud).');
+        return;
       }
+      frame.src = 'https://w.soundcloud.com/player/?url=' + encodeURIComponent(t.url) + '&auto_play=true&hide_related=true&show_comments=false&show_user=true&show_reposts=false&visual=false&color=%231DB954';
+      titleEl.textContent = t.title + (t.author ? ' — ' + t.author : '');
+      bar.classList.add('show');
+      showToast('🎶 Tocando no site: ' + t.title);
+    }
+
+    function closeWebPlayer() {
+      document.getElementById('webPlayerBar').classList.remove('show');
+      document.getElementById('webPlayerFrame').src = '';
     }
 
     async function toggleFavorite(evt) {
@@ -1402,6 +1485,501 @@ ${activitySdkBootstrap(clientId!)}
     (async () => {
       await window.activityReady;
       await Promise.all([loadFavorites(), loadPlaylists()]);
+    })();
+  </script>
+</body>
+</html>`);
+  });
+
+  // =====================================================================
+  // ⚽ RACHÃO (/atividades/fut) — o site é a interface PRINCIPAL desse
+  // sistema (o Discord fica mais pra anunciar o que rola). Reaproveita
+  // 100% da mesma engine de src/fut/services/pelada.ts que o comando
+  // /fut usa — nenhuma regra é reimplementada aqui, só a apresentação.
+  // =====================================================================
+  function serializeFutPelada(pelada: NonNullable<Awaited<ReturnType<typeof getPeladaById>>>) {
+    return {
+      id: pelada.id,
+      name: pelada.name,
+      mode: pelada.mode,
+      status: pelada.status,
+      scoreA: pelada.scoreA,
+      scoreB: pelada.scoreB,
+      resultado: pelada.resultado,
+      creatorId: pelada.creatorId,
+      players: pelada.players.map((p) => ({
+        id: p.id, discordId: p.discordId, displayName: p.displayName, position: p.position, team: p.team,
+        goals: p.goals, assists: p.assists, defesas: p.defesas, golsConcedidos: p.golsConcedidos, errosGraves: p.errosGraves,
+      })),
+    };
+  }
+
+  function handleFutError(res: express.Response, err: unknown) {
+    if (err instanceof FutError) return res.status(400).json({ error: err.message });
+    console.error('[Rachão/Site] Erro inesperado:', err);
+    res.status(500).json({ error: 'Alguma coisa deu errado. Tenta de novo.' });
+  }
+
+  app.get('/api/activities/fut/current', requirePlayerAuth, async (req, res) => {
+    const guildId = await resolveGuildId(typeof req.query.guildId === 'string' ? req.query.guildId : undefined);
+    if (!guildId) return res.status(400).json({ error: 'Nenhum servidor da Aliança configurado ainda.' });
+    const pelada = await getOpenPelada(guildId);
+    res.json({ pelada: pelada ? serializeFutPelada(pelada) : null, meId: req.cookies!.player_userid });
+  });
+
+  app.post('/api/activities/fut/create', requirePlayerAuth, async (req, res) => {
+    try {
+      const guildId = await resolveGuildId(req.body?.guildId);
+      if (!guildId) return res.status(400).json({ error: 'Nenhum servidor da Aliança configurado ainda.' });
+      const modo: FutMode = req.body?.modo === 'campo' ? 'campo' : 'futsal';
+      const nome = typeof req.body?.nome === 'string' ? req.body.nome : undefined;
+      const userId = req.cookies!.player_userid as string;
+      const username = (req.cookies!.player_username as string) || 'Jogador';
+      const pelada = await createPelada(guildId, userId, username, modo, nome);
+      res.json({ pelada: serializeFutPelada(pelada) });
+    } catch (err) { handleFutError(res, err); }
+  });
+
+  async function currentFutPeladaOr400(req: express.Request, res: express.Response) {
+    const guildId = await resolveGuildId(req.body?.guildId);
+    if (!guildId) { res.status(400).json({ error: 'Nenhum servidor da Aliança configurado ainda.' }); return null; }
+    const pelada = await getOpenPelada(guildId);
+    if (!pelada) { res.status(400).json({ error: 'Nenhuma pelada em aberto. Crie uma primeiro.' }); return null; }
+    return pelada;
+  }
+
+  app.post('/api/activities/fut/join', requirePlayerAuth, async (req, res) => {
+    try {
+      const pelada = await currentFutPeladaOr400(req, res);
+      if (!pelada) return;
+      const userId = req.cookies!.player_userid as string;
+      const username = (req.cookies!.player_username as string) || 'Jogador';
+      await joinPelada(pelada.id, userId, username, req.body?.posicao || undefined);
+      res.json({ pelada: serializeFutPelada((await getPeladaById(pelada.id))!) });
+    } catch (err) { handleFutError(res, err); }
+  });
+
+  app.post('/api/activities/fut/add-offline', requirePlayerAuth, async (req, res) => {
+    try {
+      const pelada = await currentFutPeladaOr400(req, res);
+      if (!pelada) return;
+      const apelido = String(req.body?.apelido || '');
+      await addOfflinePlayer(pelada.id, apelido, req.body?.posicao || undefined);
+      res.json({ pelada: serializeFutPelada((await getPeladaById(pelada.id))!) });
+    } catch (err) { handleFutError(res, err); }
+  });
+
+  app.post('/api/activities/fut/team', requirePlayerAuth, async (req, res) => {
+    try {
+      const pelada = await currentFutPeladaOr400(req, res);
+      if (!pelada) return;
+      const team = req.body?.team === 'B' ? 'B' : 'A';
+      await setTeam(pelada.id, { discordId: req.body?.discordId || undefined, apelido: req.body?.apelido || undefined }, team as FutTeam);
+      res.json({ pelada: serializeFutPelada((await getPeladaById(pelada.id))!) });
+    } catch (err) { handleFutError(res, err); }
+  });
+
+  app.post('/api/activities/fut/start', requirePlayerAuth, async (req, res) => {
+    try {
+      const pelada = await currentFutPeladaOr400(req, res);
+      if (!pelada) return;
+      const userId = req.cookies!.player_userid as string;
+      await startPelada(pelada.id, userId);
+      res.json({ pelada: serializeFutPelada((await getPeladaById(pelada.id))!) });
+    } catch (err) { handleFutError(res, err); }
+  });
+
+  app.post('/api/activities/fut/event', requirePlayerAuth, async (req, res) => {
+    try {
+      const pelada = await currentFutPeladaOr400(req, res);
+      if (!pelada) return;
+      const type = req.body?.type as FutEventType;
+      if (!['gol', 'defesa', 'concedido', 'erro'].includes(type)) return res.status(400).json({ error: 'Tipo de evento inválido.' });
+
+      const ref = { discordId: req.body?.discordId || undefined, apelido: req.body?.apelido || undefined };
+      const assistRef = (req.body?.assistDiscordId || req.body?.assistApelido)
+        ? { discordId: req.body?.assistDiscordId || undefined, apelido: req.body?.assistApelido || undefined }
+        : undefined;
+
+      await recordEvent(pelada.id, ref, type, assistRef);
+      res.json({ pelada: serializeFutPelada((await getPeladaById(pelada.id))!) });
+    } catch (err) { handleFutError(res, err); }
+  });
+
+  app.post('/api/activities/fut/finish', requirePlayerAuth, async (req, res) => {
+    try {
+      const pelada = await currentFutPeladaOr400(req, res);
+      if (!pelada) return;
+      const userId = req.cookies!.player_userid as string;
+      const resultado = req.body?.resultado as FutResultado | undefined;
+      const finished = await finishPelada(pelada.id, userId, resultado || undefined);
+      res.json({ pelada: serializeFutPelada(finished) });
+    } catch (err) { handleFutError(res, err); }
+  });
+
+  app.get('/api/activities/fut/profile', requirePlayerAuth, async (req, res) => {
+    const guildId = await resolveGuildId(typeof req.query.guildId === 'string' ? req.query.guildId : undefined);
+    if (!guildId) return res.status(400).json({ error: 'Nenhum servidor da Aliança configurado ainda.' });
+    const userId = typeof req.query.userId === 'string' ? req.query.userId : (req.cookies!.player_userid as string);
+    const profile = await getFutProfile(guildId, userId);
+    res.json({ profile });
+  });
+
+  app.get('/api/activities/fut/ranking', requirePlayerAuth, async (req, res) => {
+    const guildId = await resolveGuildId(typeof req.query.guildId === 'string' ? req.query.guildId : undefined);
+    if (!guildId) return res.status(400).json({ error: 'Nenhum servidor da Aliança configurado ainda.' });
+    const ranking = await getFutRanking(guildId, 10);
+    const withNames = await Promise.all(ranking.map(async (p) => {
+      const user = await discordClient.users.fetch(p.discordId).catch(() => null);
+      return { ...p, displayName: user?.username || p.discordId };
+    }));
+    res.json({ ranking: withNames });
+  });
+
+  app.get('/atividades/fut', (req, res) => {
+    const isLogged = req.cookies?.player_auth === 'permitido' && req.cookies?.player_userid;
+
+    if (!isLogged) {
+      return res.send(`<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Rachão — Login</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
+${activitySdkBootstrap(clientId!)}
+<style>
+  :root { --bg: #05050A; --primary: #22C55E; --card: #12131F; --border: #262A40; --text: #F2F3F5; --text-muted: #9CA3AF; }
+  * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Inter', sans-serif; }
+  body { background: radial-gradient(circle at 50% 0%, rgba(34,197,94,0.16), transparent 45%), var(--bg); color: var(--text); min-height: 100vh; display: flex; flex-direction: column; }
+  nav { display: flex; justify-content: space-between; align-items: center; padding: 16px 5%; }
+  nav a { color: var(--text-muted); text-decoration: none; font-weight: 600; font-size: 0.9rem; }
+  .brand { font-weight: 800; color: white; }
+  .gate { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 20px; }
+  .gate .icon { font-size: 3.4rem; margin-bottom: 18px; }
+  .gate h1 { font-size: 1.8rem; font-weight: 800; margin-bottom: 12px; }
+  .gate p { color: var(--text-muted); max-width: 420px; margin-bottom: 30px; line-height: 1.5; }
+  .discord-btn { display: inline-flex; align-items: center; gap: 10px; background: #5865F2; color: white; text-decoration: none; font-weight: 700; padding: 14px 28px; border-radius: 10px; box-shadow: 0 8px 25px rgba(88,101,242,0.4); transition: 0.2s; }
+  .discord-btn:hover { transform: translateY(-3px); box-shadow: 0 10px 30px rgba(88,101,242,0.55); }
+  .note { color: var(--text-muted); font-size: 0.8rem; margin-top: 18px; max-width: 380px; }
+</style>
+</head>
+<body>
+  <nav><span class="brand">⚽ Rachão</span><a href="/atividades">← Atividades</a></nav>
+  <div class="gate" id="gateBox">
+    <div class="icon">🔒</div>
+    <h1 id="gateTitle">Entre com sua conta do Discord</h1>
+    <p id="gateDesc">Suas estatísticas de Rachão são pessoais — por isso pedimos login com o Discord.</p>
+    <a class="discord-btn" id="gateBtn" href="/login/player?next=/atividades/fut">🎮 Entrar com Discord</a>
+    <p class="note">Isso não te dá acesso ao painel administrativo do bot — é só pra identificar seu jogador.</p>
+  </div>
+  <script>
+    window.activityReady.then((ok) => {
+      if (window.isDiscordActivity) {
+        document.getElementById('gateBtn').style.display = 'none';
+        if (ok) {
+          document.getElementById('gateTitle').innerText = '✅ Entrando...';
+          document.getElementById('gateDesc').innerText = 'Autenticado com sucesso, carregando...';
+          window.location.reload();
+        } else {
+          document.getElementById('gateTitle').innerText = '⚠️ Não deu pra autenticar automaticamente';
+          document.getElementById('gateDesc').innerText = 'Tenta fechar e abrir a Activity de novo.';
+        }
+      }
+    });
+  </script>
+</body>
+</html>`);
+    }
+
+    const meId = req.cookies?.player_userid as string;
+
+    res.send(`<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Rachão — Bryan Bot</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
+${activitySdkBootstrap(clientId!)}
+<style>
+  :root { --bg: #05050A; --bg2: #0A0A12; --primary: #22C55E; --card: #12131F; --card2: #181A28; --border: #262A40; --text: #F2F3F5; --text-muted: #9CA3AF; --red: #E74C3C; }
+  * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Inter', sans-serif; }
+  body { background: var(--bg); color: var(--text); min-height: 100vh; padding-bottom: 40px; }
+  nav { display: flex; justify-content: space-between; align-items: center; padding: 16px 5%; border-bottom: 1px solid var(--border); }
+  nav a { color: var(--text-muted); text-decoration: none; font-weight: 600; font-size: 0.9rem; }
+  .brand { font-weight: 800; color: white; display: flex; align-items: center; gap: 8px; }
+  .wrap { max-width: 720px; margin: 0 auto; padding: 24px 20px; }
+  .tabs { display: flex; gap: 8px; margin-bottom: 20px; }
+  .tab { background: var(--card); border: 1px solid var(--border); color: var(--text-muted); padding: 10px 18px; border-radius: 999px; cursor: pointer; font-weight: 700; font-size: 0.88rem; }
+  .tab.active { color: #05050A; background: var(--primary); border-color: var(--primary); }
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 22px; margin-bottom: 18px; }
+  .card h2 { font-size: 1.1rem; margin-bottom: 14px; }
+  .row { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
+  input, select { background: var(--card2); border: 1px solid var(--border); color: white; padding: 11px 14px; border-radius: 8px; outline: none; font-size: 0.9rem; }
+  input:focus, select:focus { border-color: var(--primary); }
+  button.btn { background: var(--primary); color: #05050A; border: none; padding: 11px 20px; border-radius: 8px; font-weight: 800; cursor: pointer; font-size: 0.88rem; }
+  button.btn:hover { filter: brightness(1.1); }
+  button.btn.secondary { background: var(--card2); color: white; border: 1px solid var(--border); }
+  button.btn.danger { background: var(--red); color: white; }
+  .score-big { text-align: center; font-size: 2.4rem; font-weight: 800; margin: 6px 0 18px; }
+  .teams { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 16px; }
+  .team-col h3 { font-size: 0.85rem; text-transform: uppercase; color: var(--text-muted); margin-bottom: 8px; }
+  .player-row { display: flex; justify-content: space-between; align-items: center; background: var(--card2); padding: 8px 12px; border-radius: 8px; margin-bottom: 6px; font-size: 0.86rem; }
+  .player-row .stats { color: var(--text-muted); font-size: 0.78rem; }
+  .unassigned { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 16px; }
+  .chip { background: var(--card2); border: 1px solid var(--border); padding: 6px 12px; border-radius: 999px; font-size: 0.82rem; display: flex; align-items: center; gap: 8px; }
+  .chip button { background: none; border: none; color: var(--text-muted); font-size: 0.75rem; cursor: pointer; padding: 2px 6px; border-radius: 6px; }
+  .chip button:hover { color: white; background: rgba(255,255,255,0.08); }
+  .empty-hint { color: var(--text-muted); font-size: 0.9rem; text-align: center; padding: 30px 0; }
+  .status-badge { font-size: 0.75rem; font-weight: 700; padding: 4px 10px; border-radius: 999px; background: var(--card2); color: var(--text-muted); }
+  .status-badge.aberta { color: #F5C242; }
+  .status-badge.em_andamento { color: var(--primary); }
+  .status-badge.finalizada { color: var(--red); }
+  table.stats-table { width: 100%; border-collapse: collapse; font-size: 0.86rem; }
+  table.stats-table td { padding: 8px 6px; border-bottom: 1px solid var(--border); }
+  .rank-item { display: flex; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid var(--border); font-size: 0.88rem; }
+</style>
+</head>
+<body>
+  <nav>
+    <span class="brand">⚽ Rachão</span>
+    <a href="/atividades">← Atividades</a>
+  </nav>
+  <div class="wrap">
+    <div class="tabs">
+      <button class="tab active" id="tabPelada" onclick="showTab('pelada')">Pelada</button>
+      <button class="tab" id="tabPerfil" onclick="showTab('perfil')">Perfil</button>
+      <button class="tab" id="tabRanking" onclick="showTab('ranking')">Ranking</button>
+    </div>
+    <div id="panelPelada"></div>
+    <div id="panelPerfil" style="display:none"></div>
+    <div id="panelRanking" style="display:none"></div>
+  </div>
+  <div class="toast" id="toast"></div>
+
+  <script>
+    const ME_ID = ${JSON.stringify(meId)};
+    let currentTab = 'pelada';
+    let pollTimer = null;
+
+    function showToast(msg) {
+      let el = document.getElementById('toast');
+      if (!el) {
+        el = document.createElement('div');
+        el.id = 'toast';
+        el.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#181A28;border:1px solid #262A40;padding:12px 22px;border-radius:10px;font-size:0.88rem;opacity:0;transition:.25s;z-index:999;';
+        document.body.appendChild(el);
+      }
+      el.textContent = msg;
+      el.style.opacity = '1';
+      setTimeout(() => { el.style.opacity = '0'; }, 2600);
+    }
+
+    function showTab(tab) {
+      currentTab = tab;
+      document.getElementById('tabPelada').classList.toggle('active', tab === 'pelada');
+      document.getElementById('tabPerfil').classList.toggle('active', tab === 'perfil');
+      document.getElementById('tabRanking').classList.toggle('active', tab === 'ranking');
+      document.getElementById('panelPelada').style.display = tab === 'pelada' ? 'block' : 'none';
+      document.getElementById('panelPerfil').style.display = tab === 'perfil' ? 'block' : 'none';
+      document.getElementById('panelRanking').style.display = tab === 'ranking' ? 'block' : 'none';
+      if (tab === 'perfil') loadPerfil();
+      if (tab === 'ranking') loadRanking();
+    }
+
+    async function api(path, opts) {
+      const res = await fetch(path, Object.assign({ headers: { 'Content-Type': 'application/json' } }, opts || {}));
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'Erro na requisição.');
+      return data;
+    }
+
+    function playerOptionsHtml(pelada) {
+      return pelada.players.map(p => \`<option value="\${p.discordId || ''}|\${p.displayName}">\${p.displayName}\${p.team ? ' (' + p.team + ')' : ''}</option>\`).join('');
+    }
+
+    function parsePlayerValue(val) {
+      const [discordId, apelido] = val.split('|');
+      return discordId ? { discordId } : { apelido };
+    }
+
+    function renderPelada(pelada) {
+      const panel = document.getElementById('panelPelada');
+      if (!pelada) {
+        panel.innerHTML = \`
+          <div class="card">
+            <h2>Nenhuma pelada em aberto</h2>
+            <p style="color:var(--text-muted);font-size:0.88rem;margin-bottom:14px;">Crie uma pra começar a organizar o rachão.</p>
+            <div class="row">
+              <select id="newModo"><option value="futsal">Futsal</option><option value="campo">Campo</option></select>
+              <input id="newNome" type="text" placeholder="Nome da pelada (opcional)" style="flex:1;min-width:160px;">
+              <button class="btn" onclick="criarPelada()">Criar Pelada</button>
+            </div>
+          </div>\`;
+        return;
+      }
+
+      const timeA = pelada.players.filter(p => p.team === 'A');
+      const timeB = pelada.players.filter(p => p.team === 'B');
+      const semTime = pelada.players.filter(p => !p.team);
+      const souEu = pelada.players.some(p => p.discordId === ME_ID);
+      const statusLabel = pelada.status === 'aberta' ? '🟡 Aberta' : pelada.status === 'em_andamento' ? '🟢 Em andamento' : '🔴 Finalizada';
+
+      function playerRowHtml(p) {
+        return \`<div class="player-row"><span>\${p.displayName}</span><span class="stats">⚽\${p.goals} 🅰️\${p.assists} 🧤\${p.defesas} 🥅\${p.golsConcedidos} ⚠️\${p.errosGraves}</span></div>\`;
+      }
+
+      let html = \`
+        <div class="card">
+          <div class="row" style="justify-content:space-between;align-items:center;">
+            <h2 style="margin:0;">\${pelada.name || 'Rachão'} <span class="status-badge \${pelada.status}">\${statusLabel}</span></h2>
+          </div>
+          <div class="score-big">\${pelada.scoreA} x \${pelada.scoreB}</div>
+          <div class="teams">
+            <div class="team-col"><h3>Time A</h3>\${timeA.length ? timeA.map(playerRowHtml).join('') : '<div class="empty-hint" style="padding:10px 0;">vazio</div>'}</div>
+            <div class="team-col"><h3>Time B</h3>\${timeB.length ? timeB.map(playerRowHtml).join('') : '<div class="empty-hint" style="padding:10px 0;">vazio</div>'}</div>
+          </div>\`;
+
+      if (semTime.length) {
+        html += \`<div class="unassigned">\${semTime.map(p => \`
+          <span class="chip">\${p.displayName}
+            <button onclick="definirTime('\${p.discordId || ''}|\${p.displayName}','A')">→A</button>
+            <button onclick="definirTime('\${p.discordId || ''}|\${p.displayName}','B')">→B</button>
+          </span>\`).join('')}</div>\`;
+      }
+
+      if (pelada.status === 'aberta') {
+        html += \`<div class="row">\${souEu ? '' : '<button class="btn" onclick="entrarPelada()">Entrar na pelada</button>'}<button class="btn secondary" onclick="iniciarPelada()">Iniciar pelada</button></div>\`;
+        html += \`<div class="row"><input id="offlineApelido" type="text" placeholder="Apelido (jogador sem Discord)"><input id="offlinePosicao" type="text" placeholder="Posição (opcional)" style="width:140px;"><button class="btn secondary" onclick="adicionarOffline()">Adicionar</button></div>\`;
+      }
+
+      if (pelada.status === 'em_andamento') {
+        html += \`
+          <div class="row">
+            <select id="eventPlayer">\${playerOptionsHtml(pelada)}</select>
+            <select id="eventAssist"><option value="">Sem assistência</option>\${playerOptionsHtml(pelada)}</select>
+          </div>
+          <div class="row">
+            <button class="btn" onclick="registrarEvento('gol')">⚽ Gol</button>
+            <button class="btn secondary" onclick="registrarEvento('defesa')">🧤 Defesa</button>
+            <button class="btn secondary" onclick="registrarEvento('concedido')">🥅 Concedido</button>
+            <button class="btn secondary" onclick="registrarEvento('erro')">⚠️ Erro grave</button>
+          </div>
+          <div class="row"><button class="btn danger" onclick="finalizarPelada()">Finalizar pelada</button></div>\`;
+      }
+
+      if (pelada.status === 'finalizada') {
+        const resLabel = pelada.resultado === 'empate' ? 'Empate' : pelada.resultado === 'vitoria_a' ? 'Vitória do Time A' : 'Vitória do Time B';
+        html += \`<p style="text-align:center;color:var(--text-muted);">\${resLabel} — estatísticas salvas. Crie uma nova pelada quando quiser.</p>
+          <div class="row" style="justify-content:center;"><button class="btn" onclick="criarPelada(true)">Criar nova pelada</button></div>\`;
+      }
+
+      html += '</div>';
+      panel.innerHTML = html;
+    }
+
+    async function refreshPelada() {
+      try {
+        const data = await api('/api/activities/fut/current');
+        renderPelada(data.pelada);
+      } catch (e) { /* silencioso no polling */ }
+    }
+
+    async function criarPelada() {
+      const modo = document.getElementById('newModo') ? document.getElementById('newModo').value : 'futsal';
+      const nome = document.getElementById('newNome') ? document.getElementById('newNome').value : '';
+      try {
+        await api('/api/activities/fut/create', { method: 'POST', body: JSON.stringify({ modo, nome }) });
+        showToast('✅ Pelada criada!');
+        refreshPelada();
+      } catch (e) { showToast('❌ ' + e.message); }
+    }
+
+    async function entrarPelada() {
+      try { await api('/api/activities/fut/join', { method: 'POST', body: '{}' }); showToast('✅ Você entrou na pelada!'); refreshPelada(); }
+      catch (e) { showToast('❌ ' + e.message); }
+    }
+
+    async function adicionarOffline() {
+      const apelido = document.getElementById('offlineApelido').value.trim();
+      const posicao = document.getElementById('offlinePosicao').value.trim();
+      if (!apelido) return;
+      try { await api('/api/activities/fut/add-offline', { method: 'POST', body: JSON.stringify({ apelido, posicao }) }); showToast('✅ Jogador adicionado!'); refreshPelada(); }
+      catch (e) { showToast('❌ ' + e.message); }
+    }
+
+    async function definirTime(val, team) {
+      const ref = parsePlayerValue(val);
+      try { await api('/api/activities/fut/team', { method: 'POST', body: JSON.stringify(Object.assign({ team }, ref)) }); refreshPelada(); }
+      catch (e) { showToast('❌ ' + e.message); }
+    }
+
+    async function iniciarPelada() {
+      try { await api('/api/activities/fut/start', { method: 'POST', body: '{}' }); showToast('✅ Pelada iniciada!'); refreshPelada(); }
+      catch (e) { showToast('❌ ' + e.message); }
+    }
+
+    async function registrarEvento(type) {
+      const playerVal = document.getElementById('eventPlayer').value;
+      const assistVal = document.getElementById('eventAssist').value;
+      if (!playerVal) return showToast('❌ Escolha um jogador.');
+      const ref = parsePlayerValue(playerVal);
+      const body = { type, discordId: ref.discordId, apelido: ref.apelido };
+      if (type === 'gol' && assistVal) {
+        const assistRef = parsePlayerValue(assistVal);
+        body.assistDiscordId = assistRef.discordId;
+        body.assistApelido = assistRef.apelido;
+      }
+      try { await api('/api/activities/fut/event', { method: 'POST', body: JSON.stringify(body) }); showToast('✅ Evento registrado!'); refreshPelada(); }
+      catch (e) { showToast('❌ ' + e.message); }
+    }
+
+    async function finalizarPelada() {
+      if (!confirm('Finalizar a pelada e salvar as estatísticas de todo mundo?')) return;
+      try { const data = await api('/api/activities/fut/finish', { method: 'POST', body: '{}' }); showToast('🏁 Pelada finalizada!'); renderPelada(data.pelada); }
+      catch (e) { showToast('❌ ' + e.message); }
+    }
+
+    async function loadPerfil() {
+      const panel = document.getElementById('panelPerfil');
+      panel.innerHTML = '<div class="empty-hint">Carregando...</div>';
+      try {
+        const data = await api('/api/activities/fut/profile');
+        if (!data.profile) { panel.innerHTML = '<div class="card"><div class="empty-hint">Você ainda não finalizou nenhuma pelada.</div></div>'; return; }
+        const p = data.profile;
+        panel.innerHTML = \`
+          <div class="card">
+            <h2>Suas estatísticas</h2>
+            <table class="stats-table">
+              <tr><td>Peladas</td><td style="text-align:right;">\${p.totalPeladas}</td></tr>
+              <tr><td>Vitórias / Derrotas / Empates</td><td style="text-align:right;">\${p.vitorias} / \${p.derrotas} / \${p.empates}</td></tr>
+              <tr><td>XP</td><td style="text-align:right;">\${p.xp}</td></tr>
+              <tr><td>Gols</td><td style="text-align:right;">\${p.goals}</td></tr>
+              <tr><td>Assistências</td><td style="text-align:right;">\${p.assists}</td></tr>
+              <tr><td>Defesas</td><td style="text-align:right;">\${p.defesas}</td></tr>
+              <tr><td>Gols Concedidos</td><td style="text-align:right;">\${p.golsConcedidos}</td></tr>
+              <tr><td>Erros Graves</td><td style="text-align:right;">\${p.errosGraves}</td></tr>
+            </table>
+          </div>\`;
+      } catch (e) { panel.innerHTML = '<div class="card"><div class="empty-hint">❌ ' + e.message + '</div></div>'; }
+    }
+
+    async function loadRanking() {
+      const panel = document.getElementById('panelRanking');
+      panel.innerHTML = '<div class="empty-hint">Carregando...</div>';
+      try {
+        const data = await api('/api/activities/fut/ranking');
+        if (!data.ranking.length) { panel.innerHTML = '<div class="card"><div class="empty-hint">Ninguém finalizou uma pelada ainda.</div></div>'; return; }
+        panel.innerHTML = '<div class="card"><h2>🏆 Ranking</h2>' + data.ranking.map((p, i) => \`
+          <div class="rank-item"><span>\${i + 1}. \${p.displayName}</span><span>\${p.xp} XP</span></div>\`).join('') + '</div>';
+      } catch (e) { panel.innerHTML = '<div class="card"><div class="empty-hint">❌ ' + e.message + '</div></div>'; }
+    }
+
+    (async () => {
+      await window.activityReady;
+      await refreshPelada();
+      pollTimer = setInterval(refreshPelada, 4000);
     })();
   </script>
 </body>

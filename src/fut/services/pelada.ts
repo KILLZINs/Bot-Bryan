@@ -151,6 +151,22 @@ export async function addClanMember(clanId: string, requesterId: string, data: {
   return prisma.futClanMember.create({ data: { clanId, discordId, displayName } });
 }
 
+// Remove alguém do elenco do clã — só quem criou o clã pode, e não dá pra
+// remover o próprio criador (ele tem que deletar o clã inteiro, se quiser).
+// Não mexe nas estatísticas já salvas (FutClanPlayerStats é por discordId,
+// independente de continuar ou não no elenco).
+export async function removeClanMember(clanId: string, requesterId: string, memberRef: { discordId?: string; apelido?: string }) {
+  const clan = await getClanById(clanId);
+  if (!clan) throw new FutError('Clã não encontrado.');
+  if (clan.creatorId !== requesterId) throw new FutError('Só quem criou o clã pode remover membros.');
+
+  const member = resolveMember(clan, memberRef);
+  if (member.discordId === clan.creatorId) throw new FutError('Você não pode remover a si mesmo (criador) do clã — delete o clã inteiro se for o caso.');
+
+  await prisma.futClanMember.delete({ where: { id: member.id } });
+  return member;
+}
+
 export async function deleteClan(clanId: string, requesterId: string) {
   const clan = await getClanById(clanId);
   if (!clan) throw new FutError('Clã não encontrado.');

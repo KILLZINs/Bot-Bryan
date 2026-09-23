@@ -8,6 +8,7 @@ import { errorEmbed, successEmbed, COLORS } from '../utils/embeds';
 import {
   FutError,
   createClan, joinClan, listClans, getClanByName, deleteClan,
+  listTeams, createTeam, deleteTeam, setMemberTeam,
   createPartida, getOpenPartida, getPartidaById, deletePartida, listPartidaHistory,
   joinPartida, addOfflinePlayer, setTeam, autoBalanceTeams, startPartida, recordEvent, finishPartida,
   getProfile, getRanking, getUserProfile, setUserPosition,
@@ -34,14 +35,16 @@ function buildPartidaEmbed(partida: Awaited<ReturnType<typeof getPartidaById>>, 
   const timeB = partida.players.filter((p) => p.team === 'B');
   const semTime = partida.players.filter((p) => !p.team);
   const statusLabel = partida.status === 'aberta' ? '🟡 Aberta (inscrições)' : partida.status === 'em_andamento' ? '🟢 Em andamento' : '🔴 Finalizada';
+  const finalizada = partida.status === 'finalizada';
+  const notaTxt = (p: (typeof partida.players)[number]) => (finalizada && p.nota != null ? ` — ⭐${p.nota.toFixed(1)}` : '');
 
   const embed = new EmbedBuilder()
     .setColor(COLORS.PRIMARY)
     .setTitle(`⚽ ${partida.name || 'Partida'} — clã ${clanName}`)
     .setDescription(`**Modo:** ${partida.mode === 'futsal' ? 'Futsal' : 'Campo'}\n**Status:** ${statusLabel}`)
     .addFields(
-      { name: `Time A (${timeA.length})`, value: timeA.length ? timeA.map((p) => `${p.displayName} — ⚽${p.goals} 🅰️${p.assists}`).join('\n') : '_vazio_', inline: true },
-      { name: `Time B (${timeB.length})`, value: timeB.length ? timeB.map((p) => `${p.displayName} — ⚽${p.goals} 🅰️${p.assists}`).join('\n') : '_vazio_', inline: true },
+      { name: `Time A (${timeA.length})`, value: timeA.length ? timeA.map((p) => `${p.displayName} — ⚽${p.goals} 🅰️${p.assists}${notaTxt(p)}`).join('\n') : '_vazio_', inline: true },
+      { name: `Time B (${timeB.length})`, value: timeB.length ? timeB.map((p) => `${p.displayName} — ⚽${p.goals} 🅰️${p.assists}${notaTxt(p)}`).join('\n') : '_vazio_', inline: true },
     );
 
   if (semTime.length) embed.addFields({ name: 'Sem time definido', value: semTime.map((p) => p.displayName).join(', ') });
@@ -64,6 +67,23 @@ export default {
       .addSubcommand((sub) => sub.setName('listar').setDescription('Lista os clãs deste servidor'))
       .addSubcommand((sub) => sub.setName('deletar').setDescription('Deleta um clã (só quem criou)')
         .addStringOption((o) => o.setName('nome').setDescription('Nome do clã').setRequired(true))))
+    .addSubcommandGroup((group) => group
+      .setName('elenco')
+      .setDescription('Times internos e fixos do clã (ex: Time Amarelo x Time Azul)')
+      .addSubcommand((sub) => sub.setName('criar').setDescription('Cria um time interno no clã (só quem criou o clã)')
+        .addStringOption((o) => o.setName('cla').setDescription('Nome do clã').setRequired(true))
+        .addStringOption((o) => o.setName('nome').setDescription('Nome do time').setRequired(true))
+        .addStringOption((o) => o.setName('cor').setDescription('Cor do time (opcional, ex: Amarelo, #FFD700)')))
+      .addSubcommand((sub) => sub.setName('deletar').setDescription('Deleta um time interno (só quem criou o clã)')
+        .addStringOption((o) => o.setName('cla').setDescription('Nome do clã').setRequired(true))
+        .addStringOption((o) => o.setName('nome').setDescription('Nome do time').setRequired(true)))
+      .addSubcommand((sub) => sub.setName('listar').setDescription('Lista os times internos do clã e seus jogadores')
+        .addStringOption((o) => o.setName('cla').setDescription('Nome do clã').setRequired(true)))
+      .addSubcommand((sub) => sub.setName('definir').setDescription('Coloca um membro do clã dentro de um time interno')
+        .addStringOption((o) => o.setName('cla').setDescription('Nome do clã').setRequired(true))
+        .addStringOption((o) => o.setName('nome').setDescription('Nome do time (deixe vazio pra tirar do time atual)'))
+        .addUserOption((o) => o.setName('jogador').setDescription('Membro com conta no Discord'))
+        .addStringOption((o) => o.setName('apelido').setDescription('Apelido (membro offline)'))))
     .addSubcommandGroup((group) => group
       .setName('partida')
       .setDescription('Gerenciar a partida em aberto de um clã')
@@ -170,6 +190,54 @@ export default {
           if (!clan) throw new FutError(`Não achei nenhum clã chamado **${nome}**.`);
           await deleteClan(clan.id, interaction.user.id);
           await interaction.reply({ embeds: [successEmbed('Clã deletado', `**${clan.name}** e todas as partidas dele foram apagados.`)] });
+          return;
+        }
+      }
+
+      // ── /fut elenco ──────────────────────────────────────────────────
+      if (group === 'elenco') {
+        const clan = await resolveClan(interaction);
+
+        if (sub === 'criar') {
+          const nome = interaction.options.getString('nome', true);
+          const cor = interaction.options.getString('cor') ?? undefined;
+          const team = await createTeam(clan.id, interaction.user.id, nome, cor);
+          await interaction.reply({ embeds: [successEmbed('Time criado!', `**${team.name}** agora faz parte do elenco do clã **${clan.name}**. Use \`/fut elenco definir\` pra colocar jogadores nele.`)] });
+          return;
+        }
+        if (sub === 'deletar') {
+          const nome = interaction.options.getString('nome', true);
+          const teams = await listTeams(clan.id);
+          const team = teams.find((t) => t.name.toLowerCase() === nome.trim().toLowerCase());
+          if (!team) throw new FutError(`Não achei nenhum time chamado **${nome}** nesse clã.`);
+          await deleteTeam(team.id, interaction.user.id);
+          await interaction.reply({ embeds: [successEmbed('Time deletado', `**${team.name}** foi removido do elenco.`)] });
+          return;
+        }
+        if (sub === 'listar') {
+          const teams = await listTeams(clan.id);
+          if (!teams.length) { await interaction.reply({ embeds: [errorEmbed('Nenhum time interno ainda', 'Crie um com `/fut elenco criar`.')], ephemeral: true }); return; }
+          const embed = new EmbedBuilder().setColor(COLORS.PRIMARY).setTitle(`👕 Elenco — ${clan.name}`);
+          for (const t of teams) {
+            embed.addFields({ name: `${t.name}${t.color ? ` (${t.color})` : ''} — ${t.members.length} jogador(es)`, value: t.members.length ? t.members.map((m) => m.displayName).join(', ') : '_vazio_' });
+          }
+          await interaction.reply({ embeds: [embed] });
+          return;
+        }
+        if (sub === 'definir') {
+          const nome = interaction.options.getString('nome');
+          const ref = playerRefFrom(interaction);
+          if (!ref.discordId && !ref.apelido) { await interaction.reply({ embeds: [errorEmbed('Faltou o jogador', 'Informe `jogador` ou `apelido`.')], ephemeral: true }); return; }
+
+          let teamId: string | null = null;
+          if (nome && nome.trim()) {
+            const teams = await listTeams(clan.id);
+            const team = teams.find((t) => t.name.toLowerCase() === nome.trim().toLowerCase());
+            if (!team) throw new FutError(`Não achei nenhum time chamado **${nome}** nesse clã.`);
+            teamId = team.id;
+          }
+          const member = await setMemberTeam(clan.id, ref, teamId);
+          await interaction.reply({ embeds: [successEmbed('Elenco atualizado', teamId ? `**${member.displayName}** agora faz parte de um time interno do clã.` : `**${member.displayName}** saiu do time interno.`)] });
           return;
         }
       }
@@ -303,6 +371,7 @@ export default {
           .setThumbnail(target.displayAvatarURL())
           .addFields(
             { name: 'Posição', value: posicao, inline: true },
+            { name: 'Nota média', value: `⭐ ${profile.notaMedia.toFixed(1)}`, inline: true },
             { name: 'Partidas', value: `${profile.totalPartidas}`, inline: true },
             { name: 'V / D / E', value: `${profile.vitorias} / ${profile.derrotas} / ${profile.empates}`, inline: true },
             { name: 'XP', value: `${profile.xp}`, inline: true },
@@ -331,7 +400,7 @@ export default {
         if (!ranking.length) { await interaction.reply({ embeds: [errorEmbed('Ranking vazio', `Ninguém finalizou uma partida de ${modo} nesse clã ainda.`)], ephemeral: true }); return; }
         const lines = await Promise.all(ranking.map(async (p, i) => {
           const user = await interaction.client.users.fetch(p.discordId).catch(() => null);
-          return `**${i + 1}.** ${user ? user.username : p.discordId} — ${p.xp} XP (${p.vitorias}V/${p.derrotas}D/${p.empates}E, ⚽${p.goals})`;
+          return `**${i + 1}.** ${user ? user.username : p.discordId} — ${p.xp} XP — ⭐${p.notaMedia.toFixed(1)} (${p.vitorias}V/${p.derrotas}D/${p.empates}E, ⚽${p.goals})`;
         }));
         const embed = new EmbedBuilder().setColor(COLORS.GOLD).setTitle(`🏆 Ranking — ${clan.name} (${modo})`).setDescription(lines.join('\n'));
         await interaction.reply({ embeds: [embed] });

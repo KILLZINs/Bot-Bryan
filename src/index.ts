@@ -694,7 +694,7 @@ async function start() {
     console.error('❌ Falha ao carregar os extratores de áudio:', error);
   }
 
-  startDashboard();
+  startDashboard(client);
 
   await client.login(process.env.DISCORD_TOKEN);
   console.log('🤖 Bot conectado ao Discord!');

@@ -1,5 +1,5 @@
 import 'dotenv/config';
-import { REST, Routes } from 'discord.js';
+import { REST, Routes, ApplicationCommandType } from 'discord.js';
 import { readdirSync } from 'fs';
 import { join } from 'path';
 
@@ -34,11 +34,26 @@ const rest = new REST().setToken(process.env.DISCORD_TOKEN!);
 (async () => {
   try {
     const guildId = process.env.GUILD_ID;
+    const listRoute = guildId
+      ? Routes.applicationGuildCommands(process.env.CLIENT_ID!, guildId)
+      : Routes.applicationCommands(process.env.CLIENT_ID!);
+
+    // Apps com uma Activity (o bot tem — o dashboard/atividades embutidas)
+    // ganham um comando "Entry Point" automático do próprio Discord (tipo 4).
+    // Um PUT em massa (bulk overwrite) que não inclui esse comando é
+    // interpretado como "apagar o Entry Point", e o Discord recusa a
+    // atualização inteira com o erro 50240 — nenhum comando é atualizado.
+    // Então buscamos os comandos já registrados, achamos o Entry Point (se
+    // existir) e incluímos ele de volta na lista antes de mandar o PUT.
+    const existing = (await rest.get(listRoute)) as { type?: number }[];
+    const entryPoint = existing.find((c) => c.type === ApplicationCommandType.PrimaryEntryPoint);
+    const body = entryPoint ? [...commands, entryPoint] : commands;
+
     if (guildId) {
-      await rest.put(Routes.applicationGuildCommands(process.env.CLIENT_ID!, guildId), { body: commands });
+      await rest.put(listRoute, { body });
       console.log(`✅ Comandos registrados no servidor ${guildId}`);
     } else {
-      await rest.put(Routes.applicationCommands(process.env.CLIENT_ID!), { body: commands });
+      await rest.put(listRoute, { body });
       console.log('✅ Comandos registrados globalmente — pode demorar até 1h para propagar no Discord');
     }
   } catch (err) {

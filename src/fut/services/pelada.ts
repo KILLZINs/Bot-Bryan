@@ -923,9 +923,13 @@ export async function simulateClanMatch(clanId: string, mode: FutMode, escalacao
   const timeBRefs = selecionados.filter((e) => e.team === 'B');
   if (!timeARefs.length || !timeBRefs.length) throw new FutError('Escale pelo menos 1 jogador em cada time pra simular.');
 
+  // Guardado numa const à parte (em vez de usar `clan.members` direto) porque
+  // o TypeScript não carrega o `if (!clan) throw` acima pra dentro de uma
+  // função aninhada — `clan` voltaria a contar como possivelmente nulo aqui.
+  const membrosDoClan = clan.members;
   async function comNotaEDados(refs: { memberId: string; team: 'A' | 'B' }[]) {
     return Promise.all(refs.map(async (r) => {
-      const member = clan.members.find((m) => m.id === r.memberId)!;
+      const member = membrosDoClan.find((m) => m.id === r.memberId)!;
       const nota = await notaDoMembro(clanId, mode, member);
       return { memberId: member.id, displayName: member.displayName, nota };
     }));

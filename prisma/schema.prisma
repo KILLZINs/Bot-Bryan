@@ -1149,6 +1149,7 @@ model FutChamada {
   local      String
   horario    String   // texto livre (ex: "Hoje 20h", "Sábado 09/08 às 16h") — não força um formato de data
   pix        String?
+  valorTotal Float?   // custo total da quadra/aluguel — dividido pelo nº de confirmados ("vou") pra mostrar quanto cada um paga
   link       String?
   mensagem   String?
   createdAt  DateTime @default(now())

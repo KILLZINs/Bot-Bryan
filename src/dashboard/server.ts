@@ -298,12 +298,13 @@ const SERVER_CATEGORIES = [
   { category: "📸 Social & Comunidade", desc: "Engajamento, interações e rede social interna", features: [{ id: 'featSocial', name: 'Feed Social / Insta', desc: 'Postagens de fotos com curtidas e comentários.', icon: '📸' }, { id: 'featLeveling', name: 'Sistema de XP', desc: 'Progressão por mensagens e avisos.', icon: '⭐' }, { id: 'featGiveaways', name: 'Sorteios', desc: 'Sorteios automatizados.', icon: '🎁' }, { id: 'featPolls', name: 'Enquetes', desc: 'Votações com contagem de votos.', icon: '📊' }, { id: 'featReviveChat', name: 'Reviver Chat (IA)', desc: 'Acorda o chat com perguntas geradas por IA após inatividade.', icon: '🧟' }] },
   { category: "⚔️ RPG & Economia", desc: "Sistemas de progressão, missões e mercado", features: [{ id: 'featRpg', name: 'Sistema RPG', desc: 'Ativa todo o ecossistema RPG.', icon: '⚔️' }, { id: 'featEconomy', name: 'Economia & Loja', desc: 'Sistema de moedas e loja de itens.', icon: '🪙' }, { id: 'featMissions', name: 'Missões Diárias', desc: 'Desafios automáticos com recompensas.', icon: '📜' }] },
   { category: "🛡️ Segurança & Moderação", desc: "Proteção em tempo real contra ataques e spam", features: [{ id: 'featMod', name: 'Módulo de Moderação', desc: 'Comandos administrativos, ban, kick e warns.', icon: '🔨' }, { id: 'antiSpam', name: 'Defesa Anti-Spam', desc: 'Bloqueia envio rápido de mensagens.', icon: '⚡' }, { id: 'antiLinks', name: 'Filtro Anti-Links', desc: 'Remove convites e links suspeitos.', icon: '🔗' }] },
-  { category: "🎫 Atendimento & Utilidades", desc: "Suporte aos membros e streaming", features: [{ id: 'featTickets', name: 'Tickets de Suporte', desc: 'Salas privadas de atendimento.', icon: '🎫' }, { id: 'featSelfRole', name: 'Registro de Auto-Cargos', desc: 'Menus de seleção para cargos.', icon: '🎭' }, { id: 'featMusic', name: 'Player de Música', desc: 'Streaming de áudio em canais de voz.', icon: '🎵' }, { id: 'featAnnouncements', name: 'Anúncios & Eventos', desc: 'Transmissão de comunicados.', icon: '📢' }] }
+  { category: "🎫 Atendimento & Utilidades", desc: "Suporte aos membros e streaming", features: [{ id: 'featTickets', name: 'Tickets de Suporte', desc: 'Salas privadas de atendimento.', icon: '🎫' }, { id: 'featSelfRole', name: 'Registro de Auto-Cargos', desc: 'Menus de seleção para cargos.', icon: '🎭' }, { id: 'featMusic', name: 'Player de Música', desc: 'Streaming de áudio em canais de voz.', icon: '🎵' }, { id: 'featAnnouncements', name: 'Anúncios & Eventos', desc: 'Transmissão de comunicados.', icon: '📢' }] },
+  { category: "⚽ Rachão / Fut", desc: "Clãs, partidas, chamadas e simulação de futebol", features: [{ id: 'featFut', name: 'Sistema Fut', desc: 'Comando /fut e a atividade do site (clãs, partidas, chamadas, simulação).', icon: '⚽' }] }
 ];
 
 const GLOBAL_CATEGORIES = [
   { category: "⚙️ Sistemas Centrais Globais", features: [{ id: 'featAfk', name: 'Sistema AFK Global', desc: 'Comando /afk na rede.' }, { id: 'featWelcomeDm', name: 'DM de Boas-vindas', desc: 'Mensagem privada a novos membros.' }] },
-  { category: "🌍 Master Switches (Trava Absoluta)", features: [{ id: 'featSocial', name: 'Feed Social (Insta)', desc: 'Desativa o Feed globalmente.' }, { id: 'featVoiceAi', name: 'IA de Voz (Callia)', desc: 'Proíbe a Callia em todos os servers.' }, { id: 'featRpg', name: 'Sistema RPG', desc: 'Desliga o RPG globalmente.' }, { id: 'featEconomy', name: 'Economia & Lojas', desc: 'Congela todas as lojas.' }, { id: 'featTickets', name: 'Sistema de Tickets', desc: 'Bloqueia novos atendimentos.' }, { id: 'featMusic', name: 'Player de Música', desc: 'Desliga o bot de música.' }, { id: 'antiSpam', name: 'Defesa Anti-Spam', desc: 'Desativa o bloqueador em massa.' }, { id: 'featGiveaways', name: 'Sorteios', desc: 'Trava todos os sorteios.' }, { id: 'featLeveling', name: 'Sistema de XP', desc: 'Congela ganho de XP global.' }, { id: 'featReviveChat', name: 'Reviver Chat (IA)', desc: 'Desliga o monitor de inatividade.' }] }
+  { category: "🌍 Master Switches (Trava Absoluta)", features: [{ id: 'featSocial', name: 'Feed Social (Insta)', desc: 'Desativa o Feed globalmente.' }, { id: 'featVoiceAi', name: 'IA de Voz (Callia)', desc: 'Proíbe a Callia em todos os servers.' }, { id: 'featRpg', name: 'Sistema RPG', desc: 'Desliga o RPG globalmente.' }, { id: 'featEconomy', name: 'Economia & Lojas', desc: 'Congela todas as lojas.' }, { id: 'featTickets', name: 'Sistema de Tickets', desc: 'Bloqueia novos atendimentos.' }, { id: 'featMusic', name: 'Player de Música', desc: 'Desliga o bot de música.' }, { id: 'antiSpam', name: 'Defesa Anti-Spam', desc: 'Desativa o bloqueador em massa.' }, { id: 'featGiveaways', name: 'Sorteios', desc: 'Trava todos os sorteios.' }, { id: 'featLeveling', name: 'Sistema de XP', desc: 'Congela ganho de XP global.' }, { id: 'featReviveChat', name: 'Reviver Chat (IA)', desc: 'Desliga o monitor de inatividade.' }, { id: 'featFut', name: 'Rachão / Fut', desc: 'Desliga o /fut e a atividade do site em todos os servidores.' }] }
 ];
 
 const SERVER_SETTINGS = [
@@ -1609,6 +1610,37 @@ ${activitySdkBootstrap(clientId!)}
     res.cookie('selected_guild', guildId, { maxAge: 1000 * 60 * 60 * 24 * 365, httpOnly: true, sameSite: 'lax' });
     res.json({ ok: true, selected: guildId });
   });
+
+  // ── Fut entra no mesmo esquema de liga/desliga do resto do bot: trava
+  // global mestre (BotConfig.featFut) + trava por servidor
+  // (GuildConfig.featFut) — o equivalente, pro site, do FEATURE_MAP que já
+  // protege o comando /fut no Discord (src/events/interactionCreate.ts).
+  // Nas rotas aninhadas em /clans/:id/..., ":id" É o id do clã, então dá
+  // pra descobrir o servidor dono sem precisar guildId explícito.
+  async function requireFutEnabled(req: express.Request, res: express.Response, next: express.NextFunction) {
+    try {
+      const botConfig = await prisma.botConfig.findUnique({ where: { id: 'global' } });
+      if (botConfig && (botConfig as { featFut?: boolean }).featFut === false) {
+        return res.status(403).json({ error: '🚧 O sistema Fut foi desativado globalmente pela administração. Volte mais tarde!' });
+      }
+
+      let guildId = (typeof req.query.guildId === 'string' ? req.query.guildId : undefined) || (req.cookies?.selected_guild as string | undefined);
+      if (!guildId && req.params.id) {
+        const clan = await getClanById(req.params.id);
+        guildId = clan?.guildId;
+      }
+      if (guildId) {
+        const guildConfig = await prisma.guildConfig.findUnique({ where: { guildId } });
+        if (guildConfig && (guildConfig as { featFut?: boolean }).featFut === false) {
+          return res.status(403).json({ error: '🚧 O sistema Fut foi desativado pelos administradores deste servidor.' });
+        }
+      }
+      next();
+    } catch {
+      next(); // em caso de erro na checagem, não bloqueia (mesmo padrão de isFeatureEnabled)
+    }
+  }
+  app.use('/api/activities/fut', requireFutEnabled);
 
   app.get('/api/activities/fut/clans', requirePlayerAuth, async (req, res) => {
     const guildId = await resolveGuildId(typeof req.query.guildId === 'string' ? req.query.guildId : undefined, req.cookies?.selected_guild as string | undefined);

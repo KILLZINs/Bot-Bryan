@@ -911,7 +911,7 @@ export function startDashboard(discordClient: Client) {
       // player incorporado (trava por causa da gravadora/direitos autorais),
       // então ter uma fonte alternativa resolve isso na prática.
       const source = String(req.query.source || 'soundcloud').toLowerCase();
-      const engineBySource: Record<string, any> = { soundcloud: QueryType.SOUNDCLOUD_SEARCH, youtube: QueryType.YOUTUBE_SEARCH };
+      const engineBySource: Record<string, any> = { soundcloud: QueryType.SOUNDCLOUD_SEARCH, youtube: QueryType.YOUTUBE_SEARCH, spotify: QueryType.SPOTIFY_SEARCH };
       const result = await player.search(q, {
         searchEngine: isLink ? QueryType.AUTO : (engineBySource[source] || QueryType.SOUNDCLOUD_SEARCH),
       });
@@ -1254,6 +1254,7 @@ ${activitySdkBootstrap(clientId!)}
       <div class="source-toggle" id="sourceToggle" style="visibility:hidden;">
         <button class="active" data-src="soundcloud" onclick="setSource('soundcloud')">☁️ SoundCloud</button>
         <button data-src="youtube" onclick="setSource('youtube')">▶️ YouTube</button>
+        <button data-src="spotify" onclick="setSource('spotify')">🟢 Spotify</button>
       </div>
     </div>
     <div class="content" id="content"></div>

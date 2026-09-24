@@ -12,9 +12,9 @@ import {
   createPartida, getOpenPartida, getPartidaById, deletePartida, listPartidaHistory,
   joinPartida, addOfflinePlayer, setTeam, autoBalanceTeams, startPartida, recordEvent, finishPartida,
   getProfile, getRanking, getUserProfile, setUserPosition, listGoalVideos, notaBand,
-  createChamada, listChamadas, deleteChamada, respondChamada,
+  createChamada, listChamadas, deleteChamada, respondChamada, calcValorPorPessoa,
   undoLastEvent, reopenPartida, getClanOverview, listFullClanStats,
-  addClanMemberToPartida, listAvailableClanMembers,
+  addClanMemberToPartida, listAvailableClanMembers, simulateClanMatch,
   type FutEventType, type FutMode, type FutRsvpStatus, type FutVisibility,
 } from '../fut/services/pelada';
 
@@ -204,6 +204,7 @@ export default {
       .addStringOption((o) => o.setName('local').setDescription('Onde vai ser').setRequired(true))
       .addStringOption((o) => o.setName('horario').setDescription('Quando (ex: "Hoje 20h", "Sáb 09/08 16h")').setRequired(true))
       .addStringOption((o) => o.setName('pix').setDescription('Chave PIX pra dividir a quadra (opcional)'))
+      .addNumberOption((o) => o.setName('valor_total').setDescription('Valor total da quadra, dividido entre os confirmados (opcional)').setMinValue(0))
       .addStringOption((o) => o.setName('link').setDescription('Link do grupo/WhatsApp/outra plataforma (opcional)'))
       .addStringOption((o) => o.setName('mensagem').setDescription('Mensagem extra (opcional)')))
     .addSubcommand((sub) => sub.setName('chamadas').setDescription('Mostra as últimas chamadas do clã e quem confirmou')
@@ -211,7 +212,11 @@ export default {
     .addSubcommand((sub) => sub.setName('confirmar').setDescription('Confirma presença na última chamada do clã')
       .addStringOption((o) => o.setName('cla').setDescription('Nome do clã').setRequired(true))
       .addStringOption((o) => o.setName('status').setDescription('Sua resposta').setRequired(true)
-        .addChoices({ name: '✅ Vou', value: 'vou' }, { name: '🤔 Talvez', value: 'talvez' }, { name: '❌ Não vou', value: 'nao_vou' }))),
+        .addChoices({ name: '✅ Vou', value: 'vou' }, { name: '🤔 Talvez', value: 'talvez' }, { name: '❌ Não vou', value: 'nao_vou' })))
+    .addSubcommand((sub) => sub.setName('simular').setDescription('Simula, de brincadeira, uma partida fictícia minuto a minuto com base nas notas')
+      .addStringOption((o) => o.setName('cla').setDescription('Nome do clã').setRequired(true))
+      .addStringOption((o) => o.setName('modo').setDescription('Futsal ou campo').setRequired(true)
+        .addChoices({ name: 'Futsal', value: 'futsal' }, { name: 'Campo', value: 'campo' }))),
 
   async execute(interaction: ChatInputCommandInteraction) {
     const group = interaction.options.getSubcommandGroup(false);
@@ -585,10 +590,16 @@ export default {
         const local = interaction.options.getString('local', true);
         const horario = interaction.options.getString('horario', true);
         const pix = interaction.options.getString('pix') ?? undefined;
+        const valorTotal = interaction.options.getNumber('valor_total') ?? undefined;
         const link = interaction.options.getString('link') ?? undefined;
         const mensagem = interaction.options.getString('mensagem') ?? undefined;
 
-        const chamada = await createChamada(clan.id, interaction.user.id, { local, horario, pix, link, mensagem });
+        const chamada = await createChamada(clan.id, interaction.user.id, { local, horario, pix, valorTotal, link, mensagem });
+
+        // Mesma variável usada pro OAuth do dashboard (src/dashboard/server.ts) —
+        // um único lugar define o domínio do site pra tudo (login, /fut, etc).
+        const siteUrl = (process.env.DASHBOARD_URL || 'https://bryanfut.up.railway.app').replace(/\/$/, '');
+        const chamadaUrl = `${siteUrl}/fut/chamada/${chamada.id}`;
 
         const embed = new EmbedBuilder()
           .setColor(COLORS.GOLD)
@@ -599,17 +610,34 @@ export default {
             { name: '🕒 Horário', value: horario, inline: true },
           );
         if (pix) embed.addFields({ name: '💸 PIX (dividir a quadra)', value: `\`${pix}\``, inline: false });
+        if (valorTotal) embed.addFields({ name: '💰 Valor total', value: `R$ ${valorTotal.toFixed(2)} — o valor por pessoa aparece conforme a galera confirma`, inline: false });
         if (link) embed.addFields({ name: '🔗 Link', value: link, inline: false });
         embed.setFooter({ text: `Confirme presença com /fut confirmar cla:${clan.name}` });
 
-        // Mesma variável usada pro OAuth do dashboard (src/dashboard/server.ts) —
-        // um único lugar define o domínio do site pra tudo (login, /fut, etc).
-        const siteUrl = process.env.DASHBOARD_URL || 'https://bryanfut.up.railway.app';
+        const whatsappTexto = `📣 Vai ter fut! (${clan.name})\n📍 ${local}\n🕒 ${horario}${mensagem ? `\n${mensagem}` : ''}\n\nConfirma presença aqui: ${chamadaUrl}`;
         const components = [new ActionRowBuilder<ButtonBuilder>().addComponents(
-          new ButtonBuilder().setStyle(ButtonStyle.Link).setLabel('📣 Confirmar no site').setURL(`${siteUrl.replace(/\/$/, '')}/atividades/fut`),
+          new ButtonBuilder().setStyle(ButtonStyle.Link).setLabel('📣 Confirmar no site').setURL(chamadaUrl),
+          new ButtonBuilder().setStyle(ButtonStyle.Link).setLabel('💬 Compartilhar no WhatsApp').setURL(`https://wa.me/?text=${encodeURIComponent(whatsappTexto)}`),
         )];
 
         await interaction.reply({ embeds: [embed], components });
+
+        // Manda DM pra todo mundo do elenco que tem conta vinculada (menos
+        // quem chamou, que já sabe) — "chamar o fut" precisa realmente
+        // avisar a galera, não só ficar esperando alguém ver o canal.
+        const alvos = clan.members.filter((m) => m.discordId && m.discordId !== interaction.user.id);
+        let enviados = 0;
+        let falharam = 0;
+        await Promise.all(alvos.map(async (m) => {
+          try {
+            const user = await interaction.client.users.fetch(m.discordId!);
+            await user.send({ embeds: [embed], components });
+            enviados += 1;
+          } catch { falharam += 1; }
+        }));
+        if (alvos.length) {
+          await interaction.followUp({ content: `📬 DM enviada pra ${enviados} pessoa(s) do elenco${falharam ? ` (${falharam} não recebeu — DM fechada)` : ''}.`, ephemeral: true });
+        }
         return;
       }
 
@@ -623,9 +651,10 @@ export default {
           const vou = c.respostas.filter((r) => r.status === 'vou').length;
           const talvez = c.respostas.filter((r) => r.status === 'talvez').length;
           const naoVou = c.respostas.filter((r) => r.status === 'nao_vou').length;
+          const valorPorPessoa = calcValorPorPessoa(c.valorTotal, vou);
           embed.addFields({
             name: `${c.local} — ${c.horario}`,
-            value: `✅ ${vou} vão · 🤔 ${talvez} talvez · ❌ ${naoVou} não vão`,
+            value: `✅ ${vou} vão · 🤔 ${talvez} talvez · ❌ ${naoVou} não vão${valorPorPessoa ? `\n💰 R$ ${valorPorPessoa.toFixed(2)} por pessoa (de R$ ${c.valorTotal!.toFixed(2)})` : ''}`,
           });
         }
         await interaction.reply({ embeds: [embed] });
@@ -640,7 +669,38 @@ export default {
 
         await respondChamada(chamadas[0].id, interaction.user.id, interaction.user.username, status);
         const labelMap: Record<FutRsvpStatus, string> = { vou: '✅ Você confirmou presença!', talvez: '🤔 Você marcou como talvez.', nao_vou: '❌ Você marcou que não vai.' };
-        await interaction.reply({ embeds: [successEmbed('Resposta registrada', labelMap[status])], ephemeral: true });
+        let desc = labelMap[status];
+        if (status === 'vou' && chamadas[0].valorTotal) {
+          const atualizada = await listChamadas(clan.id, 1);
+          const vou = atualizada[0].respostas.filter((r) => r.status === 'vou').length;
+          const valorPorPessoa = calcValorPorPessoa(atualizada[0].valorTotal, vou);
+          if (valorPorPessoa) desc += `\n💰 Com você, dá R$ ${valorPorPessoa.toFixed(2)} por pessoa.`;
+        }
+        await interaction.reply({ embeds: [successEmbed('Resposta registrada', desc)], ephemeral: true });
+        return;
+      }
+
+      if (sub === 'simular') {
+        const clan = await resolveClan(interaction);
+        const modo = interaction.options.getString('modo', true) as FutMode;
+        const sim = await simulateClanMatch(clan.id, modo);
+
+        const resultLabel = sim.resultado === 'empate' ? 'Empate!' : sim.resultado === 'vitoria_a' ? 'Vitória do Time A!' : 'Vitória do Time B!';
+        const timesTxt = `**Time A** (força ${sim.forcaA.toFixed(1)}): ${sim.jogadoresA.map((p) => p.displayName).join(', ')}\n**Time B** (força ${sim.forcaB.toFixed(1)}): ${sim.jogadoresB.map((p) => p.displayName).join(', ')}`;
+
+        const gols = sim.timeline.filter((e) => e.tipo === 'gol');
+        const linhas = gols.length
+          ? gols.map((e) => `**${e.minuto}'** ⚽ ${e.jogador} (Time ${e.team})${e.assistencia ? ` — assist. ${e.assistencia}` : ''}`).join('\n')
+          : '_Nenhum gol na simulação — jogo truncado!_';
+
+        const embed = new EmbedBuilder()
+          .setColor(COLORS.GOLD)
+          .setTitle(`🎮 Simulação (brincadeira) — ${clan.name}`)
+          .setDescription(`${timesTxt}\n\n${resultLabel}`)
+          .addFields({ name: `Placar: ${sim.scoreA} x ${sim.scoreB}`, value: linhas.slice(0, 1000) || '_sem lances_' })
+          .setFooter({ text: 'Isso é só pra rir com a galera — não conta pra estatística de ninguém. Veja o jogo completo minuto a minuto no site!' });
+
+        await interaction.reply({ embeds: [embed] });
         return;
       }
 

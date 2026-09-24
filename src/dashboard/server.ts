@@ -1077,6 +1077,11 @@ export function startDashboard(discordClient: Client) {
           connectionTimeout: 120000,
           bufferingTimeout: 30000,
           volume: 100,
+          // Sem isso, se o stream da faixa escolhida falhar, o discord-player
+          // busca "título + autor" em outro extrator (agora incluindo o do
+          // YouTube) e toca o primeiro resultado — podendo ser uma música
+          // completamente diferente. Preferimos um erro claro no site.
+          disableFallbackStream: true,
         },
       });
 

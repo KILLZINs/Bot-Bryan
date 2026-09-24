@@ -207,7 +207,7 @@ export async function deleteTeam(teamId: string, requesterId: string) {
   return team;
 }
 
-function resolveMember(clan: { members: { id: string; discordId: string | null; displayName: string }[] }, ref: { discordId?: string; apelido?: string }) {
+export function resolveMember(clan: { members: { id: string; discordId: string | null; displayName: string }[] }, ref: { discordId?: string; apelido?: string }) {
   let member = null;
   if (ref.discordId) {
     member = clan.members.find((m) => m.discordId === ref.discordId) || null;
@@ -337,6 +337,43 @@ export async function addOfflinePlayer(partidaId: string, apelido: string, posit
   return prisma.futPartidaPlayer.create({
     data: { partidaId, displayName: clean, position: position?.slice(0, 30) || null },
   });
+}
+
+// Convoca alguém que já está no elenco do clã pra dentro da partida em
+// aberto/andamento — direto, sem precisar que a pessoa entre sozinha
+// (`entrar`) nem digitar de novo um apelido pra gente offline. Guarda o
+// vínculo com o elenco (clanMemberId) pra estatística acumular certinho
+// mesmo pra quem não tem conta do Discord. Só quem criou a partida.
+export async function addClanMemberToPartida(partidaId: string, requesterId: string, memberId: string) {
+  const partida = await getPartidaById(partidaId);
+  if (!partida) throw new FutError('Partida não encontrada.');
+  if (partida.creatorId !== requesterId) throw new FutError('Só quem criou a partida pode convocar jogadores do elenco.');
+  assertNotFinished(partida);
+
+  const clan = await getClanById(partida.clanId);
+  if (!clan) throw new FutError('Clã não encontrado.');
+  const member = clan.members.find((m) => m.id === memberId);
+  if (!member) throw new FutError('Essa pessoa não faz parte do elenco desse clã.');
+
+  const jaNaPartida = partida.players.some((p) => (member.discordId && p.discordId === member.discordId) || p.clanMemberId === member.id);
+  if (jaNaPartida) throw new FutError(`**${member.displayName}** já está nessa partida.`);
+
+  const position = member.discordId ? await defaultPositionFor(member.discordId, partida.mode as FutMode) : null;
+
+  return prisma.futPartidaPlayer.create({
+    data: { partidaId, discordId: member.discordId, clanMemberId: member.id, displayName: member.displayName, position },
+  });
+}
+
+// Lista quem do elenco AINDA não está na partida — pra montar o seletor de
+// "convocar do elenco" no site/Discord.
+export async function listAvailableClanMembers(partidaId: string) {
+  const partida = await getPartidaById(partidaId);
+  if (!partida) throw new FutError('Partida não encontrada.');
+  const clan = await getClanById(partida.clanId);
+  if (!clan) throw new FutError('Clã não encontrado.');
+
+  return clan.members.filter((m) => !partida.players.some((p) => (m.discordId && p.discordId === m.discordId) || p.clanMemberId === m.id));
 }
 
 export async function setTeam(partidaId: string, player: { discordId?: string; apelido?: string }, team: FutTeam) {
@@ -657,10 +694,14 @@ export async function finishPartida(partidaId: string, requesterId: string, resu
   const mode = updated.mode as FutMode;
 
   // Atualiza a estatística agregada de cada jogador DENTRO DO CLÃ, separada
-  // por modo (futsal x campo não se misturam).
+  // por modo (futsal x campo não se misturam). TODO MUNDO que jogou recebe
+  // nota da partida — mesmo quem não tem conta do Discord vinculada
+  // (offline). A chave da estatística acumulada é o discordId quando tem
+  // conta, ou "offline:<clanMemberId>" quando a pessoa veio do elenco sem
+  // conta — sem essa chave estável, dá pra dar a nota da partida mas não
+  // dá pra acumular histórico entre partidas (não tem como saber que é a
+  // mesma pessoa da próxima vez).
   for (const p of updated.players) {
-    if (!p.discordId) continue;
-
     let resultLabel: 'vitorias' | 'derrotas' | 'empates' = 'empates';
     if (resultado !== 'empate' && p.team) {
       const won = (resultado === 'vitoria_a' && p.team === 'A') || (resultado === 'vitoria_b' && p.team === 'B');
@@ -677,8 +718,11 @@ export async function finishPartida(partidaId: string, requesterId: string, resu
     const nota = calcNota(p, resultLabel);
     await prisma.futPartidaPlayer.update({ where: { id: p.id }, data: { nota } });
 
+    const statsKey = p.discordId || (p.clanMemberId ? `offline:${p.clanMemberId}` : null);
+    if (!statsKey) continue; // ad-hoc offline sem vínculo com o elenco: só a nota da partida mesmo
+
     const existingStats = await prisma.futClanPlayerStats.findUnique({
-      where: { clanId_discordId_mode: { clanId: updated.clanId, discordId: p.discordId, mode } },
+      where: { clanId_discordId_mode: { clanId: updated.clanId, discordId: statsKey, mode } },
     });
     const novoCount = (existingStats?.notaCount ?? 0) + 1;
     const novaMedia = existingStats
@@ -686,10 +730,11 @@ export async function finishPartida(partidaId: string, requesterId: string, resu
       : nota;
 
     await prisma.futClanPlayerStats.upsert({
-      where: { clanId_discordId_mode: { clanId: updated.clanId, discordId: p.discordId, mode } },
+      where: { clanId_discordId_mode: { clanId: updated.clanId, discordId: statsKey, mode } },
       create: {
         clanId: updated.clanId,
-        discordId: p.discordId,
+        discordId: statsKey,
+        displayName: p.displayName,
         mode,
         totalPartidas: 1,
         vitorias: resultLabel === 'vitorias' ? 1 : 0,
@@ -705,6 +750,7 @@ export async function finishPartida(partidaId: string, requesterId: string, resu
         notaCount: novoCount,
       },
       update: {
+        displayName: p.displayName,
         totalPartidas: { increment: 1 },
         vitorias: { increment: resultLabel === 'vitorias' ? 1 : 0 },
         derrotas: { increment: resultLabel === 'derrotas' ? 1 : 0 },
@@ -739,7 +785,8 @@ export async function reopenPartida(partidaId: string, requesterId: string) {
   const resultado = partida.resultado as FutResultado | null;
 
   for (const p of partida.players) {
-    if (!p.discordId || p.nota == null) continue;
+    if (p.nota == null) continue;
+    const statsKey = p.discordId || (p.clanMemberId ? `offline:${p.clanMemberId}` : null);
 
     let resultLabel: 'vitorias' | 'derrotas' | 'empates' = 'empates';
     if (resultado && resultado !== 'empate' && p.team) {
@@ -754,33 +801,35 @@ export async function reopenPartida(partidaId: string, requesterId: string) {
       + p.errosGraves * XP_POR_ERRO
       + (resultLabel === 'vitorias' ? XP_BONUS_VITORIA : 0));
 
-    const existingStats = await prisma.futClanPlayerStats.findUnique({
-      where: { clanId_discordId_mode: { clanId: partida.clanId, discordId: p.discordId, mode } },
-    });
-    if (!existingStats) continue;
+    if (statsKey) {
+      const existingStats = await prisma.futClanPlayerStats.findUnique({
+        where: { clanId_discordId_mode: { clanId: partida.clanId, discordId: statsKey, mode } },
+      });
+      if (existingStats) {
+        const novoCount = Math.max(0, existingStats.notaCount - 1);
+        const novaMedia = novoCount > 0
+          ? Math.round(((existingStats.notaMedia * existingStats.notaCount - p.nota) / novoCount) * 100) / 100
+          : 0;
 
-    const novoCount = Math.max(0, existingStats.notaCount - 1);
-    const novaMedia = novoCount > 0
-      ? Math.round(((existingStats.notaMedia * existingStats.notaCount - p.nota) / novoCount) * 100) / 100
-      : 0;
-
-    await prisma.futClanPlayerStats.update({
-      where: { clanId_discordId_mode: { clanId: partida.clanId, discordId: p.discordId, mode } },
-      data: {
-        totalPartidas: { decrement: 1 },
-        vitorias: { decrement: resultLabel === 'vitorias' ? 1 : 0 },
-        derrotas: { decrement: resultLabel === 'derrotas' ? 1 : 0 },
-        empates: { decrement: resultLabel === 'empates' ? 1 : 0 },
-        goals: { decrement: p.goals },
-        assists: { decrement: p.assists },
-        defesas: { decrement: p.defesas },
-        golsConcedidos: { decrement: p.golsConcedidos },
-        errosGraves: { decrement: p.errosGraves },
-        xp: { decrement: xpGain },
-        notaMedia: novaMedia,
-        notaCount: novoCount,
-      },
-    });
+        await prisma.futClanPlayerStats.update({
+          where: { clanId_discordId_mode: { clanId: partida.clanId, discordId: statsKey, mode } },
+          data: {
+            totalPartidas: { decrement: 1 },
+            vitorias: { decrement: resultLabel === 'vitorias' ? 1 : 0 },
+            derrotas: { decrement: resultLabel === 'derrotas' ? 1 : 0 },
+            empates: { decrement: resultLabel === 'empates' ? 1 : 0 },
+            goals: { decrement: p.goals },
+            assists: { decrement: p.assists },
+            defesas: { decrement: p.defesas },
+            golsConcedidos: { decrement: p.golsConcedidos },
+            errosGraves: { decrement: p.errosGraves },
+            xp: { decrement: xpGain },
+            notaMedia: novaMedia,
+            notaCount: novoCount,
+          },
+        });
+      }
+    }
 
     await prisma.futPartidaPlayer.update({ where: { id: p.id }, data: { nota: null } });
   }

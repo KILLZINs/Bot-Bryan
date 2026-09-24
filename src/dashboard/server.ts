@@ -39,10 +39,12 @@ import {
   setTeam, autoBalanceTeams, startPartida, recordEvent, finishPartida, getProfile as getFutProfile, getRanking as getFutRanking,
   getUserProfile as getFutUserProfile, setUserPosition as setFutUserPosition, listGoalVideos,
   createChamada as createFutChamada, listChamadas as listFutChamadas, deleteChamada as deleteFutChamada, respondChamada as respondFutChamada,
+  getChamada as getFutChamada, calcValorPorPessoa,
   undoLastEvent as undoFutLastEvent, reopenPartida as reopenFutPartida,
   listPartidaGoals as listFutPartidaGoals, saveGoalAnimation as saveFutGoalAnimation, getGoalAnimation as getFutGoalAnimation, listMatchEvents as listFutMatchEvents,
   getClanOverview as getFutClanOverview, listFullClanStats as listFullFutClanStats,
   addClanMemberToPartida as addClanMemberToFutPartida, listAvailableClanMembers as listAvailableFutClanMembers,
+  simulateClanMatch as simulateFutClanMatch,
   type FutEventType, type FutMode, type FutTeam, type FutResultado, type FutRsvpStatus, type FutVisibility,
 } from '../fut/services/pelada';
 
@@ -1864,6 +1866,20 @@ ${activitySdkBootstrap(clientId!)}
     } catch (err) { handleFutError(res, err); }
   });
 
+  // Simulação (brincadeira): partida FICTÍCIA gerada minuto a minuto com
+  // base na nota de cada um — não mexe em estatística nenhuma, é só diversão.
+  // Sem "escalacao" no body, distribui o elenco inteiro automaticamente.
+  app.post('/api/activities/fut/clans/:id/simular', requirePlayerAuth, async (req, res) => {
+    try {
+      const mode: FutMode = req.body?.modo === 'campo' ? 'campo' : 'futsal';
+      const escalacao = Array.isArray(req.body?.escalacao)
+        ? req.body.escalacao.filter((e: any) => e && typeof e.memberId === 'string' && (e.team === 'A' || e.team === 'B'))
+        : undefined;
+      const sim = await simulateFutClanMatch(req.params.id, mode, escalacao);
+      res.json({ sim });
+    } catch (err) { handleFutError(res, err); }
+  });
+
   // Detalhe completo de UMA partida específica (aberta, em andamento ou já
   // finalizada) — "acessar as estatísticas da partida após ela terminar".
   app.get('/api/activities/fut/clans/:id/partidas/:partidaId', requirePlayerAuth, async (req, res) => {
@@ -1982,9 +1998,11 @@ ${activitySdkBootstrap(clientId!)}
   });
 
   // ── "Chamar o fut": convite (local, horário, PIX, link) + RSVP ──────────
-  function serializeChamada(chamada: { id: string; local: string; horario: string; pix: string | null; link: string | null; mensagem: string | null; creatorId: string; createdAt: Date; respostas: { discordId: string; displayName: string; status: string }[] }) {
+  function serializeChamada(chamada: { id: string; local: string; horario: string; pix: string | null; valorTotal: number | null; link: string | null; mensagem: string | null; creatorId: string; createdAt: Date; respostas: { discordId: string; displayName: string; status: string }[] }) {
+    const vou = chamada.respostas.filter((r) => r.status === 'vou').length;
     return {
       id: chamada.id, local: chamada.local, horario: chamada.horario, pix: chamada.pix, link: chamada.link,
+      valorTotal: chamada.valorTotal, valorPorPessoa: calcValorPorPessoa(chamada.valorTotal, vou),
       mensagem: chamada.mensagem, creatorId: chamada.creatorId, createdAt: chamada.createdAt,
       respostas: chamada.respostas,
     };
@@ -1998,14 +2016,34 @@ ${activitySdkBootstrap(clientId!)}
   app.post('/api/activities/fut/clans/:id/chamadas', requirePlayerAuth, async (req, res) => {
     try {
       const userId = req.cookies!.player_userid as string;
+      const valorTotalRaw = req.body?.valorTotal;
+      const valorTotal = valorTotalRaw !== undefined && valorTotalRaw !== null && valorTotalRaw !== '' ? Number(valorTotalRaw) : undefined;
       const chamada = await createFutChamada(req.params.id, userId, {
         local: String(req.body?.local || ''),
         horario: String(req.body?.horario || ''),
         pix: req.body?.pix || undefined,
+        valorTotal,
         link: req.body?.link || undefined,
         mensagem: req.body?.mensagem || undefined,
       });
       res.json({ chamada: serializeChamada({ ...chamada, respostas: [] }) });
+
+      // Manda DM pra todo mundo do elenco com conta vinculada (menos quem
+      // chamou) — mesma lógica do Discord, só que disparada a partir do site.
+      // Já respondemos a requisição, então isso roda "em segundo plano": um
+      // erro aqui não pode tentar responder de novo.
+      try {
+        const clan = await getClanById(req.params.id);
+        if (clan) {
+          const siteUrl = (process.env.DASHBOARD_URL || 'https://bryanfut.up.railway.app').replace(/\/$/, '');
+          const chamadaUrl = `${siteUrl}/fut/chamada/${chamada.id}`;
+          const texto = `📣 **Vai ter fut!** (${clan.name})\n📍 ${chamada.local}\n🕒 ${chamada.horario}${chamada.mensagem ? `\n${chamada.mensagem}` : ''}${valorTotal ? `\n💰 Valor total: R$ ${valorTotal.toFixed(2)}` : ''}\n\nConfirme presença: ${chamadaUrl}`;
+          const alvos = clan.members.filter((m) => m.discordId && m.discordId !== userId);
+          await Promise.all(alvos.map(async (m) => {
+            try { const user = await discordClient.users.fetch(m.discordId!); await user.send(texto); } catch { /* DM fechada — ignora */ }
+          }));
+        }
+      } catch (dmErr) { console.error('[Rachão/Chamada] Erro ao mandar DMs:', dmErr); }
     } catch (err) { handleFutError(res, err); }
   });
 
@@ -2027,6 +2065,59 @@ ${activitySdkBootstrap(clientId!)}
       const chamadas = await listFutChamadas(req.params.id, 5);
       res.json({ chamadas: chamadas.map(serializeChamada) });
     } catch (err) { handleFutError(res, err); }
+  });
+
+  // Página pública (sem login) da chamada — o "link pra mandar em outras
+  // plataformas" que faltava: dá pra colar no WhatsApp/grupo/onde quiser e
+  // quem abrir já vê local, horário e valor por pessoa sem precisar entrar.
+  app.get('/fut/chamada/:id', async (req, res) => {
+    const chamada = await getFutChamada(req.params.id);
+    if (!chamada) return res.status(404).send('Chamada não encontrada — talvez ela já tenha sido apagada.');
+
+    const vou = chamada.respostas.filter((r) => r.status === 'vou').length;
+    const talvez = chamada.respostas.filter((r) => r.status === 'talvez').length;
+    const valorPorPessoa = calcValorPorPessoa(chamada.valorTotal, vou);
+    const siteUrl = (process.env.DASHBOARD_URL || 'https://bryanfut.up.railway.app').replace(/\/$/, '');
+    const whatsappTexto = `📣 Vai ter fut! (${chamada.clan.name})\n📍 ${chamada.local}\n🕒 ${chamada.horario}\n\nConfirma presença aqui: ${siteUrl}/fut/chamada/${chamada.id}`;
+
+    res.send(`<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>📣 Vai ter fut! — ${chamada.clan.name}</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root { --bg: #05050A; --primary: #22C55E; --card: #12131F; --border: #262A40; --text: #F2F3F5; --text-muted: #9CA3AF; }
+  * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Inter', sans-serif; }
+  body { background: var(--bg); color: var(--text); min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 24px; }
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 16px; padding: 28px; max-width: 420px; width: 100%; }
+  h1 { font-size: 1.3rem; margin-bottom: 4px; }
+  .sub { color: var(--text-muted); font-size: 0.85rem; margin-bottom: 18px; }
+  .row { display: flex; gap: 8px; margin-bottom: 10px; font-size: 0.95rem; }
+  .row b { min-width: 90px; color: var(--text-muted); font-weight: 600; }
+  .msg { background: #181A28; border-radius: 10px; padding: 12px; margin: 14px 0; font-size: 0.9rem; }
+  .valor { background: #1a2e1f; border: 1px solid #22C55E44; border-radius: 10px; padding: 12px; margin: 14px 0; font-size: 0.9rem; }
+  .rsvp { display: flex; gap: 10px; margin: 16px 0; font-size: 0.85rem; color: var(--text-muted); }
+  a.btn { display: block; text-align: center; background: var(--primary); color: #05230f; font-weight: 700; text-decoration: none; padding: 12px; border-radius: 10px; margin-top: 10px; }
+  a.btn.secondary { background: #128C7E; color: #fff; }
+</style>
+</head>
+<body>
+  <div class="card">
+    <h1>📣 Vai ter fut!</h1>
+    <div class="sub">${chamada.clan.name}</div>
+    <div class="row"><b>📍 Local</b> ${chamada.local}</div>
+    <div class="row"><b>🕒 Horário</b> ${chamada.horario}</div>
+    ${chamada.mensagem ? `<div class="msg">${chamada.mensagem}</div>` : ''}
+    ${chamada.valorTotal ? `<div class="valor">💰 Valor total: <strong>R$ ${chamada.valorTotal.toFixed(2)}</strong>${valorPorPessoa ? ` — <strong>R$ ${valorPorPessoa.toFixed(2)}</strong> por pessoa (${vou} confirmado${vou === 1 ? '' : 's'})` : ' — o valor por pessoa aparece conforme a galera confirma'}</div>` : ''}
+    ${chamada.pix ? `<div class="row"><b>💸 PIX</b> ${chamada.pix}</div>` : ''}
+    <div class="rsvp">✅ ${vou} vão · 🤔 ${talvez} talvez</div>
+    <a class="btn" href="${siteUrl}/atividades/fut">Confirmar presença no site</a>
+    <a class="btn secondary" href="https://wa.me/?text=${encodeURIComponent(whatsappTexto)}" target="_blank" rel="noopener">Compartilhar no WhatsApp</a>
+  </div>
+</body>
+</html>`);
   });
 
   app.get('/atividades/fut', (req, res) => {
@@ -2196,6 +2287,7 @@ ${activitySdkBootstrap(clientId!)}
         <button class="tab" id="tabPerfil" onclick="showTab('perfil')">Perfil</button>
         <button class="tab" id="tabRanking" onclick="showTab('ranking')">Ranking</button>
         <button class="tab" id="tabStats" onclick="showTab('stats')">Estatísticas do clã</button>
+        <button class="tab" id="tabSimulacao" onclick="showTab('simulacao')">🎮 Simulação</button>
       </div>
       <div id="panelPelada"></div>
       <div id="panelChamar" style="display:none"></div>
@@ -2204,6 +2296,7 @@ ${activitySdkBootstrap(clientId!)}
       <div id="panelPerfil" style="display:none"></div>
       <div id="panelRanking" style="display:none"></div>
       <div id="panelStats" style="display:none"></div>
+      <div id="panelSimulacao" style="display:none"></div>
     </div>
   </div>
   <div class="toast" id="toast"></div>
@@ -2358,6 +2451,7 @@ ${activitySdkBootstrap(clientId!)}
       document.getElementById('tabPerfil').classList.toggle('active', tab === 'perfil');
       document.getElementById('tabRanking').classList.toggle('active', tab === 'ranking');
       document.getElementById('tabStats').classList.toggle('active', tab === 'stats');
+      document.getElementById('tabSimulacao').classList.toggle('active', tab === 'simulacao');
       document.getElementById('panelPelada').style.display = tab === 'pelada' ? 'block' : 'none';
       document.getElementById('panelChamar').style.display = tab === 'chamar' ? 'block' : 'none';
       document.getElementById('panelElenco').style.display = tab === 'elenco' ? 'block' : 'none';
@@ -2365,6 +2459,7 @@ ${activitySdkBootstrap(clientId!)}
       document.getElementById('panelPerfil').style.display = tab === 'perfil' ? 'block' : 'none';
       document.getElementById('panelRanking').style.display = tab === 'ranking' ? 'block' : 'none';
       document.getElementById('panelStats').style.display = tab === 'stats' ? 'block' : 'none';
+      document.getElementById('panelSimulacao').style.display = tab === 'simulacao' ? 'block' : 'none';
       if (skipLoad) return;
       if (tab === 'pelada') refreshPartida();
       if (tab === 'chamar') loadChamadas();
@@ -2373,6 +2468,7 @@ ${activitySdkBootstrap(clientId!)}
       if (tab === 'perfil') loadPerfil();
       if (tab === 'ranking') loadRanking();
       if (tab === 'stats') loadClanStats();
+      if (tab === 'simulacao') loadSimulacao();
     }
 
     function avatarHtml(url, name, size) {
@@ -2997,6 +3093,111 @@ ${activitySdkBootstrap(clientId!)}
       } catch (e) { panel.innerHTML = modeToggleHtml() + '<div class="card"><div class="empty-hint">❌ ' + e.message + '</div></div>'; }
     }
 
+    // ── Simulação (brincadeira): partida FICTÍCIA minuto a minuto, com base
+    // na nota de cada um do elenco — não é uma partida de verdade, não mexe
+    // em estatística de ninguém, é só pra rir com a galera. ─────────────────
+    let simEscalacao = {}; // memberId -> 'A' | 'B' | undefined (fora)
+    let simMode = 'futsal';
+
+    async function loadSimulacao() {
+      renderSimulacaoSetup();
+    }
+
+    function renderSimulacaoSetup() {
+      const panel = document.getElementById('panelSimulacao');
+      const membros = currentClan.members || [];
+      function chip(m) {
+        const time = simEscalacao[m.id];
+        return \`<span class="chip">\${avatarHtml(m.avatarUrl, m.displayName, 20)}\${m.displayName}
+          <button class="btn \${time === 'A' ? '' : 'secondary'}" style="padding:2px 8px;margin-left:4px;" onclick="simDefinirTime('\${m.id}','A')">A</button>
+          <button class="btn \${time === 'B' ? '' : 'secondary'}" style="padding:2px 8px;" onclick="simDefinirTime('\${m.id}','B')">B</button>
+        </span>\`;
+      }
+      panel.innerHTML = \`<div class="card">
+        <h2>🎮 Simulação (de brincadeira!)</h2>
+        <p style="color:var(--text-muted);font-size:0.85rem;margin-bottom:14px;">Gera uma partida FICTÍCIA minuto a minuto com base na nota de cada um. Não conta ponto nem estatística — é só diversão. 😄</p>
+        <div class="mode-toggle" style="margin-bottom:12px;">
+          <button class="btn \${simMode === 'futsal' ? '' : 'secondary'}" onclick="simSetMode('futsal')">Futsal</button>
+          <button class="btn \${simMode === 'campo' ? '' : 'secondary'}" onclick="simSetMode('campo')">Campo</button>
+        </div>
+        <div class="row" style="justify-content:space-between;align-items:center;">
+          <button class="btn" onclick="simularAuto()">🎲 Simular automático (times equilibrados)</button>
+          <button class="btn secondary" onclick="simularManual()">▶️ Simular com essa escalação</button>
+        </div>
+        <p style="color:var(--text-muted);font-size:0.8rem;margin:12px 0 4px;">Ou escale você mesmo quem vai pro Time A / Time B:</p>
+        <div class="unassigned">\${membros.length ? membros.map(chip).join('') : '<span class="empty-hint">O elenco desse clã tá vazio.</span>'}</div>
+      </div>
+      <div id="simResultBox"></div>\`;
+    }
+
+    function simSetMode(mode) { simMode = mode; renderSimulacaoSetup(); }
+
+    function simDefinirTime(memberId, time) {
+      simEscalacao[memberId] = simEscalacao[memberId] === time ? undefined : time;
+      renderSimulacaoSetup();
+    }
+
+    async function simularAuto() {
+      await rodarSimulacao(undefined);
+    }
+
+    async function simularManual() {
+      const escalacao = Object.keys(simEscalacao).filter(id => simEscalacao[id]).map(id => ({ memberId: id, team: simEscalacao[id] }));
+      if (!escalacao.some(e => e.team === 'A') || !escalacao.some(e => e.team === 'B')) {
+        return showToast('❌ Escale pelo menos 1 jogador em cada time.');
+      }
+      await rodarSimulacao(escalacao);
+    }
+
+    async function rodarSimulacao(escalacao) {
+      const box = document.getElementById('simResultBox');
+      box.innerHTML = '<div class="card"><div class="empty-hint">Simulando... ⚽</div></div>';
+      try {
+        const data = await api('/api/activities/fut/clans/' + currentClan.id + '/simular', { method: 'POST', body: JSON.stringify({ modo: simMode, escalacao }) });
+        renderSimulacaoResultado(data.sim);
+      } catch (e) { box.innerHTML = '<div class="card"><div class="empty-hint">❌ ' + e.message + '</div></div>'; }
+    }
+
+    function renderSimulacaoResultado(sim) {
+      const box = document.getElementById('simResultBox');
+      const resLabel = sim.resultado === 'empate' ? '🤝 Empate!' : sim.resultado === 'vitoria_a' ? '🏆 Vitória do Time A!' : '🏆 Vitória do Time B!';
+      box.innerHTML = \`<div class="card" style="margin-top:12px;">
+        <div class="teams" style="margin-bottom:10px;">
+          <div class="team-col"><h3>Time A (força \${sim.forcaA.toFixed(1)})</h3>\${sim.jogadoresA.map(p => '<div class="player-row"><span>' + p.displayName + '</span><span class="stats">' + p.nota.toFixed(1) + '</span></div>').join('')}</div>
+          <div class="team-col"><h3>Time B (força \${sim.forcaB.toFixed(1)})</h3>\${sim.jogadoresB.map(p => '<div class="player-row"><span>' + p.displayName + '</span><span class="stats">' + p.nota.toFixed(1) + '</span></div>').join('')}</div>
+        </div>
+        <div class="score-big" id="simScore">0 x 0</div>
+        <p style="text-align:center;color:var(--text-muted);" id="simResultLabel"></p>
+        <div id="simTimeline" style="max-height:320px;overflow-y:auto;margin-top:10px;"></div>
+        <div class="row" style="justify-content:center;margin-top:10px;">
+          <button class="btn secondary" onclick='renderSimulacaoResultado(\${JSON.stringify(sim).replace(/'/g, "&#39;")})'>🔁 Reassistir</button>
+          <button class="btn" onclick="renderSimulacaoSetup()">🎮 Nova simulação</button>
+        </div>
+      </div>\`;
+
+      // "Narra" o jogo revelando os lances aos poucos, tipo um replay — só
+      // pela graça, o resultado final já foi calculado de uma vez só.
+      const timelineEl = document.getElementById('simTimeline');
+      const scoreEl = document.getElementById('simScore');
+      const labelEl = document.getElementById('simResultLabel');
+      let scoreA = 0, scoreB = 0, i = 0;
+      function passo() {
+        if (i >= sim.timeline.length) { labelEl.textContent = resLabel; return; }
+        const e = sim.timeline[i++];
+        if (e.tipo === 'gol') { if (e.team === 'A') scoreA++; else scoreB++; }
+        scoreEl.textContent = scoreA + ' x ' + scoreB;
+        const icone = e.tipo === 'gol' ? '⚽' : e.tipo === 'defesa' ? '🧤' : '🔎';
+        const txt = e.tipo === 'gol' ? \`GOOOL de \${e.jogador} (Time \${e.team})\${e.assistencia ? ' — assist. ' + e.assistencia : ''}!\` : e.tipo === 'defesa' ? \`Defesa em cima de \${e.jogador} (Time \${e.team})\` : \`Chance perdida de \${e.jogador} (Time \${e.team})\`;
+        const line = document.createElement('div');
+        line.className = 'player-row';
+        line.innerHTML = '<span><strong>' + e.minuto + '\\'</strong> ' + icone + ' ' + txt + '</span>';
+        timelineEl.appendChild(line);
+        timelineEl.scrollTop = timelineEl.scrollHeight;
+        setTimeout(passo, e.tipo === 'gol' ? 550 : 140);
+      }
+      passo();
+    }
+
     // ── Elenco: times internos e fixos do clã ────────────────────────────
     async function loadElenco() {
       const panel = document.getElementById('panelElenco');
@@ -3153,7 +3354,7 @@ ${activitySdkBootstrap(clientId!)}
         <h2>📣 Chamar o fut</h2>
         <p style="color:var(--text-muted);font-size:0.85rem;margin-bottom:14px;">Marque local, horário e PIX pra galera confirmar presença.</p>
         <div class="row"><input id="chamarLocal" type="text" placeholder="Local" style="flex:1;min-width:140px;"><input id="chamarHorario" type="text" placeholder="Horário (ex: Hoje 20h)" style="flex:1;min-width:140px;"></div>
-        <div class="row"><input id="chamarPix" type="text" placeholder="PIX (opcional)" style="flex:1;min-width:140px;"><input id="chamarLink" type="text" placeholder="Link do grupo (opcional)" style="flex:1;min-width:140px;"></div>
+        <div class="row"><input id="chamarPix" type="text" placeholder="PIX (opcional)" style="flex:1;min-width:140px;"><input id="chamarValorTotal" type="number" step="0.01" min="0" placeholder="Valor total da quadra (opcional)" style="flex:1;min-width:140px;"><input id="chamarLink" type="text" placeholder="Link do grupo (opcional)" style="flex:1;min-width:140px;"></div>
         <div class="row"><input id="chamarMensagem" type="text" placeholder="Mensagem (opcional)" style="flex:1;min-width:200px;"><button class="btn" onclick="criarChamada()">Chamar!</button></div>
       </div>\`;
 
@@ -3165,6 +3366,7 @@ ${activitySdkBootstrap(clientId!)}
           const vou = (c.respostas || []).filter(r => r.status === 'vou');
           const talvez = (c.respostas || []).filter(r => r.status === 'talvez');
           const naoVou = (c.respostas || []).filter(r => r.status === 'nao_vou');
+          const chamadaUrl = location.origin + '/fut/chamada/' + c.id;
           html += \`<div class="card" style="margin-top:12px;">
             <div class="row" style="justify-content:space-between;align-items:center;">
               <h3 style="margin:0;">📍 \${c.local} — 🕒 \${c.horario}</h3>
@@ -3172,11 +3374,16 @@ ${activitySdkBootstrap(clientId!)}
             </div>
             \${c.mensagem ? '<p style="font-size:0.88rem;">' + c.mensagem + '</p>' : ''}
             \${c.pix ? '<p style="font-size:0.85rem;color:var(--text-muted);">💸 PIX: <strong>' + c.pix + '</strong></p>' : ''}
+            \${c.valorTotal ? '<p style="font-size:0.85rem;color:var(--text-muted);">💰 Valor total: <strong>R$ ' + c.valorTotal.toFixed(2) + '</strong>' + (c.valorPorPessoa ? ' — <strong>R$ ' + c.valorPorPessoa.toFixed(2) + '</strong> por pessoa' : ' — divide quando alguém confirmar') + '</p>' : ''}
             \${c.link ? '<p style="font-size:0.85rem;"><a href="' + c.link + '" target="_blank" rel="noopener">🔗 Link do grupo</a></p>' : ''}
             <div class="row">
               <button class="btn \${meResposta && meResposta.status === 'vou' ? '' : 'secondary'}" onclick="rsvpChamada('\${c.id}','vou')">✅ Vou (\${vou.length})</button>
               <button class="btn \${meResposta && meResposta.status === 'talvez' ? '' : 'secondary'}" onclick="rsvpChamada('\${c.id}','talvez')">🤔 Talvez (\${talvez.length})</button>
               <button class="btn \${meResposta && meResposta.status === 'nao_vou' ? '' : 'secondary'}" onclick="rsvpChamada('\${c.id}','nao_vou')">❌ Não vou (\${naoVou.length})</button>
+            </div>
+            <div class="row">
+              <button class="btn secondary" onclick="compartilharChamada('\${chamadaUrl}')">🔗 Copiar link pra compartilhar</button>
+              <a class="btn secondary" style="text-decoration:none;text-align:center;" href="https://wa.me/?text=\${encodeURIComponent('📣 Vai ter fut! (' + c.local + ' — ' + c.horario + ')\\n' + chamadaUrl)}" target="_blank" rel="noopener">💬 WhatsApp</a>
             </div>
             \${vou.length ? '<p style="font-size:0.8rem;color:var(--text-muted);margin-top:8px;">Confirmados: ' + vou.map(r => r.displayName).join(', ') + '</p>' : ''}
           </div>\`;
@@ -3189,14 +3396,20 @@ ${activitySdkBootstrap(clientId!)}
       const local = document.getElementById('chamarLocal').value.trim();
       const horario = document.getElementById('chamarHorario').value.trim();
       const pix = document.getElementById('chamarPix').value.trim();
+      const valorTotal = document.getElementById('chamarValorTotal').value.trim();
       const link = document.getElementById('chamarLink').value.trim();
       const mensagem = document.getElementById('chamarMensagem').value.trim();
       if (!local || !horario) return showToast('❌ Preencha local e horário.');
       try {
-        await api('/api/activities/fut/clans/' + currentClan.id + '/chamadas', { method: 'POST', body: JSON.stringify({ local, horario, pix, link, mensagem }) });
-        showToast('📣 Fut chamado!');
+        await api('/api/activities/fut/clans/' + currentClan.id + '/chamadas', { method: 'POST', body: JSON.stringify({ local, horario, pix, valorTotal: valorTotal || undefined, link, mensagem }) });
+        showToast('📣 Fut chamado! DM enviada pro elenco.');
         loadChamadas();
       } catch (e) { showToast('❌ ' + e.message); }
+    }
+
+    function compartilharChamada(url) {
+      if (navigator.clipboard) navigator.clipboard.writeText(url).then(() => showToast('🔗 Link copiado!')).catch(() => prompt('Copie o link:', url));
+      else prompt('Copie o link:', url);
     }
 
     async function rsvpChamada(chamadaId, status) {

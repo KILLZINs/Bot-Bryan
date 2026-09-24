@@ -888,6 +888,106 @@ export async function getClanOverview(clanId: string, mode: FutMode) {
   };
 }
 
+// ── Simulação (brincadeira) ─────────────────────────────────────────────
+// Partida FICTÍCIA gerada minuto a minuto com base na nota de cada um —
+// não é uma partida de verdade, então não mexe em FutPartida/estatísticas,
+// é só pra rir com a galera. Reaproveitada tanto pelo site (escalação manual,
+// arrastando gente do elenco pros times) quanto pelo Discord (auto-balanceado).
+
+async function notaDoMembro(clanId: string, mode: FutMode, member: { id: string; discordId: string | null }) {
+  const statsKey = member.discordId || `offline:${member.id}`;
+  const stats = await prisma.futClanPlayerStats.findUnique({ where: { clanId_discordId_mode: { clanId, discordId: statsKey, mode } } });
+  return stats && stats.notaCount > 0 ? stats.notaMedia : 6.0; // ninguém jogou ainda → nota neutra
+}
+
+export type FutSimTimelineEntry = { minuto: number; tipo: 'gol' | 'chance' | 'defesa'; team: 'A' | 'B'; jogador: string; assistencia?: string };
+
+export async function simulateClanMatch(clanId: string, mode: FutMode, escalacao?: { memberId: string; team: 'A' | 'B' }[]) {
+  const clan = await getClanById(clanId);
+  if (!clan) throw new FutError('Clã não encontrado.');
+
+  let selecionados: { memberId: string; team: 'A' | 'B' }[];
+  if (escalacao && escalacao.length) {
+    const validIds = new Set(clan.members.map((m) => m.id));
+    selecionados = escalacao.filter((e) => validIds.has(e.memberId) && (e.team === 'A' || e.team === 'B'));
+  } else {
+    // Sem escalação manual: pega o elenco inteiro e distribui alternando por
+    // nota (do melhor pro pior) pra sair um jogo mais ou menos parelho.
+    if (clan.members.length < 2) throw new FutError('O elenco desse clã precisa de pelo menos 2 jogadores pra simular.');
+    const comNota = await Promise.all(clan.members.map(async (m) => ({ memberId: m.id, nota: await notaDoMembro(clanId, mode, m) })));
+    comNota.sort((a, b) => b.nota - a.nota);
+    selecionados = comNota.map((p, i) => ({ memberId: p.memberId, team: (i % 2 === 0 ? 'A' : 'B') as 'A' | 'B' }));
+  }
+
+  const timeARefs = selecionados.filter((e) => e.team === 'A');
+  const timeBRefs = selecionados.filter((e) => e.team === 'B');
+  if (!timeARefs.length || !timeBRefs.length) throw new FutError('Escale pelo menos 1 jogador em cada time pra simular.');
+
+  async function comNotaEDados(refs: { memberId: string; team: 'A' | 'B' }[]) {
+    return Promise.all(refs.map(async (r) => {
+      const member = clan.members.find((m) => m.id === r.memberId)!;
+      const nota = await notaDoMembro(clanId, mode, member);
+      return { memberId: member.id, displayName: member.displayName, nota };
+    }));
+  }
+
+  const jogadoresA = await comNotaEDados(timeARefs);
+  const jogadoresB = await comNotaEDados(timeBRefs);
+  const forcaA = jogadoresA.reduce((s, p) => s + p.nota, 0) / jogadoresA.length;
+  const forcaB = jogadoresB.reduce((s, p) => s + p.nota, 0) / jogadoresB.length;
+
+  function clampNum(v: number, min: number, max: number) { return Math.min(max, Math.max(min, v)); }
+  function pickWeighted(players: { memberId: string; displayName: string; nota: number }[]) {
+    const total = players.reduce((s, p) => s + Math.max(1, p.nota), 0);
+    let r = Math.random() * total;
+    for (const p of players) { r -= Math.max(1, p.nota); if (r <= 0) return p; }
+    return players[players.length - 1];
+  }
+
+  const duracao = mode === 'futsal' ? 40 : 90;
+  const timeline: FutSimTimelineEntry[] = [];
+  let scoreA = 0;
+  let scoreB = 0;
+
+  for (let minuto = 1; minuto <= duracao; minuto++) {
+    if (Math.random() > 0.14) continue; // nem todo minuto tem lance
+    const pesoA = Math.max(1, forcaA);
+    const pesoB = Math.max(1, forcaB);
+    const timeAtacante: 'A' | 'B' = Math.random() * (pesoA + pesoB) < pesoA ? 'A' : 'B';
+    const jogadores = timeAtacante === 'A' ? jogadoresA : jogadoresB;
+    const atacante = pickWeighted(jogadores);
+    const forcaAtq = timeAtacante === 'A' ? forcaA : forcaB;
+    const forcaDef = timeAtacante === 'A' ? forcaB : forcaA;
+    const chanceGol = clampNum(0.26 + (atacante.nota - 6) / 18 + (forcaAtq - forcaDef) / 40, 0.08, 0.62);
+
+    if (Math.random() < chanceGol) {
+      let assistente: typeof atacante | undefined;
+      if (jogadores.length > 1 && Math.random() < 0.55) {
+        assistente = pickWeighted(jogadores.filter((j) => j.memberId !== atacante.memberId));
+      }
+      if (timeAtacante === 'A') scoreA += 1; else scoreB += 1;
+      timeline.push({ minuto, tipo: 'gol', team: timeAtacante, jogador: atacante.displayName, assistencia: assistente?.displayName });
+    } else {
+      timeline.push({ minuto, tipo: Math.random() < 0.5 ? 'chance' : 'defesa', team: timeAtacante, jogador: atacante.displayName });
+    }
+  }
+
+  const resultado: FutResultado = scoreA === scoreB ? 'empate' : scoreA > scoreB ? 'vitoria_a' : 'vitoria_b';
+  return {
+    clanId,
+    mode,
+    duracao,
+    jogadoresA: jogadoresA.map((p) => ({ memberId: p.memberId, displayName: p.displayName, nota: Math.round(p.nota * 100) / 100 })),
+    jogadoresB: jogadoresB.map((p) => ({ memberId: p.memberId, displayName: p.displayName, nota: Math.round(p.nota * 100) / 100 })),
+    forcaA: Math.round(forcaA * 100) / 100,
+    forcaB: Math.round(forcaB * 100) / 100,
+    timeline,
+    scoreA,
+    scoreB,
+    resultado,
+  };
+}
+
 // ── Vídeos de gol ────────────────────────────────────────────────────────
 // Lista os gols de uma partida que têm link de vídeo, com o autor do gol.
 export async function listGoalVideos(partidaId: string) {
@@ -906,7 +1006,7 @@ export async function listGoalVideos(partidaId: string) {
 
 export type FutRsvpStatus = 'vou' | 'talvez' | 'nao_vou';
 
-export async function createChamada(clanId: string, creatorId: string, data: { local: string; horario: string; pix?: string; link?: string; mensagem?: string }) {
+export async function createChamada(clanId: string, creatorId: string, data: { local: string; horario: string; pix?: string; valorTotal?: number; link?: string; mensagem?: string }) {
   const clan = await getClanById(clanId);
   if (!clan) throw new FutError('Clã não encontrado.');
 
@@ -914,6 +1014,7 @@ export async function createChamada(clanId: string, creatorId: string, data: { l
   const horario = data.horario?.trim().slice(0, 60);
   if (!local) throw new FutError('Informe o local do fut.');
   if (!horario) throw new FutError('Informe o horário do fut.');
+  if (data.valorTotal != null && (!Number.isFinite(data.valorTotal) || data.valorTotal < 0)) throw new FutError('Valor total inválido.');
 
   return prisma.futChamada.create({
     data: {
@@ -922,14 +1023,23 @@ export async function createChamada(clanId: string, creatorId: string, data: { l
       local,
       horario,
       pix: data.pix?.trim().slice(0, 100) || null,
+      valorTotal: data.valorTotal != null ? Math.round(data.valorTotal * 100) / 100 : null,
       link: data.link?.trim().slice(0, 300) || null,
       mensagem: data.mensagem?.trim().slice(0, 300) || null,
     },
   });
 }
 
+// Divide o valorTotal da chamada pelo nº de confirmados ("vou") — usado no
+// site, no Discord (embed/DM) e recalculado sempre que alguém confirma/desmarca
+// presença, já que o número de confirmados muda com o tempo.
+export function calcValorPorPessoa(valorTotal: number | null | undefined, confirmados: number): number | null {
+  if (!valorTotal || valorTotal <= 0) return null;
+  return Math.round((valorTotal / Math.max(1, confirmados)) * 100) / 100;
+}
+
 export async function getChamada(id: string) {
-  return prisma.futChamada.findUnique({ where: { id }, include: { respostas: true } });
+  return prisma.futChamada.findUnique({ where: { id }, include: { respostas: true, clan: true } });
 }
 
 export async function listChamadas(clanId: string, limit = 5) {

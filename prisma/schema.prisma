@@ -331,6 +331,7 @@ model GuildConfig {
   featAnnouncements     Boolean  @default(true)
   featMusic             Boolean  @default(true)
   featVoiceAi           Boolean  @default(true)
+  featFut               Boolean  @default(true)
 
   logFlags              Int      @default(31)
   updatedAt             DateTime @updatedAt @default(now())
@@ -792,6 +793,7 @@ model BotConfig {
   featMusic         Boolean  @default(true)
   featVoiceAi       Boolean  @default(true)
   featReviveChat    Boolean  @default(true)
+  featFut           Boolean  @default(true)
 
   // 👤 Perfil Oficial do Bryan (Configurador)
   botAvatarUrl      String?

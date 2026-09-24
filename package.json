@@ -53,6 +53,6 @@
   },
   "overrides": {
     "discord-api-types": "^0.38.0",
-    "html-encoding-sniffer": "4.0.0"
+    "jsdom": "25.0.1"
   }
 }

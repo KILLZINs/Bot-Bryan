@@ -24,6 +24,7 @@ import {
 
 import { Player } from 'discord-player';
 import { DefaultExtractors } from '@discord-player/extractor';
+import { YoutubeExtractor } from 'discord-player-youtubei';
 import ffmpegPath from 'ffmpeg-static';
 
 import { readdirSync } from 'fs';
@@ -687,6 +688,14 @@ async function updateBotPresence(client: Client) {
 
 async function start() {
   try {
+    // O pacote @discord-player/extractor (DefaultExtractors) NÃO traz mais um
+    // extrator de YouTube embutido — sem ele, buscas com QueryType.YOUTUBE_SEARCH
+    // não acham nada, e faixas do Spotify (que só trazem metadado, sem áudio
+    // próprio) não têm como ser tocadas de verdade, porque o Spotify não libera
+    // o áudio bruto pra terceiros. O discord-player-youtubei preenche essa
+    // lacuna: registra o YouTube como fonte de busca E como "ponte" (bridge)
+    // automática pro Spotify tocar de verdade.
+    await player.extractors.register(YoutubeExtractor, {});
     await player.extractors.loadMulti(DefaultExtractors);
     console.log('🎧 Extratores de áudio carregados com sucesso!');
     console.log(`🎛️ FFmpeg configurado em: ${ffmpegPath ?? 'não encontrado'}`);

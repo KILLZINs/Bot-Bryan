@@ -11,8 +11,29 @@ import {
 
 import { errorEmbed } from '../../utils/embeds';
 
-const YOUTUBE_URL =
-  /(?:youtube\.com|youtu\.be)/i;
+// Mesma lógica do site (/atividades/musica): só tratamos como "link direto"
+// quando é de fato um link de uma plataforma conhecida apontando pra algo
+// específico (vídeo/track/playlist) — não só o domínio sozinho.
+function isRealMediaLink(q: string): boolean {
+  if (!/^https?:\/\//i.test(q)) return false;
+  try {
+    const u = new URL(q);
+    const host = u.hostname.replace(/^www\./i, '').toLowerCase();
+    const knownHosts = ['youtube.com', 'youtu.be', 'open.spotify.com', 'soundcloud.com', 'music.apple.com', 'vimeo.com'];
+    if (!knownHosts.some((h) => host === h || host.endsWith('.' + h))) return false;
+    const hasPath = !!u.pathname && u.pathname !== '/' && u.pathname.length > 1;
+    const hasQuery = !!u.search && u.search.length > 1;
+    return hasPath || hasQuery;
+  } catch {
+    return false;
+  }
+}
+
+const ENGINE_BY_SOURCE: Record<string, any> = {
+  soundcloud: QueryType.SOUNDCLOUD_SEARCH,
+  youtube: QueryType.YOUTUBE_SEARCH,
+  spotify: QueryType.SPOTIFY_SEARCH,
+};
 
 export default {
   data: new SlashCommandBuilder()
@@ -24,9 +45,22 @@ export default {
       option
         .setName('musica')
         .setDescription(
-          'Nome da música ou link do Spotify ou SoundCloud',
+          'Nome da música ou link do Spotify, YouTube ou SoundCloud',
         )
         .setRequired(true),
+    )
+    .addStringOption((option) =>
+      option
+        .setName('fonte')
+        .setDescription(
+          'De onde buscar (padrão: SoundCloud) — ignorado se você colar um link',
+        )
+        .setRequired(false)
+        .addChoices(
+          { name: '☁️ SoundCloud', value: 'soundcloud' },
+          { name: '▶️ YouTube', value: 'youtube' },
+          { name: '🟢 Spotify', value: 'spotify' },
+        ),
     ),
 
   async execute(
@@ -38,6 +72,7 @@ export default {
       'musica',
       true,
     );
+    const fonte = (interaction.options.getString('fonte') || 'soundcloud').toLowerCase();
 
     const member =
       interaction.member as GuildMember;
@@ -54,23 +89,10 @@ export default {
       });
     }
 
-    if (YOUTUBE_URL.test(query)) {
-      return interaction.reply({
-        embeds: [
-          errorEmbed(
-            'Bloqueio',
-            'Links diretos do YouTube estão instáveis. 🎧 Use links do Spotify, SoundCloud ou digite o nome da música!',
-          ),
-        ],
-        ephemeral: true,
-      });
-    }
-
     await interaction.deferReply();
 
     try {
-      const isLink =
-        /^https?:\/\//i.test(query);
+      const isLink = isRealMediaLink(query);
 
       const searchResult = await player.search(
         query,
@@ -78,13 +100,13 @@ export default {
           requestedBy: interaction.user,
           searchEngine: isLink
             ? QueryType.AUTO
-            : QueryType.SOUNDCLOUD_SEARCH,
+            : (ENGINE_BY_SOURCE[fonte] || QueryType.SOUNDCLOUD_SEARCH),
         },
       );
 
       if (!searchResult.hasTracks()) {
         return interaction.editReply(
-          '❌ Não encontrei essa música. Tente usar o nome completo ou um link do Spotify/SoundCloud.',
+          '❌ Não encontrei essa música. Tente usar o nome completo, trocar a `fonte` ou colar um link do Spotify/YouTube/SoundCloud.',
         );
       }
 

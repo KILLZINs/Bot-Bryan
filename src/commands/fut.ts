@@ -7,13 +7,14 @@ import { Command } from '../types';
 import { errorEmbed, successEmbed, COLORS } from '../utils/embeds';
 import {
   FutError,
-  createClan, joinClan, addClanMember, removeClanMember, listClans, getClanByName, deleteClan,
+  createClan, joinClan, addClanMember, removeClanMember, listClans, getClanByName, getClanById, deleteClan, resolveMember,
   listTeams, createTeam, deleteTeam, setMemberTeam,
   createPartida, getOpenPartida, getPartidaById, deletePartida, listPartidaHistory,
   joinPartida, addOfflinePlayer, setTeam, autoBalanceTeams, startPartida, recordEvent, finishPartida,
   getProfile, getRanking, getUserProfile, setUserPosition, listGoalVideos, notaBand,
   createChamada, listChamadas, deleteChamada, respondChamada,
   undoLastEvent, reopenPartida, getClanOverview, listFullClanStats,
+  addClanMemberToPartida, listAvailableClanMembers,
   type FutEventType, type FutMode, type FutRsvpStatus, type FutVisibility,
 } from '../fut/services/pelada';
 
@@ -22,6 +23,14 @@ import {
 const NOTA_EMOJI: Record<ReturnType<typeof notaBand>, string> = { ruim: '🟥', mediano: '🟧', bom: '🟩', excelente: '🟨' };
 function notaTag(nota: number): string {
   return `${NOTA_EMOJI[notaBand(nota)]} ${nota.toFixed(1)}`;
+}
+
+// Pra estatística de gente do elenco sem conta vinculada (discordId sintético
+// "offline:<clanMemberId>" — ver addClanMemberToPartida/finishPartida em
+// pelada.ts): não dá pra usar <@mention> porque não existe usuário de
+// verdade, então mostra o displayName salvo em texto puro.
+function mentionOrName(discordId: string, displayName?: string | null): string {
+  return discordId.startsWith('offline:') ? (displayName || 'Jogador do elenco') : `<@${discordId}>`;
 }
 
 function playerRefFrom(interaction: ChatInputCommandInteraction) {
@@ -126,6 +135,10 @@ export default {
         .addStringOption((o) => o.setName('cla').setDescription('Nome do clã').setRequired(true))
         .addStringOption((o) => o.setName('apelido').setDescription('Apelido do jogador').setRequired(true))
         .addStringOption((o) => o.setName('posicao').setDescription('Posição (opcional)')))
+      .addSubcommand((sub) => sub.setName('convocar').setDescription('Chama alguém que já está no elenco do clã direto pra dentro da partida')
+        .addStringOption((o) => o.setName('cla').setDescription('Nome do clã').setRequired(true))
+        .addUserOption((o) => o.setName('jogador').setDescription('Pessoa do elenco com conta no Discord'))
+        .addStringOption((o) => o.setName('apelido').setDescription('Apelido de quem não tem conta vinculada')))
       .addSubcommand((sub) => sub.setName('time').setDescription('Define o time (A ou B) de um jogador')
         .addStringOption((o) => o.setName('cla').setDescription('Nome do clã').setRequired(true))
         .addStringOption((o) => o.setName('time').setDescription('Time').setRequired(true)
@@ -299,13 +312,13 @@ export default {
               { name: 'Gols concedidos', value: `${overview.totalConcedidos}`, inline: true },
               { name: 'Erros graves', value: `${overview.totalErros}`, inline: true },
             );
-          if (overview.artilheiro) embed.addFields({ name: '👑 Artilheiro', value: `<@${overview.artilheiro.discordId}> — ${overview.artilheiro.goals} gols`, inline: false });
-          if (overview.garcom) embed.addFields({ name: '🎯 Garçom (mais assistências)', value: `<@${overview.garcom.discordId}> — ${overview.garcom.assists} assists`, inline: false });
-          if (overview.melhorNota) embed.addFields({ name: '⭐ Melhor nota média', value: `<@${overview.melhorNota.discordId}> — ${notaTag(overview.melhorNota.notaMedia)}`, inline: false });
+          if (overview.artilheiro) embed.addFields({ name: '👑 Artilheiro', value: `${mentionOrName(overview.artilheiro.discordId, overview.artilheiro.displayName)} — ${overview.artilheiro.goals} gols`, inline: false });
+          if (overview.garcom) embed.addFields({ name: '🎯 Garçom (mais assistências)', value: `${mentionOrName(overview.garcom.discordId, overview.garcom.displayName)} — ${overview.garcom.assists} assists`, inline: false });
+          if (overview.melhorNota) embed.addFields({ name: '⭐ Melhor nota média', value: `${mentionOrName(overview.melhorNota.discordId, overview.melhorNota.displayName)} — ${notaTag(overview.melhorNota.notaMedia)}`, inline: false });
 
           // Elenco completo (individual) — corta se passar do limite de um
           // campo de embed do Discord (1024 caracteres).
-          const linhasElenco = elenco.map((p, i) => `**${i + 1}.** <@${p.discordId}> — ${notaTag(p.notaMedia)} — ⚽${p.goals} 🅰️${p.assists} 🧤${p.defesas} — ${p.totalPartidas}J`);
+          const linhasElenco = elenco.map((p, i) => `**${i + 1}.** ${mentionOrName(p.discordId, p.displayName)} — ${notaTag(p.notaMedia)} — ⚽${p.goals} 🅰️${p.assists} 🧤${p.defesas} — ${p.totalPartidas}J`);
           let elencoTxt = linhasElenco.join('\n');
           if (elencoTxt.length > 1000) elencoTxt = `${elencoTxt.slice(0, 990)}\n… (veja o elenco completo no site)`;
           embed.addFields({ name: `Elenco completo (${elenco.length})`, value: elencoTxt || '_sem dados_', inline: false });
@@ -456,6 +469,17 @@ export default {
           const posicao = interaction.options.getString('posicao') ?? undefined;
           await addOfflinePlayer(partida!.id, apelido, posicao);
           await interaction.reply({ embeds: [buildPartidaEmbed(await getPartidaById(partida!.id), clan.name)] });
+          return;
+        }
+
+        if (sub === 'convocar') {
+          const ref = playerRefFrom(interaction);
+          if (!ref.discordId && !ref.apelido) { await interaction.reply({ embeds: [errorEmbed('Faltou o jogador', 'Informe `jogador` ou `apelido`.')], ephemeral: true }); return; }
+          const fullClan = await getClanById(clan.id);
+          if (!fullClan) throw new FutError('Clã não encontrado.');
+          const member = resolveMember(fullClan, ref);
+          await addClanMemberToPartida(partida!.id, interaction.user.id, member.id);
+          await interaction.reply({ embeds: [successEmbed('Convocado!', `**${member.displayName}** entrou na partida.`), buildPartidaEmbed(await getPartidaById(partida!.id), clan.name)] });
           return;
         }
 
@@ -634,8 +658,12 @@ export default {
         const ranking = await getRanking(clan.id, modo, 10);
         if (!ranking.length) { await interaction.reply({ embeds: [errorEmbed('Ranking vazio', `Ninguém finalizou uma partida de ${modo} nesse clã ainda.`)], ephemeral: true }); return; }
         const lines = await Promise.all(ranking.map(async (p, i) => {
-          const user = await interaction.client.users.fetch(p.discordId).catch(() => null);
-          return `**${i + 1}.** ${user ? user.username : p.discordId} — ${p.xp} XP — ${notaTag(p.notaMedia)} (${p.vitorias}V/${p.derrotas}D/${p.empates}E, ⚽${p.goals})`;
+          let nome: string = p.displayName || p.discordId;
+          if (!p.discordId.startsWith('offline:')) {
+            const user = await interaction.client.users.fetch(p.discordId).catch(() => null);
+            nome = user ? user.username : (p.displayName || p.discordId);
+          }
+          return `**${i + 1}.** ${nome} — ${p.xp} XP — ${notaTag(p.notaMedia)} (${p.vitorias}V/${p.derrotas}D/${p.empates}E, ⚽${p.goals})`;
         }));
         const embed = new EmbedBuilder().setColor(COLORS.GOLD).setTitle(`🏆 Ranking — ${clan.name} (${modo})`).setDescription(lines.join('\n'));
         await interaction.reply({ embeds: [embed] });

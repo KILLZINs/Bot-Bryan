@@ -3,7 +3,7 @@ import axios from 'axios';
 import cookieParser from 'cookie-parser';
 import path from 'path';
 import type { Client } from 'discord.js';
-import { useMainPlayer, QueryType } from 'discord-player';
+import { useMainPlayer, useQueue, QueryType } from 'discord-player';
 import { prisma } from '../database/client';
 import { askBryan } from '../ai/bryan';
 import { getCharacter, computeStats, distributeStatPoints, type FullCharacter } from '../rpg/services/character';
@@ -906,14 +906,53 @@ export function startDashboard(discordClient: Client) {
     try {
       const player = useMainPlayer();
       const isLink = /^https?:\/\//i.test(q);
+      // Fonte escolhida na busca (SoundCloud continua o padrão), mas dá pra
+      // trocar pra YouTube — algumas faixas do SoundCloud são "só prévia" no
+      // player incorporado (trava por causa da gravadora/direitos autorais),
+      // então ter uma fonte alternativa resolve isso na prática.
+      const source = String(req.query.source || 'soundcloud').toLowerCase();
+      const engineBySource: Record<string, any> = { soundcloud: QueryType.SOUNDCLOUD_SEARCH, youtube: QueryType.YOUTUBE_SEARCH };
       const result = await player.search(q, {
-        searchEngine: isLink ? QueryType.AUTO : QueryType.SOUNDCLOUD_SEARCH,
+        searchEngine: isLink ? QueryType.AUTO : (engineBySource[source] || QueryType.SOUNDCLOUD_SEARCH),
       });
       if (!result.hasTracks()) return res.json({ tracks: [] });
       res.json({ tracks: result.tracks.slice(0, 20).map(trackToJson) });
     } catch (err) {
       console.error('[Música/Site] Erro na busca:', err);
       res.status(500).json({ error: 'Não consegui buscar essa música agora.' });
+    }
+  });
+
+  // Importa uma playlist inteira colando um link (Spotify, YouTube, SoundCloud,
+  // Apple Music, etc — qualquer coisa que o discord-player reconheça). Resolve
+  // via a MESMA engine de busca/tocagem, então funciona igual em qualquer lugar
+  // que já suporta link (comando /play, "tocar na call" daqui do site).
+  app.post('/api/activities/music/playlists/import', requirePlayerAuth, async (req, res) => {
+    const userId = req.cookies!.player_userid as string;
+    const url = String(req.body?.url || '').trim();
+    if (!/^https?:\/\//i.test(url)) return res.status(400).json({ error: 'Cole um link válido (Spotify, YouTube, SoundCloud...).' });
+
+    try {
+      const player = useMainPlayer();
+      const result = await player.search(url, { searchEngine: QueryType.AUTO });
+      if (!result.hasTracks()) return res.status(404).json({ error: 'Não encontrei nenhuma música nesse link.' });
+
+      const tracks = (result.playlist ? result.playlist.tracks : result.tracks).slice(0, 200);
+      const name = String(req.body?.name || '').trim().slice(0, 60) || result.playlist?.title?.slice(0, 60) || 'Playlist importada';
+
+      const playlist = await prisma.musicPlaylist.create({
+        data: {
+          userId,
+          name,
+          tracks: { create: tracks.map((t) => ({ title: t.title, author: t.author || null, url: t.url, thumbnail: t.thumbnail || null, duration: t.duration || null })) },
+        },
+        include: { tracks: true },
+      });
+
+      res.json({ playlist, imported: tracks.length, wasPlaylist: !!result.playlist });
+    } catch (err) {
+      console.error('[Música/Site] Erro ao importar playlist:', err);
+      res.status(500).json({ error: 'Não consegui importar essa playlist. Confira o link e tente de novo.' });
     }
   });
 
@@ -1026,6 +1065,20 @@ export function startDashboard(discordClient: Client) {
       const message = err instanceof Error ? err.message : String(err);
       res.status(500).json({ error: `Não consegui tocar essa faixa. Detalhes: ${message.slice(0, 300)}` });
     }
+  });
+
+  // Ajusta o volume da faixa tocando AGORA na call de voz (0-100) — pega a
+  // fila ativa do discord-player pra esse servidor e muda o volume nela,
+  // sem precisar parar/reiniciar a música.
+  app.post('/api/activities/music/volume', requirePlayerAuth, async (req, res) => {
+    const { guildId, volume } = req.body || {};
+    const vol = Math.max(0, Math.min(100, Number(volume)));
+    if (!guildId || Number.isNaN(vol)) return res.status(400).json({ error: 'guildId e volume são obrigatórios.' });
+
+    const queue = useQueue(String(guildId));
+    if (!queue) return res.status(404).json({ error: 'Não tem nenhuma música tocando nesse servidor agora.' });
+    queue.node.setVolume(vol);
+    res.json({ ok: true, volume: vol });
   });
 
   app.get('/atividades/musica', (req, res) => {
@@ -1154,12 +1207,37 @@ ${activitySdkBootstrap(clientId!)}
   .modal-actions .cancel { background: none; color: var(--text-muted); }
   .modal-actions .confirm { background: var(--primary); color: #05050A; }
   .loading { color: var(--text-muted); font-size: 0.9rem; padding: 20px 0; text-align: center; }
+  .source-toggle { display: flex; gap: 6px; }
+  .source-toggle button { background: var(--card2); border: 1px solid var(--border); color: var(--text-muted); padding: 10px 14px; border-radius: 999px; font-size: 0.82rem; font-weight: 700; cursor: pointer; white-space: nowrap; }
+  .source-toggle button.active { background: var(--primary); color: #05050A; border-color: var(--primary); }
+  .home-hero { background: linear-gradient(135deg, rgba(29,185,84,0.16), rgba(29,185,84,0.03)); border: 1px solid var(--border); border-radius: 16px; padding: 22px; margin-bottom: 24px; }
+  .home-hero h2 { margin-bottom: 6px; }
+  .home-hero p { color: var(--text-muted); font-size: 0.88rem; margin-bottom: 14px; }
+  .import-row { display: flex; gap: 8px; flex-wrap: wrap; }
+  .import-row input { flex: 1; min-width: 220px; background: var(--card2); border: 1px solid var(--border); color: white; padding: 12px 14px; border-radius: 8px; outline: none; font-size: 0.9rem; }
+  .import-row input:focus { border-color: var(--primary); }
+  .import-row button { background: var(--primary); color: #05050A; border: none; padding: 12px 20px; border-radius: 8px; font-weight: 800; cursor: pointer; font-size: 0.88rem; white-space: nowrap; }
+  .import-row button:disabled { opacity: 0.6; cursor: default; }
+  .home-section { margin-bottom: 28px; }
+  .home-section h3 { font-size: 1rem; margin-bottom: 12px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.03em; font-size: 0.78rem; }
+  .pl-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; }
+  .pl-card { background: var(--card2); border: 1px solid var(--border); border-radius: 12px; padding: 16px; cursor: pointer; }
+  .pl-card:hover { border-color: var(--primary); }
+  .pl-card .pl-card-icon { font-size: 1.8rem; margin-bottom: 8px; }
+  .pl-card .pl-card-name { font-weight: 700; font-size: 0.9rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .pl-card .pl-card-count { color: var(--text-muted); font-size: 0.78rem; margin-top: 2px; }
+  .vol-row { display: flex; align-items: center; gap: 8px; }
+  .vol-row input[type="range"] { width: 90px; accent-color: var(--primary); cursor: pointer; }
+  .call-volume-bar { position: fixed; left: 0; right: 0; bottom: 0; background: var(--bg2); border-top: 1px solid var(--border); padding: 10px 16px; display: none; align-items: center; gap: 12px; z-index: 998; }
+  .call-volume-bar.show { display: flex; }
+  .call-volume-bar .cv-title { font-size: 0.85rem; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1; }
 </style>
 </head>
 <body>
   <aside class="sidebar">
     <div class="brand">🎵 Música</div>
-    <button class="nav-item active" id="navSearch" onclick="showView('search')">🔎 Buscar</button>
+    <button class="nav-item active" id="navHome" onclick="showView('home')">🏠 Início</button>
+    <button class="nav-item" id="navSearch" onclick="showView('search')">🔎 Buscar</button>
     <button class="nav-item" id="navFavorites" onclick="showView('favorites')">💚 Favoritas</button>
     <div class="nav-sep"></div>
     <div style="padding: 0 12px; color: var(--text-muted); font-size: 0.78rem; font-weight: 700; text-transform: uppercase; margin-bottom: 6px;">Suas Playlists</div>
@@ -1173,10 +1251,12 @@ ${activitySdkBootstrap(clientId!)}
       <div class="search-box">
         <input id="searchInput" type="text" placeholder="O que você quer ouvir?" autocomplete="off">
       </div>
+      <div class="source-toggle" id="sourceToggle" style="visibility:hidden;">
+        <button class="active" data-src="soundcloud" onclick="setSource('soundcloud')">☁️ SoundCloud</button>
+        <button data-src="youtube" onclick="setSource('youtube')">▶️ YouTube</button>
+      </div>
     </div>
-    <div class="content" id="content">
-      <div class="empty-hint">Digite algo na busca pra começar 🎧</div>
-    </div>
+    <div class="content" id="content"></div>
   </div>
 
   <div class="toast" id="toast"></div>
@@ -1184,7 +1264,20 @@ ${activitySdkBootstrap(clientId!)}
   <div class="web-player-bar" id="webPlayerBar">
     <span class="wp-title" id="webPlayerTitle"></span>
     <iframe id="webPlayerFrame" scrolling="no" frameborder="no" allow="autoplay"></iframe>
+    <div class="vol-row">
+      <span title="Volume">🔊</span>
+      <input type="range" id="webVolumeSlider" min="0" max="100" value="80" oninput="setWebVolume(this.value)">
+    </div>
     <button class="wp-close" onclick="closeWebPlayer()" title="Fechar player">✕</button>
+  </div>
+
+  <div class="call-volume-bar" id="callVolumeBar">
+    <span class="cv-title" id="callVolumeTitle">🎶 Tocando na call</span>
+    <div class="vol-row">
+      <span title="Volume">🔊</span>
+      <input type="range" id="callVolumeSlider" min="0" max="100" value="100" oninput="setCallVolume(this.value)">
+    </div>
+    <button class="wp-close" onclick="document.getElementById('callVolumeBar').classList.remove('show')" title="Fechar">✕</button>
   </div>
 
   <div class="modal-overlay" id="playlistModal">
@@ -1211,7 +1304,7 @@ ${activitySdkBootstrap(clientId!)}
   <script>
     let playlists = [];
     let favorites = [];
-    let currentView = 'search';
+    let currentView = 'home';
     let currentPlaylistId = null;
     let pendingTrackForPlaylist = null;
 
@@ -1255,12 +1348,15 @@ ${activitySdkBootstrap(clientId!)}
       return JSON.parse(decodeURIComponent(el.getAttribute('data-track')));
     }
 
+    let currentCallGuildId = null;
+    let callVolumeTimeout = null;
+
     async function playTrack(evt) {
       const t = getTrackFromEl(evt);
 
       // Dentro do foguetinho, numa call de voz: toca de verdade no canal,
       // igual o /play do Discord. Fora disso (navegador normal, sem call),
-      // o som sai do próprio site — via o player embutido do SoundCloud.
+      // o som sai do próprio site — via o player embutido (SoundCloud ou YouTube).
       if (window.isDiscordActivity && window.discordChannelId && window.discordGuildId) {
         showToast('▶️ Chamando ' + t.title + '...');
         try {
@@ -1272,6 +1368,9 @@ ${activitySdkBootstrap(clientId!)}
           const data = await res.json();
           if (!res.ok) return showToast('❌ ' + (data.error || 'Erro ao tocar.'));
           showToast('🎶 Tocando na call: ' + data.title);
+          currentCallGuildId = window.discordGuildId;
+          document.getElementById('callVolumeTitle').textContent = '🎶 ' + data.title;
+          document.getElementById('callVolumeBar').classList.add('show');
         } catch (e) {
           showToast('❌ Erro de conexão ao tentar tocar.');
         }
@@ -1281,23 +1380,93 @@ ${activitySdkBootstrap(clientId!)}
       playInBrowser(t);
     }
 
+    // Volume da faixa tocando na call (0-100) — debounced pra não spammar a
+    // API a cada pixel arrastado no slider.
+    function setCallVolume(v) {
+      clearTimeout(callVolumeTimeout);
+      callVolumeTimeout = setTimeout(async () => {
+        if (!currentCallGuildId) return;
+        try {
+          await fetch('/api/activities/music/volume', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ guildId: currentCallGuildId, volume: Number(v) }),
+          });
+        } catch (e) { /* silencioso — não trava a UI por um volume que não salvou */ }
+      }, 200);
+    }
+
+    // ── Player web: SoundCloud ou YouTube incorporado, com controle de volume
+    // de verdade via a API JS de cada um (não dá pra controlar volume de um
+    // <iframe> comum sem a API do provedor). ──────────────────────────────
+    let webWidget = null;
+    let webWidgetType = null;
+
+    function ensureScApi(cb) {
+      if (window.SC && window.SC.Widget) return cb();
+      const s = document.createElement('script');
+      s.src = 'https://w.soundcloud.com/player/api.js';
+      s.onload = cb;
+      document.head.appendChild(s);
+    }
+    function ensureYtApi(cb) {
+      if (window.YT && window.YT.Player) return cb();
+      const prev = window.onYouTubeIframeAPIReady;
+      window.onYouTubeIframeAPIReady = () => { if (prev) prev(); cb(); };
+      if (document.getElementById('ytIframeApiScript')) return;
+      const s = document.createElement('script');
+      s.id = 'ytIframeApiScript';
+      s.src = 'https://www.youtube.com/iframe_api';
+      document.head.appendChild(s);
+    }
+    function extractYoutubeId(url) {
+      const m = url.match(/(?:youtu\\.be\\/|youtube\\.com\\/(?:watch\\?v=|embed\\/|shorts\\/))([\\w-]{11})/);
+      return m ? m[1] : null;
+    }
+
     function playInBrowser(t) {
       const bar = document.getElementById('webPlayerBar');
       const frame = document.getElementById('webPlayerFrame');
       const titleEl = document.getElementById('webPlayerTitle');
-      if (!/soundcloud\\.com/i.test(t.url)) {
-        showToast('🎧 Essa faixa só toca dentro de uma call do Discord (não é do SoundCloud).');
+      const isSoundcloud = /soundcloud\\.com/i.test(t.url);
+      const ytId = !isSoundcloud ? extractYoutubeId(t.url) : null;
+
+      if (!isSoundcloud && !ytId) {
+        showToast('🎧 Essa faixa só toca dentro de uma call do Discord (fonte não suportada no navegador).');
         return;
       }
-      frame.src = 'https://w.soundcloud.com/player/?url=' + encodeURIComponent(t.url) + '&auto_play=true&hide_related=true&show_comments=false&show_user=true&show_reposts=false&visual=false&color=%231DB954';
+
+      webWidget = null;
       titleEl.textContent = t.title + (t.author ? ' — ' + t.author : '');
       bar.classList.add('show');
+      const startVol = Number(document.getElementById('webVolumeSlider').value);
+
+      if (isSoundcloud) {
+        webWidgetType = 'soundcloud';
+        frame.src = 'https://w.soundcloud.com/player/?url=' + encodeURIComponent(t.url) + '&auto_play=true&hide_related=true&show_comments=false&show_user=true&show_reposts=false&visual=false&color=%231DB954';
+        ensureScApi(() => {
+          webWidget = SC.Widget(frame);
+          webWidget.bind(SC.Widget.Events.READY, () => webWidget.setVolume(startVol));
+        });
+      } else {
+        webWidgetType = 'youtube';
+        frame.src = 'https://www.youtube.com/embed/' + ytId + '?autoplay=1&enablejsapi=1&origin=' + encodeURIComponent(location.origin);
+        ensureYtApi(() => {
+          webWidget = new YT.Player('webPlayerFrame', { events: { onReady: () => webWidget.setVolume(startVol) } });
+        });
+      }
       showToast('🎶 Tocando no site: ' + t.title);
+    }
+
+    function setWebVolume(v) {
+      if (!webWidget || !webWidget.setVolume) return;
+      webWidget.setVolume(Number(v));
     }
 
     function closeWebPlayer() {
       document.getElementById('webPlayerBar').classList.remove('show');
       document.getElementById('webPlayerFrame').src = '';
+      webWidget = null;
+      webWidgetType = null;
     }
 
     async function toggleFavorite(evt) {
@@ -1422,16 +1591,103 @@ ${activitySdkBootstrap(clientId!)}
     function showView(view) {
       currentView = view;
       currentPlaylistId = null;
+      document.getElementById('navHome').classList.toggle('active', view === 'home');
       document.getElementById('navSearch').classList.toggle('active', view === 'search');
       document.getElementById('navFavorites').classList.toggle('active', view === 'favorites');
+      document.getElementById('sourceToggle').style.visibility = view === 'search' ? 'visible' : 'hidden';
       renderPlaylistSidebar();
-      if (view === 'search') {
+      if (view === 'home') {
+        renderHomeView();
+      } else if (view === 'search') {
         document.getElementById('content').innerHTML = document.getElementById('searchInput').value.trim()
           ? document.getElementById('content').innerHTML
           : '<div class="empty-hint">Digite algo na busca pra começar 🎧</div>';
       } else if (view === 'favorites') {
         renderFavoritesView();
       }
+    }
+
+    // ── Início: atalho pra importar playlist + visão geral das suas playlists
+    // e favoritas — em vez de cair numa busca vazia ao abrir a atividade.
+    function renderHomeView() {
+      const content = document.getElementById('content');
+      content.innerHTML = \`
+        <div class="home-hero">
+          <h2>🎧 E aí, bora ouvir algo?</h2>
+          <p>Cole o link de uma playlist do Spotify, YouTube, SoundCloud (ou até uma música só) pra importar tudo de uma vez pra uma playlist sua.</p>
+          <div class="import-row">
+            <input id="importUrlInput" type="text" placeholder="Cole aqui o link da playlist ou música...">
+            <button id="importBtn" onclick="importPlaylist()">📥 Importar</button>
+          </div>
+        </div>
+        <div class="home-section">
+          <h3>Suas playlists</h3>
+          <div class="pl-grid" id="homePlGrid"></div>
+        </div>
+        <div class="home-section">
+          <h3>💚 Favoritas recentes</h3>
+          <div id="homeFavList"></div>
+        </div>\`;
+      renderHomePlaylistGrid();
+      renderHomeFavorites();
+    }
+
+    function renderHomePlaylistGrid() {
+      const grid = document.getElementById('homePlGrid');
+      if (!grid) return;
+      if (!playlists.length) {
+        grid.innerHTML = '<div class="empty-hint" style="padding:10px 0;">Você ainda não tem playlists. Crie uma ao lado ou importe uma pronta ali em cima!</div>';
+        return;
+      }
+      grid.innerHTML = playlists.map(p => \`
+        <div class="pl-card" onclick="openPlaylist('\${p.id}')">
+          <div class="pl-card-icon">🎼</div>
+          <div class="pl-card-name">\${p.name}</div>
+          <div class="pl-card-count">\${p.tracks.length} música(s)</div>
+        </div>\`).join('');
+    }
+
+    function renderHomeFavorites() {
+      const el = document.getElementById('homeFavList');
+      if (!el) return;
+      if (!favorites.length) { el.innerHTML = '<div class="empty-hint" style="padding:10px 0;">Nenhuma favorita ainda.</div>'; return; }
+      el.innerHTML = favorites.slice(0, 5).map(f => trackRowHtml(f)).join('');
+    }
+
+    async function importPlaylist() {
+      const input = document.getElementById('importUrlInput');
+      const btn = document.getElementById('importBtn');
+      const url = input.value.trim();
+      if (!url) return showToast('❌ Cole um link primeiro.');
+      btn.disabled = true;
+      btn.textContent = '⏳ Importando...';
+      try {
+        const res = await fetch('/api/activities/music/playlists/import', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url }),
+        });
+        const data = await res.json();
+        if (!res.ok) { showToast('❌ ' + (data.error || 'Erro ao importar.')); return; }
+        showToast('✅ Importado! ' + data.imported + ' música(s) em "' + data.playlist.name + '"');
+        input.value = '';
+        await loadPlaylists();
+        if (currentView === 'home') renderHomePlaylistGrid();
+      } catch (e) {
+        showToast('❌ Erro de conexão ao importar.');
+      } finally {
+        btn.disabled = false;
+        btn.textContent = '📥 Importar';
+      }
+    }
+
+    // ── Fonte da busca: SoundCloud (padrão) ou YouTube — algumas faixas do
+    // SoundCloud só tocam em prévia dentro do player incorporado (restrição
+    // de gravadora), então trocar de fonte contorna isso na prática.
+    let currentSource = 'soundcloud';
+    function setSource(src) {
+      currentSource = src;
+      document.querySelectorAll('#sourceToggle button').forEach(b => b.classList.toggle('active', b.getAttribute('data-src') === src));
+      const q = document.getElementById('searchInput').value.trim();
+      if (q) doSearch(q);
     }
 
     function renderFavoritesView() {
@@ -1447,8 +1703,10 @@ ${activitySdkBootstrap(clientId!)}
     function openPlaylist(id, silent) {
       currentView = 'playlist';
       currentPlaylistId = id;
+      document.getElementById('navHome').classList.remove('active');
       document.getElementById('navSearch').classList.remove('active');
       document.getElementById('navFavorites').classList.remove('active');
+      document.getElementById('sourceToggle').style.visibility = 'hidden';
       renderPlaylistSidebar();
       const playlist = playlists.find(p => p.id === id);
       const content = document.getElementById('content');
@@ -1475,13 +1733,15 @@ ${activitySdkBootstrap(clientId!)}
     async function doSearch(q) {
       currentView = 'search';
       currentPlaylistId = null;
+      document.getElementById('navHome').classList.remove('active');
       document.getElementById('navSearch').classList.add('active');
       document.getElementById('navFavorites').classList.remove('active');
+      document.getElementById('sourceToggle').style.visibility = 'visible';
       renderPlaylistSidebar();
       const content = document.getElementById('content');
       content.innerHTML = '<div class="loading">Buscando "' + q + '"...</div>';
       try {
-        const res = await fetch('/api/activities/music/search?q=' + encodeURIComponent(q));
+        const res = await fetch('/api/activities/music/search?q=' + encodeURIComponent(q) + '&source=' + currentSource);
         const data = await res.json();
         const tracks = data.tracks || [];
         if (tracks.length === 0) {
@@ -1497,6 +1757,7 @@ ${activitySdkBootstrap(clientId!)}
     (async () => {
       await window.activityReady;
       await Promise.all([loadFavorites(), loadPlaylists()]);
+      showView('home');
     })();
   </script>
 </body>

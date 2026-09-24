@@ -1047,6 +1047,8 @@ model FutPartidaPlayer {
   id             String   @id @default(cuid())
   partidaId      String
   discordId      String? // opcional — jogador sem conta vinculada (offline)
+  clanMemberId   String? // se veio do elenco do clã (convocado), liga aqui — é
+                         // o que permite estatística acumulada mesmo sem discordId
   displayName    String
   position       String?
   team           String? // 'A' | 'B' | null
@@ -1063,6 +1065,7 @@ model FutPartidaPlayer {
 
   @@index([partidaId])
   @@index([discordId])
+  @@index([clanMemberId])
   @@map("fut_partida_players")
 }
 
@@ -1092,7 +1095,13 @@ model FutMatchEvent {
 model FutClanPlayerStats {
   id             String   @id @default(cuid())
   clanId         String
+  // Pra gente com conta: o discordId de verdade. Pra gente do elenco SEM
+  // conta vinculada (offline): "offline:<clanMemberId>" — uma chave estável
+  // que não é um Discord ID de verdade, mas deixa a estatística acumular
+  // entre partidas do mesmo jeito. displayName cobre a exibição nesse caso
+  // (não dá pra buscar o nome de alguém sem conta via API do Discord).
   discordId      String
+  displayName    String?
   mode           String   // 'futsal' | 'campo'
   totalPartidas  Int      @default(0)
   vitorias       Int      @default(0)

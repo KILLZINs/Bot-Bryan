@@ -132,6 +132,16 @@ export default {
              * Não use volume 99 para tentar "forçar" o FFmpeg.
              */
             volume: 100,
+
+            // Quando o stream da fonte escolhida falha (ex: SoundCloud às
+            // vezes falha silenciosamente ao resolver o link de áudio), o
+            // discord-player por padrão cai num "fallback" que busca outro
+            // extrator (agora que temos o do YouTube) por "título + autor" e
+            // toca o PRIMEIRO resultado — o que pode ser uma música
+            // completamente diferente pra termos de busca comuns/genéricos.
+            // Preferimos um erro claro (o listener player.events 'playerError'
+            // já avisa no canal) a tocar a coisa errada sem avisar.
+            disableFallbackStream: true,
           },
         },
       );

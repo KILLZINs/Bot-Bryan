@@ -24,7 +24,6 @@ import {
 
 import { Player } from 'discord-player';
 import { DefaultExtractors } from '@discord-player/extractor';
-import { YoutubeExtractor } from 'discord-player-youtubei';
 import ffmpegPath from 'ffmpeg-static';
 
 import { readdirSync } from 'fs';
@@ -61,6 +60,19 @@ const player = new Player(client, {
   skipFFmpeg: false,
   connectionTimeout: 120000,
 });
+
+// O pacote `discord-player-youtubei` carrega por baixo dos panos o
+// `youtubei.js`, que é um pacote 100% ESM ("type": "module"). Se
+// importarmos ele do jeito normal (`import ... from 'discord-player-youtubei'`
+// no topo do arquivo), o TypeScript compila isso pra um `require()` — porque
+// este projeto inteiro compila pra CommonJS — e um `require()` de um módulo
+// ESM quebra o processo na hora (ERR_REQUIRE_ESM), derrubando o bot inteiro
+// assim que o arquivo era carregado. A saída é forçar um `import()` de
+// verdade em tempo de execução (que sabe carregar ESM a partir de código
+// CommonJS), escapando da transformação do TypeScript com um `new Function`
+// — truque padrão pra esse tipo de dependência ESM-only dentro de um projeto
+// CommonJS.
+const dynamicImport = new Function('specifier', 'return import(specifier)') as (specifier: string) => Promise<any>;
 
 player.events.on('error', (queue, error) => {
   console.error('[ERRO NA FILA]', error);
@@ -694,7 +706,9 @@ async function start() {
     // próprio) não têm como ser tocadas de verdade, porque o Spotify não libera
     // o áudio bruto pra terceiros. O discord-player-youtubei preenche essa
     // lacuna: registra o YouTube como fonte de busca E como "ponte" (bridge)
-    // automática pro Spotify tocar de verdade.
+    // automática pro Spotify tocar de verdade. Carregado via import()
+    // dinâmico (dynamicImport) — ver comentário acima de onde ele é definido.
+    const { YoutubeExtractor } = await dynamicImport('discord-player-youtubei');
     await player.extractors.register(YoutubeExtractor, {});
     await player.extractors.loadMulti(DefaultExtractors);
     console.log('🎧 Extratores de áudio carregados com sucesso!');

@@ -42,6 +42,7 @@ import {
   undoLastEvent as undoFutLastEvent, reopenPartida as reopenFutPartida,
   listPartidaGoals as listFutPartidaGoals, saveGoalAnimation as saveFutGoalAnimation, getGoalAnimation as getFutGoalAnimation, listMatchEvents as listFutMatchEvents,
   getClanOverview as getFutClanOverview, listFullClanStats as listFullFutClanStats,
+  addClanMemberToPartida as addClanMemberToFutPartida, listAvailableClanMembers as listAvailableFutClanMembers,
   type FutEventType, type FutMode, type FutTeam, type FutResultado, type FutRsvpStatus, type FutVisibility,
 } from '../fut/services/pelada';
 
@@ -1515,6 +1516,18 @@ ${activitySdkBootstrap(clientId!)}
     return user ? user.displayAvatarURL({ size: 128 }) : null;
   }
 
+  // FutClanPlayerStats.discordId pode ser um Discord ID de verdade, ou uma
+  // chave sintética "offline:<clanMemberId>" pra gente do elenco sem conta
+  // vinculada (ver addClanMemberToPartida/finishPartida em pelada.ts). Pra
+  // essas, não tem usuário do Discord pra buscar — usa o nome salvo direto.
+  async function resolveStatIdentity(discordId: string, storedDisplayName?: string | null) {
+    if (discordId.startsWith('offline:')) {
+      return { displayName: storedDisplayName || 'Jogador do elenco', avatarUrl: null as string | null };
+    }
+    const user = await discordClient.users.fetch(discordId).catch(() => null);
+    return { displayName: user?.username || storedDisplayName || discordId, avatarUrl: user ? user.displayAvatarURL({ size: 64 }) : null };
+  }
+
   async function serializeFutClan(clan: NonNullable<Awaited<ReturnType<typeof getClanById>>>, viewerId?: string) {
     const members = await Promise.all(clan.members.map(async (m) => ({
       id: m.id,
@@ -1825,6 +1838,32 @@ ${activitySdkBootstrap(clientId!)}
     } catch (err) { handleFutError(res, err); }
   });
 
+  // Quem do elenco ainda não está na partida — pra montar o seletor de
+  // "convocar do elenco" (em vez de precisar digitar apelido de novo ou a
+  // pessoa entrar sozinha).
+  app.get('/api/activities/fut/clans/:id/partidas/:partidaId/elenco-disponivel', requirePlayerAuth, async (req, res) => {
+    try {
+      const partida = await getPartidaById(req.params.partidaId);
+      if (!partida || partida.clanId !== req.params.id) return res.status(404).json({ error: 'Partida não encontrada nesse clã.' });
+      const disponiveis = await listAvailableFutClanMembers(partida.id);
+      res.json({ disponiveis });
+    } catch (err) { handleFutError(res, err); }
+  });
+
+  // Convoca alguém do elenco direto pra dentro da partida — mantém o vínculo
+  // com o elenco (clanMemberId) pra estatística contar certinho mesmo pra
+  // quem não tem conta do Discord vinculada.
+  app.post('/api/activities/fut/clans/:id/partidas/:partidaId/convocar', requirePlayerAuth, async (req, res) => {
+    try {
+      const partida = await getPartidaById(req.params.partidaId);
+      if (!partida || partida.clanId !== req.params.id) return res.status(404).json({ error: 'Partida não encontrada nesse clã.' });
+      const userId = req.cookies!.player_userid as string;
+      const memberId = typeof req.body?.memberId === 'string' ? req.body.memberId : '';
+      await addClanMemberToFutPartida(partida.id, userId, memberId);
+      res.json({ partida: await serializeFutPartida((await getPartidaById(partida.id))!) });
+    } catch (err) { handleFutError(res, err); }
+  });
+
   // Detalhe completo de UMA partida específica (aberta, em andamento ou já
   // finalizada) — "acessar as estatísticas da partida após ela terminar".
   app.get('/api/activities/fut/clans/:id/partidas/:partidaId', requirePlayerAuth, async (req, res) => {
@@ -1902,10 +1941,7 @@ ${activitySdkBootstrap(clientId!)}
   app.get('/api/activities/fut/clans/:id/ranking', requirePlayerAuth, async (req, res) => {
     const mode: FutMode = req.query.mode === 'campo' ? 'campo' : 'futsal';
     const ranking = await getFutRanking(req.params.id, mode, 10);
-    const withNames = await Promise.all(ranking.map(async (p) => {
-      const user = await discordClient.users.fetch(p.discordId).catch(() => null);
-      return { ...p, displayName: user?.username || p.discordId, avatarUrl: user ? user.displayAvatarURL({ size: 64 }) : null };
-    }));
+    const withNames = await Promise.all(ranking.map(async (p) => ({ ...p, ...(await resolveStatIdentity(p.discordId, p.displayName)) })));
     res.json({ ranking: withNames });
   });
 
@@ -1915,14 +1951,10 @@ ${activitySdkBootstrap(clientId!)}
   app.get('/api/activities/fut/clans/:id/overview', requirePlayerAuth, async (req, res) => {
     const mode: FutMode = req.query.mode === 'campo' ? 'campo' : 'futsal';
     const [overview, elenco] = await Promise.all([getFutClanOverview(req.params.id, mode), listFullFutClanStats(req.params.id, mode)]);
-    const elencoComNomes = await Promise.all(elenco.map(async (p) => {
-      const user = await discordClient.users.fetch(p.discordId).catch(() => null);
-      return { ...p, displayName: user?.username || p.discordId, avatarUrl: user ? user.displayAvatarURL({ size: 64 }) : null };
-    }));
+    const elencoComNomes = await Promise.all(elenco.map(async (p) => ({ ...p, ...(await resolveStatIdentity(p.discordId, p.displayName)) })));
     const withUser = async (stat: typeof overview.artilheiro) => {
       if (!stat) return null;
-      const user = await discordClient.users.fetch(stat.discordId).catch(() => null);
-      return { ...stat, displayName: user?.username || stat.discordId, avatarUrl: user ? user.displayAvatarURL({ size: 64 }) : null };
+      return { ...stat, ...(await resolveStatIdentity(stat.discordId, stat.displayName)) };
     };
     const [artilheiro, garcom, melhorNota] = await Promise.all([withUser(overview.artilheiro), withUser(overview.garcom), withUser(overview.melhorNota)]);
     res.json({ overview: { ...overview, artilheiro, garcom, melhorNota }, elenco: elencoComNomes });
@@ -2439,6 +2471,10 @@ ${activitySdkBootstrap(clientId!)}
         html += \`<div class="row"><input id="offlineApelido" type="text" placeholder="Apelido (jogador sem Discord)"><input id="offlinePosicao" type="text" placeholder="Posição (opcional)" style="width:140px;"><button class="btn secondary" onclick="adicionarOffline()">Adicionar</button></div>\`;
       }
 
+      if (souCriador && partida.status !== 'finalizada') {
+        html += \`<div id="convocarElencoBox" style="margin-top:8px;"></div>\`;
+      }
+
       if (partida.status === 'em_andamento') {
         html += \`
           <div class="row">
@@ -2476,6 +2512,29 @@ ${activitySdkBootstrap(clientId!)}
 
       html += '</div>';
       panel.innerHTML = html;
+      if (souCriador && partida.status !== 'finalizada') loadConvocarElenco(partida);
+    }
+
+    async function loadConvocarElenco(partida) {
+      const box = document.getElementById('convocarElencoBox');
+      if (!box) return;
+      box.innerHTML = '<div class="empty-hint">Carregando elenco...</div>';
+      try {
+        const data = await api('/api/activities/fut/clans/' + currentClan.id + '/partidas/' + partida.id + '/elenco-disponivel');
+        if (!data.disponiveis.length) { box.innerHTML = '<div class="empty-hint" style="padding:6px 0;">Todo mundo do elenco já está na partida.</div>'; return; }
+        box.innerHTML = \`<p style="color:var(--text-muted);font-size:0.82rem;margin:6px 0 4px;">Convocar do elenco:</p><div class="unassigned">\${data.disponiveis.map(m => \`
+          <span class="chip">\${m.displayName}
+            <button onclick="convocarMembro('\${partida.id}','\${m.id}')" title="Adicionar essa pessoa na partida">+ Adicionar</button>
+          </span>\`).join('')}</div>\`;
+      } catch (e) { box.innerHTML = '<div class="empty-hint">Erro ao carregar elenco.</div>'; }
+    }
+
+    async function convocarMembro(partidaId, memberId) {
+      try {
+        const data = await api('/api/activities/fut/clans/' + currentClan.id + '/partidas/' + partidaId + '/convocar', { method: 'POST', body: JSON.stringify({ memberId }) });
+        showToast('✅ Jogador convocado!');
+        renderPartida(data.partida);
+      } catch (e) { showToast('❌ ' + e.message); }
     }
 
     async function verVideosGol() {

@@ -15,7 +15,8 @@ export type FeatureKey =
   | 'featSocial'
   | 'featEconomy'
   | 'featMod'
-  | 'featAnnouncements';
+  | 'featAnnouncements'
+  | 'featFut';
 
 export interface FeatureMeta {
   label: string;
@@ -35,6 +36,7 @@ export const FEATURE_META: Record<FeatureKey, FeatureMeta> = {
   featEconomy:       { label: 'Economia (moedas)',     emoji: '🪙', desc: 'Sistema de moedas, loja e transferências' },
   featMod:           { label: 'Auto-Moderação',        emoji: '🔨', desc: 'Anti-spam, anti-links e moderação automática' },
   featAnnouncements: { label: 'Anúncios / Eventos',    emoji: '📢', desc: 'Sistema de anúncios e eventos do servidor' },
+  featFut:           { label: 'Rachão / Fut',          emoji: '⚽', desc: 'Clãs, partidas, chamadas e simulação do sistema de futebol' },
 };
 
 export const FEATURE_KEYS = Object.keys(FEATURE_META) as FeatureKey[];

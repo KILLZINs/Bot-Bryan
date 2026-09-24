@@ -900,16 +900,37 @@ export function startDashboard(discordClient: Client) {
     };
   }
 
+  // Só trata como "link de faixa/playlist" quando for um link de verdade de
+  // uma dessas plataformas E apontando pra algo específico (vídeo, track,
+  // playlist) — não só o domínio sozinho (ex: "https://youtube.com/" digitado
+  // sem nada na frente). Sem isso, qualquer texto começando com "http" caía
+  // numa busca "AUTO" que ignorava a fonte escolhida no toggle e dava
+  // resultado aleatório.
+  function isRealMediaLink(q: string): boolean {
+    if (!/^https?:\/\//i.test(q)) return false;
+    try {
+      const u = new URL(q);
+      const host = u.hostname.replace(/^www\./i, '').toLowerCase();
+      const knownHosts = ['youtube.com', 'youtu.be', 'open.spotify.com', 'soundcloud.com', 'music.apple.com', 'vimeo.com'];
+      if (!knownHosts.some((h) => host === h || host.endsWith('.' + h))) return false;
+      const hasPath = !!u.pathname && u.pathname !== '/' && u.pathname.length > 1;
+      const hasQuery = !!u.search && u.search.length > 1;
+      return hasPath || hasQuery;
+    } catch {
+      return false;
+    }
+  }
+
   app.get('/api/activities/music/search', requirePlayerAuth, async (req, res) => {
     const q = String(req.query.q || '').trim();
     if (!q) return res.json({ tracks: [] });
     try {
       const player = useMainPlayer();
-      const isLink = /^https?:\/\//i.test(q);
+      const isLink = isRealMediaLink(q);
       // Fonte escolhida na busca (SoundCloud continua o padrão), mas dá pra
-      // trocar pra YouTube — algumas faixas do SoundCloud são "só prévia" no
-      // player incorporado (trava por causa da gravadora/direitos autorais),
-      // então ter uma fonte alternativa resolve isso na prática.
+      // trocar pra YouTube ou Spotify — algumas faixas do SoundCloud são "só
+      // prévia" no player incorporado (trava por causa da gravadora/direitos
+      // autorais), então ter uma fonte alternativa resolve isso na prática.
       const source = String(req.query.source || 'soundcloud').toLowerCase();
       const engineBySource: Record<string, any> = { soundcloud: QueryType.SOUNDCLOUD_SEARCH, youtube: QueryType.YOUTUBE_SEARCH, spotify: QueryType.SPOTIFY_SEARCH };
       const result = await player.search(q, {

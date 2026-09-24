@@ -117,7 +117,8 @@ export default {
               `Leveling: ${formatBool(c.featLeveling)} | RPG: ${formatBool(c.featRpg)} | Tickets: ${formatBool(c.featTickets)}\n` +
               `Sorteios: ${formatBool(c.featGiveaways)} | Enquetes: ${formatBool(c.featPolls)} | Auto-Cargos: ${formatBool(c.featSelfRole)}\n` +
               `Missões: ${formatBool(c.featMissions)} | Social: ${formatBool(c.featSocial)} | Economia: ${formatBool(c.featEconomy)}\n` +
-              `Moderação: ${formatBool(c.featMod)} | Anúncios: ${formatBool(c.featAnnouncements)} | Música: ${formatBool(c.featMusic)}`,
+              `Moderação: ${formatBool(c.featMod)} | Anúncios: ${formatBool(c.featAnnouncements)} | Música: ${formatBool(c.featMusic)}\n` +
+              `Rachão / Fut: ${formatBool(c.featFut)}`,
             inline: false,
           }
         )
@@ -163,7 +164,7 @@ export default {
               .setValue('cat_security'),
             new StringSelectMenuOptionBuilder()
               .setLabel('Módulos & Sistemas')
-              .setDescription('Ligar ou desligar os 12 sistemas funcionais do bot')
+              .setDescription('Ligar ou desligar os 13 sistemas funcionais do bot')
               .setEmoji('🧩')
               .setValue('cat_features')
           )
@@ -379,7 +380,8 @@ export default {
                   { label: `Economia: ${cfg.featEconomy ? 'Ativo' : 'Desativado'}`, value: 'featEconomy', emoji: '💰' },
                   { label: `Moderação: ${cfg.featMod ? 'Ativo' : 'Desativado'}`, value: 'featMod', emoji: '🔨' },
                   { label: `Anúncios: ${cfg.featAnnouncements ? 'Ativo' : 'Desativado'}`, value: 'featAnnouncements', emoji: '📢' },
-                  { label: `Música: ${cfg.featMusic ? 'Ativo' : 'Desativado'}`, value: 'featMusic', emoji: '🎵' }
+                  { label: `Música: ${cfg.featMusic ? 'Ativo' : 'Desativado'}`, value: 'featMusic', emoji: '🎵' },
+                  { label: `Rachão / Fut: ${cfg.featFut ? 'Ativo' : 'Desativado'}`, value: 'featFut', emoji: '⚽' }
                 )
             );
 

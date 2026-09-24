@@ -27,7 +27,10 @@ const FEATURE_MAP: Record<string, string> = {
   // 🛡️ Administração
   'ticket': 'featTickets',
   'mod': 'featMod', 'moderacao': 'featMod', 'logs': 'featMod',
-  'anuncio': 'featAnnouncements', 'evento': 'featAnnouncements'
+  'anuncio': 'featAnnouncements', 'evento': 'featAnnouncements',
+
+  // ⚽ Rachão / Fut
+  'fut': 'featFut',
 };
 
 export default {

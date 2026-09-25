@@ -1845,6 +1845,8 @@ ${activitySdkBootstrap(clientId!)}
     const players = await Promise.all(partida.players.map(async (p) => ({
       id: p.id, discordId: p.discordId, displayName: p.displayName, position: p.position, team: p.team,
       goals: p.goals, assists: p.assists, defesas: p.defesas, golsConcedidos: p.golsConcedidos, errosGraves: p.errosGraves,
+      desarmes: p.desarmes, boasJogadas: p.boasJogadas, bloqueios: p.bloqueios,
+      falhasDefensivas: p.falhasDefensivas, falhasOfensivas: p.falhasOfensivas,
       nota: p.nota, avatarUrl: await getAvatarUrl(p.discordId),
     })));
     return {
@@ -2106,7 +2108,8 @@ ${activitySdkBootstrap(clientId!)}
       const partida = await currentFutPartidaOr400(req, res);
       if (!partida) return;
       const type = req.body?.type as FutEventType;
-      if (!['gol', 'defesa', 'concedido', 'erro'].includes(type)) return res.status(400).json({ error: 'Tipo de evento inválido.' });
+      const validTypes: FutEventType[] = ['gol', 'defesa', 'concedido', 'erro', 'desarme', 'boa_jogada', 'bloqueio', 'falha_defensiva', 'falha_ofensiva'];
+      if (!validTypes.includes(type)) return res.status(400).json({ error: 'Tipo de evento inválido.' });
 
       const ref = { discordId: req.body?.discordId || undefined, apelido: req.body?.apelido || undefined };
       const assistRef = (req.body?.assistDiscordId || req.body?.assistApelido)
@@ -2811,6 +2814,19 @@ ${activitySdkBootstrap(clientId!)}
       return '<span style="display:inline-block;min-width:32px;padding:2px 6px;border-radius:6px;background:' + bg + ';color:' + fg + ';font-weight:700;font-size:0.78rem;text-align:center;">' + n.toFixed(1) + '</span>';
     }
 
+    // Notas extras (desarme/boa jogada/bloqueio/falhas) só aparecem quando
+    // tem pelo menos 1 — senão a linha do jogador fica poluída com zeros de
+    // lances que não aconteceram na maioria das partidas.
+    function extraNotasHtml(p) {
+      const partes = [];
+      if (p.desarmes) partes.push('🛡️' + p.desarmes);
+      if (p.boasJogadas) partes.push('✨' + p.boasJogadas);
+      if (p.bloqueios) partes.push('🧱' + p.bloqueios);
+      if (p.falhasDefensivas) partes.push('🔸' + p.falhasDefensivas);
+      if (p.falhasOfensivas) partes.push('🔹' + p.falhasOfensivas);
+      return partes.length ? ' ' + partes.join(' ') : '';
+    }
+
     function setMode(mode) {
       currentMode = mode;
       if (currentTab === 'perfil') loadPerfil();
@@ -2858,7 +2874,7 @@ ${activitySdkBootstrap(clientId!)}
 
       function playerRowHtml(p) {
         const notaTxt = (partida.status === 'finalizada' && p.nota != null) ? ' ' + notaBadgeHtml(p.nota) : '';
-        return \`<div class="player-row"><span>\${avatarHtml(p.avatarUrl, p.displayName, 22)}\${p.displayName}\${p.position ? ' <small style="color:var(--text-muted);">(' + p.position + ')</small>' : ''}</span><span class="stats">⚽\${p.goals} 🅰️\${p.assists} 🧤\${p.defesas} 🥅\${p.golsConcedidos} ⚠️\${p.errosGraves}\${notaTxt}</span></div>\`;
+        return \`<div class="player-row"><span>\${avatarHtml(p.avatarUrl, p.displayName, 22)}\${p.displayName}\${p.position ? ' <small style="color:var(--text-muted);">(' + p.position + ')</small>' : ''}</span><span class="stats">⚽\${p.goals} 🅰️\${p.assists} 🧤\${p.defesas} 🥅\${p.golsConcedidos} ⚠️\${p.errosGraves}\${extraNotasHtml(p)}\${notaTxt}</span></div>\`;
       }
 
       let html = \`
@@ -2902,7 +2918,14 @@ ${activitySdkBootstrap(clientId!)}
             <button class="btn" onclick="registrarEvento('gol')">⚽ Gol</button>
             <button class="btn secondary" onclick="registrarEvento('defesa')">🧤 Defesa</button>
             <button class="btn secondary" onclick="registrarEvento('concedido')">🥅 Concedido</button>
-            <button class="btn secondary" onclick="registrarEvento('erro')">⚠️ Erro grave</button>
+            <button class="btn secondary" onclick="registrarEvento('erro')" title="CAGADA MASTER — pesa mais na nota">⚠️ Erro grave</button>
+          </div>
+          <div class="row">
+            <button class="btn secondary" onclick="registrarEvento('desarme')">🛡️ Desarme</button>
+            <button class="btn secondary" onclick="registrarEvento('boa_jogada')">✨ Boa jogada</button>
+            <button class="btn secondary" onclick="registrarEvento('bloqueio')">🧱 Bloqueio</button>
+            <button class="btn secondary" onclick="registrarEvento('falha_defensiva')" title="Pesa menos que erro grave">🔸 Falha defensiva</button>
+            <button class="btn secondary" onclick="registrarEvento('falha_ofensiva')" title="Pesa menos que erro grave">🔹 Falha ofensiva</button>
           </div>
           <div class="row">
             <button class="btn secondary" onclick="desfazerEvento()" title="Remove o último evento registrado, em caso de engano">↩️ Desfazer último evento</button>
@@ -2966,6 +2989,16 @@ ${activitySdkBootstrap(clientId!)}
 
     async function refreshPartida() {
       if (!currentClan) return;
+      // Enquanto a pessoa está com o foco em algo dentro do painel (um
+      // <select> de jogador aberto, um campo de texto sendo preenchido), o
+      // polling automático NÃO reconstrói a tela — senão o dropdown fecha ou
+      // o campo é resetado no meio da seleção/digitação, dificultando clicar
+      // nas coisas. Só re-renderiza quando o foco está fora do painel; a
+      // atualização mais recente aparece assim que a pessoa terminar e sair
+      // de lá (ou no próximo ciclo de 4s).
+      const panel = document.getElementById('panelPelada');
+      const active = document.activeElement;
+      if (panel && active && active !== document.body && panel.contains(active)) return;
       try {
         const data = await api('/api/activities/fut/clans/' + currentClan.id + '/partida');
         renderPartida(data.partida);
@@ -3097,11 +3130,14 @@ ${activitySdkBootstrap(clientId!)}
 
         function rowHtml(p) {
           const notaTxt = p.nota != null ? ' ' + notaBadgeHtml(p.nota) : '';
-          return \`<div class="player-row"><span>\${avatarHtml(p.avatarUrl, p.displayName, 22)}\${p.displayName}</span><span class="stats">⚽\${p.goals} 🅰️\${p.assists} 🧤\${p.defesas} 🥅\${p.golsConcedidos} ⚠️\${p.errosGraves}\${notaTxt}</span></div>\`;
+          return \`<div class="player-row"><span>\${avatarHtml(p.avatarUrl, p.displayName, 22)}\${p.displayName}</span><span class="stats">⚽\${p.goals} 🅰️\${p.assists} 🧤\${p.defesas} 🥅\${p.golsConcedidos} ⚠️\${p.errosGraves}\${extraNotasHtml(p)}\${notaTxt}</span></div>\`;
         }
 
         const golEvents = data.events.filter(e => e.type === 'gol');
-        const eventIcon = { gol: '⚽', assistencia: '🅰️', defesa: '🧤', concedido: '🥅', erro: '⚠️' };
+        const eventIcon = {
+          gol: '⚽', assistencia: '🅰️', defesa: '🧤', concedido: '🥅', erro: '⚠️',
+          desarme: '🛡️', boa_jogada: '✨', bloqueio: '🧱', falha_defensiva: '🔸', falha_ofensiva: '🔹',
+        };
         const eventosHtml = data.events.length ? data.events.map(e => {
           const animBtn = e.type === 'gol' ? '<button class="btn secondary" onclick="abrirAnimacaoGol(\\'' + e.id + '\\')">' + (e.hasAnimation ? '🎬 Ver animação' : '🎬 Montar animação') + '</button>' : '';
           const videoLink = e.videoUrl ? ' <a href="' + e.videoUrl + '" target="_blank" rel="noopener">vídeo</a>' : '';
@@ -3349,6 +3385,11 @@ ${activitySdkBootstrap(clientId!)}
               <tr><td>Defesas</td><td style="text-align:right;">\${p.defesas}</td></tr>
               <tr><td>Gols Concedidos</td><td style="text-align:right;">\${p.golsConcedidos}</td></tr>
               <tr><td>Erros Graves</td><td style="text-align:right;">\${p.errosGraves}</td></tr>
+              <tr><td>Desarmes</td><td style="text-align:right;">\${p.desarmes}</td></tr>
+              <tr><td>Boas Jogadas</td><td style="text-align:right;">\${p.boasJogadas}</td></tr>
+              <tr><td>Bloqueios</td><td style="text-align:right;">\${p.bloqueios}</td></tr>
+              <tr><td>Falhas Defensivas</td><td style="text-align:right;">\${p.falhasDefensivas}</td></tr>
+              <tr><td>Falhas Ofensivas</td><td style="text-align:right;">\${p.falhasOfensivas}</td></tr>
             </table>
           </div>\`;
       } catch (e) { panel.innerHTML = modeToggleHtml() + '<div class="card"><div class="empty-hint">❌ ' + e.message + '</div></div>'; }
@@ -3390,6 +3431,11 @@ ${activitySdkBootstrap(clientId!)}
               <tr><td>Defesas do elenco</td><td style="text-align:right;">\${o.totalDefesas}</td></tr>
               <tr><td>Gols concedidos</td><td style="text-align:right;">\${o.totalConcedidos}</td></tr>
               <tr><td>Erros graves</td><td style="text-align:right;">\${o.totalErros}</td></tr>
+              <tr><td>Desarmes</td><td style="text-align:right;">\${o.totalDesarmes}</td></tr>
+              <tr><td>Boas jogadas</td><td style="text-align:right;">\${o.totalBoasJogadas}</td></tr>
+              <tr><td>Bloqueios</td><td style="text-align:right;">\${o.totalBloqueios}</td></tr>
+              <tr><td>Falhas defensivas</td><td style="text-align:right;">\${o.totalFalhasDefensivas}</td></tr>
+              <tr><td>Falhas ofensivas</td><td style="text-align:right;">\${o.totalFalhasOfensivas}</td></tr>
             </table>\`;
         if (o.artilheiro) html += \`<p style="margin-top:10px;">👑 <strong>Artilheiro:</strong> \${avatarHtml(o.artilheiro.avatarUrl, o.artilheiro.displayName, 20)}\${o.artilheiro.displayName} — \${o.artilheiro.goals} gols</p>\`;
         if (o.garcom) html += \`<p>🎯 <strong>Garçom:</strong> \${avatarHtml(o.garcom.avatarUrl, o.garcom.displayName, 20)}\${o.garcom.displayName} — \${o.garcom.assists} assists</p>\`;

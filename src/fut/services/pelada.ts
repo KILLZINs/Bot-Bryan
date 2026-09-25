@@ -11,7 +11,9 @@
 import { prisma } from '../../database/client';
 
 export type FutMode = 'futsal' | 'campo';
-export type FutEventType = 'gol' | 'assistencia' | 'defesa' | 'concedido' | 'erro';
+export type FutEventType =
+  | 'gol' | 'assistencia' | 'defesa' | 'concedido' | 'erro'
+  | 'desarme' | 'boa_jogada' | 'bloqueio' | 'falha_defensiva' | 'falha_ofensiva';
 export type FutTeam = 'A' | 'B';
 export type FutResultado = 'vitoria_a' | 'vitoria_b' | 'empate';
 export type FutVisibility = 'publico' | 'privado';
@@ -24,6 +26,13 @@ const XP_POR_ASSIST = 8;
 const XP_POR_DEFESA = 5;
 const XP_POR_ERRO = -3;
 const XP_BONUS_VITORIA = 20;
+const XP_POR_DESARME = 4;
+const XP_POR_BOA_JOGADA = 3;
+const XP_POR_BLOQUEIO = 4;
+// Falhas (defensiva/ofensiva) rendem menos XP negativo que um erro grave —
+// erro grave é tipo "CAGADA MASTER", uma falha é só um deslize.
+const XP_POR_FALHA_DEFENSIVA = -1;
+const XP_POR_FALHA_OFENSIVA = -1;
 
 // Limite de clãs simultâneos por servidor — evita clã abandonado acumulando
 // e não deixa a lista virar bagunça. Deletar um clã libera o slot.
@@ -483,6 +492,21 @@ export async function recordEvent(partidaId: string, playerRef: { discordId?: st
     case 'erro':
       await prisma.futPartidaPlayer.update({ where: { id: player.id }, data: { errosGraves: { increment: 1 } } });
       break;
+    case 'desarme':
+      await prisma.futPartidaPlayer.update({ where: { id: player.id }, data: { desarmes: { increment: 1 } } });
+      break;
+    case 'boa_jogada':
+      await prisma.futPartidaPlayer.update({ where: { id: player.id }, data: { boasJogadas: { increment: 1 } } });
+      break;
+    case 'bloqueio':
+      await prisma.futPartidaPlayer.update({ where: { id: player.id }, data: { bloqueios: { increment: 1 } } });
+      break;
+    case 'falha_defensiva':
+      await prisma.futPartidaPlayer.update({ where: { id: player.id }, data: { falhasDefensivas: { increment: 1 } } });
+      break;
+    case 'falha_ofensiva':
+      await prisma.futPartidaPlayer.update({ where: { id: player.id }, data: { falhasOfensivas: { increment: 1 } } });
+      break;
   }
   const event = await prisma.futMatchEvent.create({ data: { partidaId, playerId: player.id, type, videoUrl: cleanVideoUrl } });
 
@@ -610,6 +634,21 @@ async function revertEventEffect(playerId: string, type: FutEventType) {
     case 'erro':
       await prisma.futPartidaPlayer.update({ where: { id: playerId }, data: { errosGraves: { decrement: 1 } } });
       break;
+    case 'desarme':
+      await prisma.futPartidaPlayer.update({ where: { id: playerId }, data: { desarmes: { decrement: 1 } } });
+      break;
+    case 'boa_jogada':
+      await prisma.futPartidaPlayer.update({ where: { id: playerId }, data: { boasJogadas: { decrement: 1 } } });
+      break;
+    case 'bloqueio':
+      await prisma.futPartidaPlayer.update({ where: { id: playerId }, data: { bloqueios: { decrement: 1 } } });
+      break;
+    case 'falha_defensiva':
+      await prisma.futPartidaPlayer.update({ where: { id: playerId }, data: { falhasDefensivas: { decrement: 1 } } });
+      break;
+    case 'falha_ofensiva':
+      await prisma.futPartidaPlayer.update({ where: { id: playerId }, data: { falhasOfensivas: { decrement: 1 } } });
+      break;
   }
 }
 
@@ -650,13 +689,23 @@ export async function undoLastEvent(partidaId: string, requesterId: string) {
 // desce conforme os números da partida — parecido com o que os sites de
 // futebol fazem, sem ser exatamente igual (eles usam dados que a gente não
 // tem, tipo passes certos e desarmes).
-function calcNota(p: { goals: number; assists: number; defesas: number; golsConcedidos: number; errosGraves: number }, resultLabel: 'vitorias' | 'derrotas' | 'empates') {
+function calcNota(p: {
+  goals: number; assists: number; defesas: number; golsConcedidos: number; errosGraves: number;
+  desarmes: number; boasJogadas: number; bloqueios: number; falhasDefensivas: number; falhasOfensivas: number;
+}, resultLabel: 'vitorias' | 'derrotas' | 'empates') {
   let nota = 6.0
     + p.goals * 1.0
     + p.assists * 0.6
     + p.defesas * 0.25
     - p.golsConcedidos * 0.25
-    - p.errosGraves * 0.7;
+    - p.errosGraves * 0.7 // erro grave = "CAGADA MASTER", pesa o mais pesado da lista
+    + p.desarmes * 0.35
+    + p.boasJogadas * 0.2
+    + p.bloqueios * 0.3
+    // Falhas (defensiva/ofensiva) pesam MENOS que um erro grave — é um
+    // deslize, não uma cagada master.
+    - p.falhasDefensivas * 0.35
+    - p.falhasOfensivas * 0.3;
 
   if (resultLabel === 'vitorias') nota += 0.3;
   else if (resultLabel === 'derrotas') nota -= 0.3;
@@ -713,6 +762,11 @@ export async function finishPartida(partidaId: string, requesterId: string, resu
       + p.assists * XP_POR_ASSIST
       + p.defesas * XP_POR_DEFESA
       + p.errosGraves * XP_POR_ERRO
+      + p.desarmes * XP_POR_DESARME
+      + p.boasJogadas * XP_POR_BOA_JOGADA
+      + p.bloqueios * XP_POR_BLOQUEIO
+      + p.falhasDefensivas * XP_POR_FALHA_DEFENSIVA
+      + p.falhasOfensivas * XP_POR_FALHA_OFENSIVA
       + (resultLabel === 'vitorias' ? XP_BONUS_VITORIA : 0));
 
     const nota = calcNota(p, resultLabel);
@@ -745,6 +799,11 @@ export async function finishPartida(partidaId: string, requesterId: string, resu
         defesas: p.defesas,
         golsConcedidos: p.golsConcedidos,
         errosGraves: p.errosGraves,
+        desarmes: p.desarmes,
+        boasJogadas: p.boasJogadas,
+        bloqueios: p.bloqueios,
+        falhasDefensivas: p.falhasDefensivas,
+        falhasOfensivas: p.falhasOfensivas,
         xp: xpGain,
         notaMedia: novaMedia,
         notaCount: novoCount,
@@ -760,6 +819,11 @@ export async function finishPartida(partidaId: string, requesterId: string, resu
         defesas: { increment: p.defesas },
         golsConcedidos: { increment: p.golsConcedidos },
         errosGraves: { increment: p.errosGraves },
+        desarmes: { increment: p.desarmes },
+        boasJogadas: { increment: p.boasJogadas },
+        bloqueios: { increment: p.bloqueios },
+        falhasDefensivas: { increment: p.falhasDefensivas },
+        falhasOfensivas: { increment: p.falhasOfensivas },
         xp: { increment: xpGain },
         notaMedia: novaMedia,
         notaCount: novoCount,
@@ -799,6 +863,11 @@ export async function reopenPartida(partidaId: string, requesterId: string) {
       + p.assists * XP_POR_ASSIST
       + p.defesas * XP_POR_DEFESA
       + p.errosGraves * XP_POR_ERRO
+      + p.desarmes * XP_POR_DESARME
+      + p.boasJogadas * XP_POR_BOA_JOGADA
+      + p.bloqueios * XP_POR_BLOQUEIO
+      + p.falhasDefensivas * XP_POR_FALHA_DEFENSIVA
+      + p.falhasOfensivas * XP_POR_FALHA_OFENSIVA
       + (resultLabel === 'vitorias' ? XP_BONUS_VITORIA : 0));
 
     if (statsKey) {
@@ -823,6 +892,11 @@ export async function reopenPartida(partidaId: string, requesterId: string) {
             defesas: { decrement: p.defesas },
             golsConcedidos: { decrement: p.golsConcedidos },
             errosGraves: { decrement: p.errosGraves },
+            desarmes: { decrement: p.desarmes },
+            boasJogadas: { decrement: p.boasJogadas },
+            bloqueios: { decrement: p.bloqueios },
+            falhasDefensivas: { decrement: p.falhasDefensivas },
+            falhasOfensivas: { decrement: p.falhasOfensivas },
             xp: { decrement: xpGain },
             notaMedia: novaMedia,
             notaCount: novoCount,
@@ -862,7 +936,10 @@ export async function getClanOverview(clanId: string, mode: FutMode) {
   const [agg, totalPartidas, artilheiro, garcom, melhorNota] = await Promise.all([
     prisma.futClanPlayerStats.aggregate({
       where: { clanId, mode },
-      _sum: { goals: true, assists: true, defesas: true, golsConcedidos: true, errosGraves: true, vitorias: true, derrotas: true, empates: true },
+      _sum: {
+        goals: true, assists: true, defesas: true, golsConcedidos: true, errosGraves: true, vitorias: true, derrotas: true, empates: true,
+        desarmes: true, boasJogadas: true, bloqueios: true, falhasDefensivas: true, falhasOfensivas: true,
+      },
       _count: { _all: true },
     }),
     prisma.futPartida.count({ where: { clanId, mode, status: 'finalizada' } }),
@@ -879,6 +956,11 @@ export async function getClanOverview(clanId: string, mode: FutMode) {
     totalDefesas: agg._sum.defesas ?? 0,
     totalConcedidos: agg._sum.golsConcedidos ?? 0,
     totalErros: agg._sum.errosGraves ?? 0,
+    totalDesarmes: agg._sum.desarmes ?? 0,
+    totalBoasJogadas: agg._sum.boasJogadas ?? 0,
+    totalBloqueios: agg._sum.bloqueios ?? 0,
+    totalFalhasDefensivas: agg._sum.falhasDefensivas ?? 0,
+    totalFalhasOfensivas: agg._sum.falhasOfensivas ?? 0,
     totalVitorias: agg._sum.vitorias ?? 0,
     totalDerrotas: agg._sum.derrotas ?? 0,
     totalEmpates: agg._sum.empates ?? 0,

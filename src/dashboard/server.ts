@@ -2987,18 +2987,23 @@ ${activitySdkBootstrap(clientId!)}
       } catch (e) { box.innerHTML = '<div class="empty-hint">❌ ' + e.message + '</div>'; }
     }
 
-    async function refreshPartida() {
+    async function refreshPartida(force) {
       if (!currentClan) return;
       // Enquanto a pessoa está com o foco em algo dentro do painel (um
       // <select> de jogador aberto, um campo de texto sendo preenchido), o
-      // polling automático NÃO reconstrói a tela — senão o dropdown fecha ou
-      // o campo é resetado no meio da seleção/digitação, dificultando clicar
-      // nas coisas. Só re-renderiza quando o foco está fora do painel; a
-      // atualização mais recente aparece assim que a pessoa terminar e sair
-      // de lá (ou no próximo ciclo de 4s).
-      const panel = document.getElementById('panelPelada');
-      const active = document.activeElement;
-      if (panel && active && active !== document.body && panel.contains(active)) return;
+      // polling automático de fundo NÃO reconstrói a tela — senão o dropdown
+      // fecha ou o campo é resetado no meio da seleção/digitação, dificultando
+      // clicar nas coisas. Isso NÃO se aplica quando force=true: logo depois
+      // de uma ação da própria pessoa (clicar em →A/→B, Iniciar partida,
+      // registrar evento etc.) o botão clicado fica com o foco (o navegador
+      // foca o elemento clicado), que também está "dentro do painel" — sem o
+      // force, esse refresh imediato seria pulado e a tela pareceria não
+      // reagir ao clique até a pessoa sair e voltar da aba.
+      if (!force) {
+        const panel = document.getElementById('panelPelada');
+        const active = document.activeElement;
+        if (panel && active && active !== document.body && panel.contains(active)) return;
+      }
       try {
         const data = await api('/api/activities/fut/clans/' + currentClan.id + '/partida');
         renderPartida(data.partida);
@@ -3011,18 +3016,18 @@ ${activitySdkBootstrap(clientId!)}
       try {
         await api('/api/activities/fut/clans/' + currentClan.id + '/partida', { method: 'POST', body: JSON.stringify({ modo, nome }) });
         showToast('✅ Partida criada!');
-        refreshPartida();
+        refreshPartida(true);
       } catch (e) { showToast('❌ ' + e.message); }
     }
 
     async function deletarPartida() {
       if (!confirm('Deletar a partida em aberto?')) return;
-      try { await api('/api/activities/fut/clans/' + currentClan.id + '/partida', { method: 'DELETE' }); showToast('🗑️ Partida deletada.'); refreshPartida(); }
+      try { await api('/api/activities/fut/clans/' + currentClan.id + '/partida', { method: 'DELETE' }); showToast('🗑️ Partida deletada.'); refreshPartida(true); }
       catch (e) { showToast('❌ ' + e.message); }
     }
 
     async function entrarPartida() {
-      try { await api('/api/activities/fut/clans/' + currentClan.id + '/join-partida', { method: 'POST', body: '{}' }); showToast('✅ Você entrou!'); refreshPartida(); }
+      try { await api('/api/activities/fut/clans/' + currentClan.id + '/join-partida', { method: 'POST', body: '{}' }); showToast('✅ Você entrou!'); refreshPartida(true); }
       catch (e) { showToast('❌ ' + e.message); }
     }
 
@@ -3030,23 +3035,23 @@ ${activitySdkBootstrap(clientId!)}
       const apelido = document.getElementById('offlineApelido').value.trim();
       const posicao = document.getElementById('offlinePosicao').value.trim();
       if (!apelido) return;
-      try { await api('/api/activities/fut/clans/' + currentClan.id + '/add-offline', { method: 'POST', body: JSON.stringify({ apelido, posicao }) }); showToast('✅ Jogador adicionado!'); refreshPartida(); }
+      try { await api('/api/activities/fut/clans/' + currentClan.id + '/add-offline', { method: 'POST', body: JSON.stringify({ apelido, posicao }) }); showToast('✅ Jogador adicionado!'); refreshPartida(true); }
       catch (e) { showToast('❌ ' + e.message); }
     }
 
     async function definirTime(val, team) {
       const ref = parsePlayerValue(val);
-      try { await api('/api/activities/fut/clans/' + currentClan.id + '/team', { method: 'POST', body: JSON.stringify(Object.assign({ team }, ref)) }); refreshPartida(); }
+      try { await api('/api/activities/fut/clans/' + currentClan.id + '/team', { method: 'POST', body: JSON.stringify(Object.assign({ team }, ref)) }); refreshPartida(true); }
       catch (e) { showToast('❌ ' + e.message); }
     }
 
     async function iniciarPartida() {
-      try { await api('/api/activities/fut/clans/' + currentClan.id + '/start', { method: 'POST', body: '{}' }); showToast('✅ Partida iniciada!'); refreshPartida(); }
+      try { await api('/api/activities/fut/clans/' + currentClan.id + '/start', { method: 'POST', body: '{}' }); showToast('✅ Partida iniciada!'); refreshPartida(true); }
       catch (e) { showToast('❌ ' + e.message); }
     }
 
     async function autoEquilibrar() {
-      try { await api('/api/activities/fut/clans/' + currentClan.id + '/auto-balance', { method: 'POST', body: '{}' }); showToast('🎲 Times equilibrados pelo XP de cada um!'); refreshPartida(); }
+      try { await api('/api/activities/fut/clans/' + currentClan.id + '/auto-balance', { method: 'POST', body: '{}' }); showToast('🎲 Times equilibrados pelo XP de cada um!'); refreshPartida(true); }
       catch (e) { showToast('❌ ' + e.message); }
     }
 
@@ -3068,7 +3073,7 @@ ${activitySdkBootstrap(clientId!)}
       try {
         await api('/api/activities/fut/clans/' + currentClan.id + '/event', { method: 'POST', body: JSON.stringify(body) });
         showToast(type === 'gol' ? '✅ Gol registrado! Monte a animação dele depois, em "Ver detalhes".' : '✅ Evento registrado!');
-        refreshPartida();
+        refreshPartida(true);
       } catch (e) { showToast('❌ ' + e.message); }
     }
 

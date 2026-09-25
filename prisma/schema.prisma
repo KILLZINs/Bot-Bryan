@@ -1059,6 +1059,11 @@ model FutPartidaPlayer {
   defesas        Int     @default(0)
   golsConcedidos Int     @default(0)
   errosGraves    Int     @default(0)
+  desarmes         Int   @default(0) // desarme importante
+  boasJogadas      Int   @default(0) // boa jogada (lance de destaque sem ser gol/assist/defesa)
+  bloqueios        Int   @default(0) // bloqueio (ex: cortar um chute/cruzamento)
+  falhasDefensivas Int   @default(0) // falha defensiva — pesa menos que erro grave na nota
+  falhasOfensivas  Int   @default(0) // falha ofensiva — pesa menos que erro grave na nota
   nota           Float?  // nota estilo Sofascore (0.0-10.0), calculada ao finalizar a partida
   createdAt      DateTime @default(now())
 
@@ -1114,6 +1119,11 @@ model FutClanPlayerStats {
   defesas        Int      @default(0)
   golsConcedidos Int      @default(0)
   errosGraves    Int      @default(0)
+  desarmes         Int    @default(0)
+  boasJogadas      Int    @default(0)
+  bloqueios        Int    @default(0)
+  falhasDefensivas Int    @default(0)
+  falhasOfensivas  Int    @default(0)
   xp             Int      @default(0)
   notaMedia      Float    @default(0) // média das notas (estilo Sofascore) de todas as partidas nesse modo
   notaCount      Int      @default(0) // quantas partidas entraram na média (pra recalcular incremental)

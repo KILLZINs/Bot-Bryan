@@ -174,9 +174,29 @@ export default {
         .addStringOption((o) => o.setName('cla').setDescription('Nome do clã').setRequired(true))
         .addUserOption((o) => o.setName('jogador').setDescription('Quem sofreu o gol'))
         .addStringOption((o) => o.setName('apelido').setDescription('Apelido (jogador offline)')))
-      .addSubcommand((sub) => sub.setName('erro').setDescription('Registra um erro grave / lance ruim')
+      .addSubcommand((sub) => sub.setName('erro').setDescription('Registra um erro grave / lance ruim (CAGADA MASTER — pesa mais na nota)')
         .addStringOption((o) => o.setName('cla').setDescription('Nome do clã').setRequired(true))
         .addUserOption((o) => o.setName('jogador').setDescription('Quem errou'))
+        .addStringOption((o) => o.setName('apelido').setDescription('Apelido (jogador offline)')))
+      .addSubcommand((sub) => sub.setName('desarme').setDescription('Registra um desarme importante')
+        .addStringOption((o) => o.setName('cla').setDescription('Nome do clã').setRequired(true))
+        .addUserOption((o) => o.setName('jogador').setDescription('Quem desarmou'))
+        .addStringOption((o) => o.setName('apelido').setDescription('Apelido (jogador offline)')))
+      .addSubcommand((sub) => sub.setName('boa_jogada').setDescription('Registra uma boa jogada (lance de destaque)')
+        .addStringOption((o) => o.setName('cla').setDescription('Nome do clã').setRequired(true))
+        .addUserOption((o) => o.setName('jogador').setDescription('Quem fez a jogada'))
+        .addStringOption((o) => o.setName('apelido').setDescription('Apelido (jogador offline)')))
+      .addSubcommand((sub) => sub.setName('bloqueio').setDescription('Registra um bloqueio')
+        .addStringOption((o) => o.setName('cla').setDescription('Nome do clã').setRequired(true))
+        .addUserOption((o) => o.setName('jogador').setDescription('Quem bloqueou'))
+        .addStringOption((o) => o.setName('apelido').setDescription('Apelido (jogador offline)')))
+      .addSubcommand((sub) => sub.setName('falha_defensiva').setDescription('Registra uma falha defensiva (pesa menos que erro grave)')
+        .addStringOption((o) => o.setName('cla').setDescription('Nome do clã').setRequired(true))
+        .addUserOption((o) => o.setName('jogador').setDescription('Quem falhou'))
+        .addStringOption((o) => o.setName('apelido').setDescription('Apelido (jogador offline)')))
+      .addSubcommand((sub) => sub.setName('falha_ofensiva').setDescription('Registra uma falha ofensiva (pesa menos que erro grave)')
+        .addStringOption((o) => o.setName('cla').setDescription('Nome do clã').setRequired(true))
+        .addUserOption((o) => o.setName('jogador').setDescription('Quem falhou'))
         .addStringOption((o) => o.setName('apelido').setDescription('Apelido (jogador offline)')))
       .addSubcommand((sub) => sub.setName('placar').setDescription('Mostra o placar da partida em aberto do clã')
         .addStringOption((o) => o.setName('cla').setDescription('Nome do clã').setRequired(true)))
@@ -316,6 +336,11 @@ export default {
               { name: 'Defesas (elenco)', value: `${overview.totalDefesas}`, inline: true },
               { name: 'Gols concedidos', value: `${overview.totalConcedidos}`, inline: true },
               { name: 'Erros graves', value: `${overview.totalErros}`, inline: true },
+              { name: 'Desarmes', value: `${overview.totalDesarmes}`, inline: true },
+              { name: 'Boas jogadas', value: `${overview.totalBoasJogadas}`, inline: true },
+              { name: 'Bloqueios', value: `${overview.totalBloqueios}`, inline: true },
+              { name: 'Falhas defensivas', value: `${overview.totalFalhasDefensivas}`, inline: true },
+              { name: 'Falhas ofensivas', value: `${overview.totalFalhasOfensivas}`, inline: true },
             );
           if (overview.artilheiro) embed.addFields({ name: '👑 Artilheiro', value: `${mentionOrName(overview.artilheiro.discordId, overview.artilheiro.displayName)} — ${overview.artilheiro.goals} gols`, inline: false });
           if (overview.garcom) embed.addFields({ name: '🎯 Garçom (mais assistências)', value: `${mentionOrName(overview.garcom.discordId, overview.garcom.displayName)} — ${overview.garcom.assists} assists`, inline: false });
@@ -509,7 +534,8 @@ export default {
           return;
         }
 
-        if (sub === 'gol' || sub === 'defesa' || sub === 'concedido' || sub === 'erro') {
+        if (sub === 'gol' || sub === 'defesa' || sub === 'concedido' || sub === 'erro'
+          || sub === 'desarme' || sub === 'boa_jogada' || sub === 'bloqueio' || sub === 'falha_defensiva' || sub === 'falha_ofensiva') {
           const ref = playerRefFrom(interaction);
           if (!ref.discordId && !ref.apelido) { await interaction.reply({ embeds: [errorEmbed('Faltou o jogador', 'Informe `jogador` ou `apelido`.')], ephemeral: true }); return; }
 
@@ -523,7 +549,11 @@ export default {
           }
 
           const { player, assistPlayer } = await recordEvent(partida!.id, ref, sub as FutEventType, assistRef, videoUrl);
-          const labelMap: Record<string, string> = { gol: '⚽ Gol', defesa: '🧤 Defesa', concedido: '🥅 Gol concedido', erro: '⚠️ Erro grave' };
+          const labelMap: Record<string, string> = {
+            gol: '⚽ Gol', defesa: '🧤 Defesa', concedido: '🥅 Gol concedido', erro: '⚠️ Erro grave (CAGADA MASTER)',
+            desarme: '🛡️ Desarme importante', boa_jogada: '✨ Boa jogada', bloqueio: '🧱 Bloqueio',
+            falha_defensiva: '🔸 Falha defensiva', falha_ofensiva: '🔹 Falha ofensiva',
+          };
           let desc = `${labelMap[sub]} de **${player.displayName}**`;
           if (assistPlayer) desc += ` (assistência de **${assistPlayer.displayName}**)`;
           if (videoUrl) desc += `\n🎬 [Ver vídeo](${videoUrl})`;
@@ -534,7 +564,11 @@ export default {
 
         if (sub === 'desfazer') {
           const desfeito = await undoLastEvent(partida!.id, interaction.user.id);
-          const labelMap: Record<string, string> = { gol: 'gol', assistencia: 'assistência', defesa: 'defesa', concedido: 'gol concedido', erro: 'erro grave' };
+          const labelMap: Record<string, string> = {
+            gol: 'gol', assistencia: 'assistência', defesa: 'defesa', concedido: 'gol concedido', erro: 'erro grave',
+            desarme: 'desarme importante', boa_jogada: 'boa jogada', bloqueio: 'bloqueio',
+            falha_defensiva: 'falha defensiva', falha_ofensiva: 'falha ofensiva',
+          };
           await interaction.reply({ embeds: [successEmbed('Evento desfeito', `Removi o último evento (**${labelMap[desfeito.type] || desfeito.type}** de **${desfeito.player.displayName}**).`), buildPartidaEmbed(await getPartidaById(partida!.id), clan.name)] });
           return;
         }
@@ -580,6 +614,11 @@ export default {
             { name: 'Defesas', value: `${profile.defesas}`, inline: true },
             { name: 'Gols Concedidos', value: `${profile.golsConcedidos}`, inline: true },
             { name: 'Erros Graves', value: `${profile.errosGraves}`, inline: true },
+            { name: 'Desarmes', value: `${profile.desarmes}`, inline: true },
+            { name: 'Boas Jogadas', value: `${profile.boasJogadas}`, inline: true },
+            { name: 'Bloqueios', value: `${profile.bloqueios}`, inline: true },
+            { name: 'Falhas Defensivas', value: `${profile.falhasDefensivas}`, inline: true },
+            { name: 'Falhas Ofensivas', value: `${profile.falhasOfensivas}`, inline: true },
           );
         await interaction.reply({ embeds: [embed] });
         return;

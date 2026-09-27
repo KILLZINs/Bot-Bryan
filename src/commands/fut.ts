@@ -10,7 +10,7 @@ import {
   createClan, joinClan, addClanMember, removeClanMember, listClans, getClanByName, getClanById, deleteClan, resolveMember,
   listTeams, createTeam, deleteTeam, setMemberTeam,
   createPartida, getOpenPartida, getPartidaById, deletePartida, listPartidaHistory,
-  joinPartida, addOfflinePlayer, setTeam, autoBalanceTeams, startPartida, recordEvent, finishPartida,
+  joinPartida, addOfflinePlayer, setTeam, removePlayerFromPartida, autoBalanceTeams, startPartida, recordEvent, finishPartida,
   getProfile, getRanking, getUserProfile, setUserPosition, listGoalVideos, notaBand,
   createChamada, listChamadas, deleteChamada, respondChamada, calcValorPorPessoa,
   undoLastEvent, reopenPartida, getClanOverview, listFullClanStats,
@@ -147,6 +147,10 @@ export default {
         .addStringOption((o) => o.setName('apelido').setDescription('Apelido (jogador offline)')))
       .addSubcommand((sub) => sub.setName('auto_equilibrar').setDescription('Distribui os jogadores em times A/B tentando equilibrar o nível (só quem criou a partida)')
         .addStringOption((o) => o.setName('cla').setDescription('Nome do clã').setRequired(true)))
+      .addSubcommand((sub) => sub.setName('remover').setDescription('Tira alguém da partida (sem informar ninguém, sai você mesmo)')
+        .addStringOption((o) => o.setName('cla').setDescription('Nome do clã').setRequired(true))
+        .addUserOption((o) => o.setName('jogador').setDescription('Quem remover (deixe vazio pra sair você mesmo)'))
+        .addStringOption((o) => o.setName('apelido').setDescription('Apelido (jogador offline)')))
       .addSubcommand((sub) => sub.setName('iniciar').setDescription('Inicia a partida (fecha as inscrições)')
         .addStringOption((o) => o.setName('cla').setDescription('Nome do clã').setRequired(true)))
       .addSubcommand((sub) => sub.setName('gol').setDescription('Registra um gol')
@@ -525,6 +529,17 @@ export default {
         if (sub === 'auto_equilibrar') {
           const balanced = await autoBalanceTeams(partida!.id, interaction.user.id);
           await interaction.reply({ embeds: [successEmbed('Times equilibrados!', 'Distribuí com base no XP de cada um nesse modo.'), buildPartidaEmbed(balanced, clan.name)] });
+          return;
+        }
+
+        if (sub === 'remover') {
+          const ref = playerRefFrom(interaction);
+          // Sem `jogador`/`apelido` informado: a pessoa está saindo da
+          // própria partida ("incluindo eu").
+          const alvo = (!ref.discordId && !ref.apelido) ? { discordId: interaction.user.id } : ref;
+          const souOAlvo = alvo.discordId === interaction.user.id;
+          const atualizada = await removePlayerFromPartida(partida!.id, interaction.user.id, alvo);
+          await interaction.reply({ embeds: [successEmbed(souOAlvo ? 'Você saiu da partida!' : 'Removido(a)!', souOAlvo ? 'Você não está mais participando dessa partida.' : 'Essa pessoa foi tirada da partida.'), buildPartidaEmbed(atualizada, clan.name)] });
           return;
         }
 

@@ -36,7 +36,7 @@ import {
   FutError, createClan, joinClan, addClanMember as addFutClanMember, removeClanMember as removeFutClanMember, listClans, countClans as countFutClans, maxClansPerGuild, getClanByName, getClanById, getClanByJoinCode, deleteClan,
   listTeams as listFutTeams, createTeam as createFutTeam, deleteTeam as deleteFutTeam, setMemberTeam as setFutMemberTeam,
   createPartida, getOpenPartida, getPartidaById, deletePartida, listPartidaHistory, joinPartida, addOfflinePlayer,
-  setTeam, autoBalanceTeams, startPartida, recordEvent, finishPartida, getProfile as getFutProfile, getRanking as getFutRanking,
+  setTeam, removePlayerFromPartida, autoBalanceTeams, startPartida, recordEvent, finishPartida, getProfile as getFutProfile, getRanking as getFutRanking,
   getUserProfile as getFutUserProfile, setUserPosition as setFutUserPosition, listGoalVideos,
   createChamada as createFutChamada, listChamadas as listFutChamadas, deleteChamada as deleteFutChamada, respondChamada as respondFutChamada,
   getChamada as getFutChamada, calcValorPorPessoa,
@@ -2083,6 +2083,16 @@ ${activitySdkBootstrap(clientId!)}
     } catch (err) { handleFutError(res, err); }
   });
 
+  app.post('/api/activities/fut/clans/:id/remove-player', requirePlayerAuth, async (req, res) => {
+    try {
+      const partida = await currentFutPartidaOr400(req, res);
+      if (!partida) return;
+      const userId = req.cookies!.player_userid as string;
+      await removePlayerFromPartida(partida.id, userId, { discordId: req.body?.discordId || undefined, apelido: req.body?.apelido || undefined });
+      res.json({ partida: await serializeFutPartida((await getPartidaById(partida.id))!) });
+    } catch (err) { handleFutError(res, err); }
+  });
+
   app.post('/api/activities/fut/clans/:id/auto-balance', requirePlayerAuth, async (req, res) => {
     try {
       const partida = await currentFutPartidaOr400(req, res);
@@ -2872,9 +2882,19 @@ ${activitySdkBootstrap(clientId!)}
       const souCriador = partida.creatorId === ME_ID;
       const statusLabel = partida.status === 'aberta' ? '🟡 Aberta' : partida.status === 'em_andamento' ? '🟢 Em andamento' : '🔴 Finalizada';
 
+      // Quem criou a partida pode tirar qualquer um; qualquer jogador pode
+      // tirar A SI MESMO (sair da partida). Depois de finalizada, as
+      // estatísticas já foram salvas — precisa reabrir a partida antes.
+      function podeRemover(p) { return partida.status !== 'finalizada' && (souCriador || p.discordId === ME_ID); }
+      function removerBtnHtml(p) {
+        if (!podeRemover(p)) return '';
+        const titulo = p.discordId === ME_ID ? 'Sair da partida' : 'Remover da partida';
+        return \`<button class="btn danger" style="padding:2px 8px;font-size:0.78rem;" onclick="removerJogador('\${p.discordId || ''}|\${p.displayName}')" title="\${titulo}">✕</button>\`;
+      }
+
       function playerRowHtml(p) {
         const notaTxt = (partida.status === 'finalizada' && p.nota != null) ? ' ' + notaBadgeHtml(p.nota) : '';
-        return \`<div class="player-row"><span>\${avatarHtml(p.avatarUrl, p.displayName, 22)}\${p.displayName}\${p.position ? ' <small style="color:var(--text-muted);">(' + p.position + ')</small>' : ''}</span><span class="stats">⚽\${p.goals} 🅰️\${p.assists} 🧤\${p.defesas} 🥅\${p.golsConcedidos} ⚠️\${p.errosGraves}\${extraNotasHtml(p)}\${notaTxt}</span></div>\`;
+        return \`<div class="player-row"><span>\${avatarHtml(p.avatarUrl, p.displayName, 22)}\${p.displayName}\${p.position ? ' <small style="color:var(--text-muted);">(' + p.position + ')</small>' : ''}</span><span class="stats">⚽\${p.goals} 🅰️\${p.assists} 🧤\${p.defesas} 🥅\${p.golsConcedidos} ⚠️\${p.errosGraves}\${extraNotasHtml(p)}\${notaTxt} \${removerBtnHtml(p)}</span></div>\`;
       }
 
       let html = \`
@@ -2895,6 +2915,7 @@ ${activitySdkBootstrap(clientId!)}
           <span class="chip">\${p.displayName}
             <button onclick="definirTime('\${p.discordId || ''}|\${p.displayName}','A')">→A</button>
             <button onclick="definirTime('\${p.discordId || ''}|\${p.displayName}','B')">→B</button>
+            \${removerBtnHtml(p)}
           </span>\`).join('')}</div>\`;
       }
 
@@ -3043,6 +3064,17 @@ ${activitySdkBootstrap(clientId!)}
       const ref = parsePlayerValue(val);
       try { await api('/api/activities/fut/clans/' + currentClan.id + '/team', { method: 'POST', body: JSON.stringify(Object.assign({ team }, ref)) }); refreshPartida(true); }
       catch (e) { showToast('❌ ' + e.message); }
+    }
+
+    async function removerJogador(val) {
+      const ref = parsePlayerValue(val);
+      const souEu = ref.discordId && ref.discordId === ME_ID;
+      if (!confirm(souEu ? 'Sair dessa partida?' : 'Remover essa pessoa da partida?')) return;
+      try {
+        await api('/api/activities/fut/clans/' + currentClan.id + '/remove-player', { method: 'POST', body: JSON.stringify(ref) });
+        showToast(souEu ? '👋 Você saiu da partida.' : '✅ Removido(a) da partida.');
+        refreshPartida(true);
+      } catch (e) { showToast('❌ ' + e.message); }
     }
 
     async function iniciarPartida() {

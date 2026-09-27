@@ -391,6 +391,26 @@ export async function setTeam(partidaId: string, player: { discordId?: string; a
   return target;
 }
 
+// Tira alguém da partida por completo (sai dos times A/B e da lista de
+// participantes de uma vez só). Só quem criou a partida pode tirar outra
+// pessoa; qualquer jogador pode tirar A SI MESMO (sair da partida). Uma vez
+// finalizada a partida as estatísticas já foram salvas no clã — pra corrigir
+// isso é preciso reabrir a partida (`reopenPartida`) antes.
+export async function removePlayerFromPartida(partidaId: string, requesterId: string, playerRef: { discordId?: string; apelido?: string }) {
+  const partida = await getPartidaById(partidaId);
+  if (!partida) throw new FutError('Partida não encontrada.');
+  assertNotFinished(partida);
+
+  const target = await resolvePlayer(partidaId, playerRef);
+  const souOAlvo = !!target.discordId && target.discordId === requesterId;
+  if (partida.creatorId !== requesterId && !souOAlvo) {
+    throw new FutError('Só quem criou a partida pode remover outras pessoas — você só pode sair da própria participação.');
+  }
+
+  await prisma.futPartidaPlayer.delete({ where: { id: target.id } });
+  return getPartidaById(partidaId);
+}
+
 // "Criador de time": distribui os jogadores em A/B tentando equilibrar o
 // nível médio dos dois lados, usando o XP acumulado de cada um NO MODO da
 // partida (futsal e campo têm níveis separados). Quem ainda não tem

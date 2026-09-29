@@ -284,9 +284,112 @@ async function defaultPositionFor(discordId: string, mode: FutMode) {
   return (mode === 'futsal' ? profile.positionFutsal : profile.positionCampo) || null;
 }
 
+// Só aceita link http/https — mesma regra do vídeo de gol, evita salvar lixo
+// nos campos de foto/banner (que são colados como URL, sem upload).
+function sanitizeImageUrl(url?: string | null): string | null {
+  if (!url) return null;
+  const clean = url.trim();
+  if (!/^https?:\/\/\S+$/i.test(clean)) throw new FutError('O link da imagem precisa ser uma URL válida (começando com http:// ou https://).');
+  return clean.slice(0, 500);
+}
+
+// Perfil PRÓPRIO do Rachão (fora de qualquer clã): nome de exibição, foto,
+// banner e bio. Passar `null` num campo apaga ele (volta pro padrão do
+// Discord); `undefined` deixa como já estava.
+export async function updateUserProfile(discordId: string, data: { displayName?: string | null; bio?: string | null; avatarUrl?: string | null; bannerUrl?: string | null }) {
+  const clean: { displayName?: string | null; bio?: string | null; avatarUrl?: string | null; bannerUrl?: string | null } = {};
+  if (data.displayName !== undefined) clean.displayName = data.displayName?.trim().slice(0, 40) || null;
+  if (data.bio !== undefined) clean.bio = data.bio?.trim().slice(0, 300) || null;
+  if (data.avatarUrl !== undefined) clean.avatarUrl = sanitizeImageUrl(data.avatarUrl);
+  if (data.bannerUrl !== undefined) clean.bannerUrl = sanitizeImageUrl(data.bannerUrl);
+
+  return prisma.futUserProfile.upsert({
+    where: { discordId },
+    create: { discordId, ...clean },
+    update: clean,
+  });
+}
+
+// Perfil GLOBAL: dados próprios + todo clã (de qualquer servidor) em que a
+// pessoa é membro, com as estatísticas PRINCIPAIS somadas dos dois modos
+// (futsal + campo) pra dar uma visão geral rápida em cada card de clã — e o
+// TOTAL somando TODOS os clãs de uma vez, inclusive privados (é a estatística
+// de verdade da pessoa; só a LISTA de clãs é que esconde os privados de
+// terceiros — ver serialização no site). Base pro futuro sistema de ranking.
+export async function getGlobalProfile(discordId: string) {
+  const [profile, memberships] = await Promise.all([
+    getUserProfile(discordId),
+    prisma.futClanMember.findMany({ where: { discordId }, include: { clan: true } }),
+  ]);
+
+  const clanesComStats = await Promise.all(memberships.map(async (m) => {
+    const statsPorModo = await prisma.futClanPlayerStats.findMany({ where: { clanId: m.clanId, discordId } });
+    const totalPartidas = statsPorModo.reduce((s, x) => s + x.totalPartidas, 0);
+    const totalXp = statsPorModo.reduce((s, x) => s + x.xp, 0);
+    const notaSomada = statsPorModo.reduce((s, x) => s + x.notaMedia * x.notaCount, 0);
+    const notaCount = statsPorModo.reduce((s, x) => s + x.notaCount, 0);
+    return {
+      clanId: m.clanId,
+      clanName: m.clan.name,
+      visibility: m.clan.visibility,
+      isCreator: m.clan.creatorId === discordId,
+      totalPartidas,
+      xp: totalXp,
+      notaMedia: notaCount > 0 ? Math.round((notaSomada / notaCount) * 100) / 100 : null,
+    };
+  }));
+
+  const totalPartidas = clanesComStats.reduce((s, c) => s + c.totalPartidas, 0);
+  const totalXp = clanesComStats.reduce((s, c) => s + c.xp, 0);
+  // Média simples entre os clãs onde já tem nota (cada clã pesa igual,
+  // independente de quantas partidas teve nele) — dá pro ranking futuro
+  // trocar por uma ponderada por partida se fizer mais sentido depois.
+  const clanesComNota = clanesComStats.filter((c) => c.notaMedia != null);
+
+  return {
+    discordId,
+    displayName: profile?.displayName || null,
+    bio: profile?.bio || null,
+    avatarUrl: profile?.avatarUrl || null,
+    bannerUrl: profile?.bannerUrl || null,
+    positionFutsal: profile?.positionFutsal || null,
+    positionCampo: profile?.positionCampo || null,
+    clans: clanesComStats,
+    totais: {
+      totalClans: clanesComStats.length,
+      totalPartidas,
+      totalXp,
+      notaMedia: clanesComNota.length ? Math.round((clanesComNota.reduce((s, c) => s + (c.notaMedia ?? 0), 0) / clanesComNota.length) * 100) / 100 : null,
+    },
+  };
+}
+
+// Quem pode "registrar partida" num clã: o dono do clã sempre pode, e quem
+// mais o dono autorizou nas configurações do clã (FutClanMember.canRecord).
+// Todo mundo continua podendo ENTRAR/participar de uma partida já criada —
+// essa checagem é só pra CRIAR uma partida nova.
+export function isClanRecorder(clan: { creatorId: string; members: { discordId: string | null; canRecord: boolean }[] }, discordId: string) {
+  if (clan.creatorId === discordId) return true;
+  return clan.members.some((m) => m.discordId === discordId && m.canRecord);
+}
+
+// Liga/desliga a permissão de registrar partida pra alguém do elenco — só
+// quem criou o clã pode mexer nisso.
+export async function setMemberCanRecord(clanId: string, requesterId: string, memberRef: { discordId?: string; apelido?: string }, canRecord: boolean) {
+  const clan = await getClanById(clanId);
+  if (!clan) throw new FutError('Clã não encontrado.');
+  if (clan.creatorId !== requesterId) throw new FutError('Só quem criou o clã pode mudar quem registra partida.');
+
+  const member = resolveMember(clan, memberRef);
+  if (member.discordId === clan.creatorId) throw new FutError('O dono do clã já pode registrar partida por padrão.');
+
+  return prisma.futClanMember.update({ where: { id: member.id }, data: { canRecord } });
+}
+
 export async function createPartida(clanId: string, creatorId: string, creatorName: string, mode: FutMode, name?: string) {
   const clan = await getClanById(clanId);
   if (!clan) throw new FutError('Clã não encontrado.');
+  if (!isClanRecorder(clan, creatorId)) throw new FutError('Só o dono do clã ou quem foi autorizado nas configurações pode criar/registrar uma partida.');
 
   const existing = await getOpenPartida(clanId);
   if (existing) throw new FutError(`Esse clã já tem uma partida em aberto (**${existing.name || 'sem nome'}**). Finalize ela antes de criar outra.`);
@@ -955,6 +1058,40 @@ export async function reopenPartida(partidaId: string, requesterId: string) {
 
 export async function getProfile(clanId: string, discordId: string, mode: FutMode) {
   return prisma.futClanPlayerStats.findUnique({ where: { clanId_discordId_mode: { clanId, discordId, mode } } });
+}
+
+const EDITABLE_STATS_FIELDS = [
+  'totalPartidas', 'vitorias', 'derrotas', 'empates',
+  'goals', 'assists', 'defesas', 'golsConcedidos', 'errosGraves',
+  'desarmes', 'boasJogadas', 'bloqueios', 'falhasDefensivas', 'falhasOfensivas',
+  'xp', 'notaMedia', 'notaCount',
+] as const;
+type EditableStatsField = (typeof EDITABLE_STATS_FIELDS)[number];
+
+// Correção manual da estatística acumulada de alguém no clã — pra quando um
+// número ficou errado (engano ao registrar, partida antiga já sem como
+// reabrir, etc) e não compensa refazer a partida inteira. Só quem pode
+// registrar partida nesse clã (dono ou autorizado) pode editar. Edita
+// diretamente o total salvo (FutClanPlayerStats) — não mexe em nenhuma
+// partida específica.
+export async function updateClanPlayerStats(clanId: string, requesterId: string, targetDiscordId: string, mode: FutMode, changes: Partial<Record<EditableStatsField, number>>) {
+  const clan = await getClanById(clanId);
+  if (!clan) throw new FutError('Clã não encontrado.');
+  if (!isClanRecorder(clan, requesterId)) throw new FutError('Só o dono do clã ou quem foi autorizado nas configurações pode editar estatísticas.');
+
+  const data: Partial<Record<EditableStatsField, number>> = {};
+  for (const field of EDITABLE_STATS_FIELDS) {
+    const value = changes[field];
+    if (value === undefined || value === null || Number.isNaN(Number(value))) continue;
+    if (field === 'notaMedia') data[field] = Math.max(0, Math.min(10, Number(value)));
+    else data[field] = Math.max(0, Math.round(Number(value) * 100) / 100);
+  }
+  if (Object.keys(data).length === 0) throw new FutError('Nenhum campo válido pra atualizar.');
+
+  const existing = await prisma.futClanPlayerStats.findUnique({ where: { clanId_discordId_mode: { clanId, discordId: targetDiscordId, mode } } });
+  if (!existing) throw new FutError('Essa pessoa ainda não tem estatística salva nesse clã/modo.');
+
+  return prisma.futClanPlayerStats.update({ where: { clanId_discordId_mode: { clanId, discordId: targetDiscordId, mode } }, data });
 }
 
 export async function getRanking(clanId: string, mode: FutMode, limit = 10) {

@@ -1088,6 +1088,13 @@ model FutMatchEvent {
   // como JSON serializado: um array de frames, cada frame um array de
   // tokens { id, type, x, y, angle }.
   animationFrames String? @db.Text
+  // Local do chute dentro do gol (só em 'gol'), tipo os replay de TV: uma
+  // marcação de onde a bola entrou, em % da largura/altura do desenho do gol
+  // (0,0 = canto superior esquerdo, 100,100 = canto inferior direito). Fica
+  // separado dos frames da animação porque é um ponto único, não uma
+  // sequência.
+  shotX     Float?
+  shotY     Float?
   createdAt DateTime @default(now())
 
   partida FutPartida        @relation(fields: [partidaId], references: [id], onDelete: Cascade)

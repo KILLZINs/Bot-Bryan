@@ -38,6 +38,8 @@ import {
   createPartida, getOpenPartida, getPartidaById, deletePartida, listPartidaHistory, joinPartida, addOfflinePlayer,
   setTeam, removePlayerFromPartida, autoBalanceTeams, startPartida, recordEvent, finishPartida, getProfile as getFutProfile, getRanking as getFutRanking,
   getUserProfile as getFutUserProfile, setUserPosition as setFutUserPosition, listGoalVideos,
+  updateUserProfile as updateFutUserProfile, getGlobalProfile as getFutGlobalProfile,
+  setMemberCanRecord as setFutMemberCanRecord, updateClanPlayerStats as updateFutClanPlayerStats,
   createChamada as createFutChamada, listChamadas as listFutChamadas, deleteChamada as deleteFutChamada, respondChamada as respondFutChamada,
   getChamada as getFutChamada, calcValorPorPessoa,
   undoLastEvent as undoFutLastEvent, reopenPartida as reopenFutPartida,
@@ -1825,6 +1827,7 @@ ${activitySdkBootstrap(clientId!)}
       discordId: m.discordId,
       displayName: m.displayName,
       teamId: m.teamId,
+      canRecord: m.canRecord,
       avatarUrl: await getAvatarUrl(m.discordId),
     })));
     // O código de convite (pra clã privado) só aparece pra quem já é
@@ -2330,6 +2333,64 @@ ${activitySdkBootstrap(clientId!)}
     } catch (err) { handleFutError(res, err); }
   });
 
+  // Perfil GLOBAL do Rachão — fora de qualquer clã: nome de exibição, foto,
+  // banner, bio, e o resumo com todo clã em que a pessoa está + os totais
+  // somando tudo. Base do "meu perfil" novo, separado do perfil por clã.
+  app.get('/api/activities/fut/me/global', requirePlayerAuth, async (req, res) => {
+    try {
+      const userId = req.cookies!.player_userid as string;
+      const profile = await getFutGlobalProfile(userId);
+      const discordUser = await discordClient.users.fetch(userId).catch(() => null);
+      res.json({
+        ...profile,
+        discordUsername: discordUser?.username || null,
+        discordAvatarUrl: discordUser ? discordUser.displayAvatarURL({ size: 128 }) : null,
+      });
+    } catch (err) { handleFutError(res, err); }
+  });
+
+  app.post('/api/activities/fut/me/global', requirePlayerAuth, async (req, res) => {
+    try {
+      const userId = req.cookies!.player_userid as string;
+      await updateFutUserProfile(userId, {
+        displayName: req.body?.displayName !== undefined ? (req.body.displayName || null) : undefined,
+        bio: req.body?.bio !== undefined ? (req.body.bio || null) : undefined,
+        avatarUrl: req.body?.avatarUrl !== undefined ? (req.body.avatarUrl || null) : undefined,
+        bannerUrl: req.body?.bannerUrl !== undefined ? (req.body.bannerUrl || null) : undefined,
+      });
+      const profile = await getFutGlobalProfile(userId);
+      res.json(profile);
+    } catch (err) { handleFutError(res, err); }
+  });
+
+  // Liga/desliga "pode registrar partida" pra alguém do elenco — só o dono
+  // do clã mexe nisso, nas configurações do clã.
+  app.post('/api/activities/fut/clans/:id/members/can-record', requirePlayerAuth, async (req, res) => {
+    try {
+      const userId = req.cookies!.player_userid as string;
+      await setFutMemberCanRecord(req.params.id, userId, { discordId: req.body?.discordId || undefined, apelido: req.body?.apelido || undefined }, !!req.body?.canRecord);
+      const clan = await getClanById(req.params.id);
+      res.json({ clan: clan ? await serializeFutClan(clan, userId) : null });
+    } catch (err) { handleFutError(res, err); }
+  });
+
+  // Correção manual de estatística (dono do clã ou quem tem permissão de
+  // registrar) — pra consertar um número errado sem precisar reabrir/refazer
+  // a partida inteira.
+  app.post('/api/activities/fut/clans/:id/stats/edit', requirePlayerAuth, async (req, res) => {
+    try {
+      const userId = req.cookies!.player_userid as string;
+      const mode: FutMode = req.body?.mode === 'campo' ? 'campo' : 'futsal';
+      const targetDiscordId = String(req.body?.discordId || '');
+      if (!targetDiscordId) return res.status(400).json({ error: 'Faltou discordId.' });
+      const changes = req.body?.changes || {};
+      await updateFutClanPlayerStats(req.params.id, userId, targetDiscordId, mode, changes);
+      const [overview, elenco] = await Promise.all([getFutClanOverview(req.params.id, mode), listFullFutClanStats(req.params.id, mode)]);
+      const elencoComNomes = await Promise.all(elenco.map(async (p) => ({ ...p, ...(await resolveStatIdentity(p.discordId, p.displayName)) })));
+      res.json({ overview, elenco: elencoComNomes });
+    } catch (err) { handleFutError(res, err); }
+  });
+
   // ── "Chamar o fut": convite (local, horário, PIX, link) + RSVP ──────────
   function serializeChamada(chamada: { id: string; local: string; horario: string; pix: string | null; valorTotal: number | null; link: string | null; mensagem: string | null; creatorId: string; createdAt: Date; respostas: { discordId: string; displayName: string; status: string }[] }) {
     const vou = chamada.respostas.filter((r) => r.status === 'vou').length;
@@ -2361,17 +2422,18 @@ ${activitySdkBootstrap(clientId!)}
       });
       res.json({ chamada: serializeChamada({ ...chamada, respostas: [] }) });
 
-      // Manda DM pra todo mundo do elenco com conta vinculada (menos quem
-      // chamou) — mesma lógica do Discord, só que disparada a partir do site.
-      // Já respondemos a requisição, então isso roda "em segundo plano": um
-      // erro aqui não pode tentar responder de novo.
+      // Manda DM pra todo mundo do elenco com conta vinculada, INCLUSIVE quem
+      // chamou — assim a pessoa sabe que a chamada saiu de verdade e vê como
+      // o texto ficou. Mesma lógica do Discord, só que disparada do site. Já
+      // respondemos a requisição, então isso roda "em segundo plano": um erro
+      // aqui não pode tentar responder de novo.
       try {
         const clan = await getClanById(req.params.id);
         if (clan) {
           const siteUrl = (process.env.DASHBOARD_URL || 'https://bryanfut.up.railway.app').replace(/\/$/, '');
           const chamadaUrl = `${siteUrl}/fut/chamada/${chamada.id}`;
           const texto = `📣 **Vai ter fut!** (${clan.name})\n📍 ${chamada.local}\n🕒 ${chamada.horario}${chamada.mensagem ? `\n${chamada.mensagem}` : ''}${valorTotal ? `\n💰 Valor total: R$ ${valorTotal.toFixed(2)}` : ''}\n\nConfirme presença: ${chamadaUrl}`;
-          const alvos = clan.members.filter((m) => m.discordId && m.discordId !== userId);
+          const alvos = clan.members.filter((m) => m.discordId);
           await Promise.all(alvos.map(async (m) => {
             try { const user = await discordClient.users.fetch(m.discordId!); await user.send(texto); } catch { /* DM fechada — ignora */ }
           }));
@@ -2535,8 +2597,8 @@ ${activitySdkBootstrap(clientId!)}
   .card { background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 22px; margin-bottom: 18px; }
   .card h2 { font-size: 1.1rem; margin-bottom: 14px; }
   .row { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
-  input, select { background: var(--card2); border: 1px solid var(--border); color: white; padding: 11px 14px; border-radius: 8px; outline: none; font-size: 0.9rem; }
-  input:focus, select:focus { border-color: var(--primary); }
+  input, select, textarea { background: var(--card2); border: 1px solid var(--border); color: white; padding: 11px 14px; border-radius: 8px; outline: none; font-size: 0.9rem; font-family: inherit; }
+  input:focus, select:focus, textarea:focus { border-color: var(--primary); }
   button.btn { background: var(--primary); color: #05050A; border: none; padding: 11px 20px; border-radius: 8px; font-weight: 800; cursor: pointer; font-size: 0.88rem; }
   button.btn:hover { filter: brightness(1.1); }
   button.btn.secondary { background: var(--card2); color: white; border: 1px solid var(--border); }
@@ -2579,14 +2641,31 @@ ${activitySdkBootstrap(clientId!)}
         <p style="color:var(--text-muted);font-size:0.85rem;margin-bottom:12px;">Você tá em mais de um servidor da Aliança — escolha qual usar.</p>
         <div class="row"><select id="guildSelect" onchange="selecionarServidor()" style="flex:1;min-width:200px;"></select></div>
       </div>
-      <div class="card">
-        <h2>🧍 Minha posição preferida</h2>
-        <p style="color:var(--text-muted);font-size:0.85rem;margin-bottom:12px;">Usada automaticamente quando você entra numa partida (dá pra mudar na hora também).</p>
+      <div class="card" id="perfilGlobalCard">
+        <h2>👤 Meu perfil</h2>
+        <p style="color:var(--text-muted);font-size:0.85rem;margin-bottom:12px;">Seu perfil do Rachão — fora de qualquer clã específico. Aparece assim pra quem olhar seus clãs públicos.</p>
+        <div id="perfilGlobalBanner" style="height:70px;border-radius:8px;background:var(--card2);margin-bottom:-30px;background-size:cover;background-position:center;"></div>
+        <div class="row" style="align-items:flex-end;margin-bottom:10px;">
+          <img id="perfilGlobalAvatar" src="" style="width:64px;height:64px;border-radius:50%;border:3px solid var(--bg);object-fit:cover;background:var(--card2);">
+          <div style="flex:1;">
+            <input id="pgDisplayName" type="text" placeholder="Nome de exibição (opcional, padrão: seu nome do Discord)" style="width:100%;">
+          </div>
+        </div>
+        <div class="row">
+          <input id="pgAvatarUrl" type="text" placeholder="Link da foto de perfil (URL, opcional)" style="flex:1;min-width:200px;">
+          <input id="pgBannerUrl" type="text" placeholder="Link do banner (URL, opcional)" style="flex:1;min-width:200px;">
+        </div>
+        <div class="row">
+          <textarea id="pgBio" placeholder="Bio (opcional, até 300 caracteres)" rows="2" style="flex:1;resize:vertical;"></textarea>
+        </div>
         <div class="row">
           <input id="posFutsal" type="text" placeholder="Posição no Futsal (ex: Pivô)" style="flex:1;min-width:160px;">
           <input id="posCampo" type="text" placeholder="Posição no Campo (ex: Meia)" style="flex:1;min-width:160px;">
-          <button class="btn secondary" onclick="salvarMinhasPosicoes()">Salvar</button>
         </div>
+        <div class="row" style="margin-top:6px;"><button class="btn" onclick="salvarPerfilGlobal()">💾 Salvar perfil</button></div>
+
+        <div id="perfilGlobalTotais" style="margin-top:16px;"></div>
+        <div id="perfilGlobalClans" style="margin-top:10px;"></div>
       </div>
       <div class="card">
         <h2>Seus clãs <small id="clanSlotCount" style="color:var(--text-muted);font-weight:normal;"></small></h2>
@@ -2662,22 +2741,64 @@ ${activitySdkBootstrap(clientId!)}
       return data;
     }
 
-    // ── Minha posição preferida (global, independe de clã) ──────────────
-    async function loadMinhasPosicoes() {
+    // ── Meu perfil (global, fora de qualquer clã) ────────────────────────
+    let perfilGlobalData = null;
+
+    async function loadPerfilGlobal() {
       try {
-        const data = await api('/api/activities/fut/me');
+        const data = await api('/api/activities/fut/me/global');
+        perfilGlobalData = data;
+        document.getElementById('pgDisplayName').value = data.displayName || '';
+        document.getElementById('pgAvatarUrl').value = data.avatarUrl || '';
+        document.getElementById('pgBannerUrl').value = data.bannerUrl || '';
+        document.getElementById('pgBio').value = data.bio || '';
         document.getElementById('posFutsal').value = data.positionFutsal || '';
         document.getElementById('posCampo').value = data.positionCampo || '';
+        document.getElementById('perfilGlobalAvatar').src = data.avatarUrl || data.discordAvatarUrl || '';
+        const banner = document.getElementById('perfilGlobalBanner');
+        banner.style.backgroundImage = data.bannerUrl ? 'url(' + data.bannerUrl + ')' : 'none';
+        renderPerfilGlobalResumo(data);
       } catch (e) { /* silencioso */ }
     }
 
-    async function salvarMinhasPosicoes() {
+    function renderPerfilGlobalResumo(data) {
+      const t = data.totais;
+      document.getElementById('perfilGlobalTotais').innerHTML = \`
+        <table class="stats-table">
+          <tr><td>Clãs</td><td style="text-align:right;">\${t.totalClans}</td></tr>
+          <tr><td>Partidas (todos os clãs)</td><td style="text-align:right;">\${t.totalPartidas}</td></tr>
+          <tr><td>XP total</td><td style="text-align:right;">\${t.totalXp}</td></tr>
+          <tr><td>Nota média geral</td><td style="text-align:right;">\${t.notaMedia != null ? notaBadgeHtml(t.notaMedia) : '—'}</td></tr>
+        </table>\`;
+      const publicos = data.clans.filter(c => c.visibility === 'publico');
+      document.getElementById('perfilGlobalClans').innerHTML = !publicos.length ? '' : \`
+        <p style="font-size:0.82rem;color:var(--text-muted);margin:10px 0 6px;">Clãs públicos:</p>
+        <div class="clan-list">\${publicos.map(c => \`
+          <div class="clan-item" onclick="abrirClanDoPerfil('\${c.clanId}')">
+            <div><strong>\${c.isCreator ? '👑 ' : ''}\${c.clanName}</strong><div class="meta">\${c.totalPartidas} partida(s) · \${c.xp} XP\${c.notaMedia != null ? ' · nota ' + c.notaMedia.toFixed(1) : ''}</div></div>
+          </div>\`).join('')}</div>\`;
+    }
+
+    function abrirClanDoPerfil(clanId) {
+      const found = clans.find(c => c.id === clanId);
+      if (found) { abrirClan(clanId); return; }
+      showToast('Esse clã é de outro servidor — troque de servidor acima pra acessar ele.');
+    }
+
+    async function salvarPerfilGlobal() {
       const futsal = document.getElementById('posFutsal').value.trim();
       const campo = document.getElementById('posCampo').value.trim();
       try {
         if (futsal) await api('/api/activities/fut/me/position', { method: 'POST', body: JSON.stringify({ mode: 'futsal', position: futsal }) });
         if (campo) await api('/api/activities/fut/me/position', { method: 'POST', body: JSON.stringify({ mode: 'campo', position: campo }) });
-        showToast('✅ Posições salvas!');
+        await api('/api/activities/fut/me/global', { method: 'POST', body: JSON.stringify({
+          displayName: document.getElementById('pgDisplayName').value.trim() || null,
+          bio: document.getElementById('pgBio').value.trim() || null,
+          avatarUrl: document.getElementById('pgAvatarUrl').value.trim() || null,
+          bannerUrl: document.getElementById('pgBannerUrl').value.trim() || null,
+        }) });
+        showToast('✅ Perfil salvo!');
+        loadPerfilGlobal();
       } catch (e) { showToast('❌ ' + e.message); }
     }
 
@@ -3542,12 +3663,13 @@ ${activitySdkBootstrap(clientId!)}
       const ordenado = clanStatsElenco.slice().sort(CLAN_STATS_SORTS[clanStatsSort].cmp);
       const opcoesOrdem = Object.keys(CLAN_STATS_SORTS).map(k => \`<option value="\${k}" \${k === clanStatsSort ? 'selected' : ''}>\${CLAN_STATS_SORTS[k].label}</option>\`).join('');
 
+      const podeEditar = souClanRecorder();
       html += \`<div class="card">
         <div class="row" style="justify-content:space-between;align-items:center;flex-wrap:wrap;">
           <h2 style="margin:0;">👥 Elenco completo (\${clanStatsElenco.length})</h2>
           <label style="font-size:0.82rem;color:var(--text-muted);">Ordenar por: <select onchange="setElencoSort(this.value)">\${opcoesOrdem}</select></label>
         </div>
-        <table class="stats-table"><tr><td><strong>Jogador</strong></td><td style="text-align:right;"><strong>Nota</strong></td><td style="text-align:right;"><strong>J</strong></td><td style="text-align:right;"><strong>⚽</strong></td><td style="text-align:right;"><strong>🅰️</strong></td><td style="text-align:right;"><strong>🧤</strong></td><td style="text-align:right;"><strong>🥅</strong></td><td style="text-align:right;"><strong>⚠️</strong></td><td style="text-align:right;"><strong>XP</strong></td></tr>\` +
+        <table class="stats-table"><tr><td><strong>Jogador</strong></td><td style="text-align:right;"><strong>Nota</strong></td><td style="text-align:right;"><strong>J</strong></td><td style="text-align:right;"><strong>⚽</strong></td><td style="text-align:right;"><strong>🅰️</strong></td><td style="text-align:right;"><strong>🧤</strong></td><td style="text-align:right;"><strong>🥅</strong></td><td style="text-align:right;"><strong>⚠️</strong></td><td style="text-align:right;"><strong>XP</strong></td>\${podeEditar ? '<td></td>' : ''}</tr>\` +
         ordenado.map(p => \`<tr>
           <td>\${avatarHtml(p.avatarUrl, p.displayName, 20)}\${p.displayName}</td>
           <td style="text-align:right;">\${notaBadgeHtml(p.notaMedia)}</td>
@@ -3558,9 +3680,75 @@ ${activitySdkBootstrap(clientId!)}
           <td style="text-align:right;">\${p.golsConcedidos}</td>
           <td style="text-align:right;">\${p.errosGraves}</td>
           <td style="text-align:right;">\${p.xp}</td>
+          \${podeEditar ? \`<td style="text-align:right;"><button class="btn secondary" style="padding:2px 8px;font-size:0.75rem;" onclick="iniciarEdicaoStats('\${p.discordId}')" title="Corrigir estatística">✏️</button></td>\` : ''}
         </tr>\`).join('') + '</table></div>';
 
+      html += '<div id="statsEditBox"></div>';
       panel.innerHTML = html;
+      if (editandoStatsDiscordId) renderStatsEditForm();
+    }
+
+    // Quem pode registrar partida nesse clã (dono ou autorizado nas
+    // configurações) também pode corrigir estatística na mão.
+    function souClanRecorder() {
+      if (!currentClan) return false;
+      if (currentClan.creatorId === ME_ID) return true;
+      return (currentClan.members || []).some(m => m.discordId === ME_ID && m.canRecord);
+    }
+
+    let editandoStatsDiscordId = null;
+    const STATS_EDIT_FIELDS = [
+      ['totalPartidas', 'Partidas'], ['vitorias', 'Vitórias'], ['derrotas', 'Derrotas'], ['empates', 'Empates'],
+      ['goals', 'Gols'], ['assists', 'Assistências'], ['defesas', 'Defesas'], ['golsConcedidos', 'Gols concedidos'], ['errosGraves', 'Erros graves'],
+      ['desarmes', 'Desarmes'], ['boasJogadas', 'Boas jogadas'], ['bloqueios', 'Bloqueios'], ['falhasDefensivas', 'Falhas defensivas'], ['falhasOfensivas', 'Falhas ofensivas'],
+      ['xp', 'XP'], ['notaMedia', 'Nota média'],
+    ];
+
+    function iniciarEdicaoStats(discordId) {
+      editandoStatsDiscordId = discordId;
+      renderClanStatsPanel();
+      document.getElementById('statsEditBox').scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+
+    function cancelarEdicaoStats() { editandoStatsDiscordId = null; renderClanStatsPanel(); }
+
+    function renderStatsEditForm() {
+      const p = clanStatsElenco.find(x => x.discordId === editandoStatsDiscordId);
+      const box = document.getElementById('statsEditBox');
+      if (!p || !box) return;
+      box.innerHTML = \`<div class="card" style="border-color:var(--primary);">
+        <h2>✏️ Corrigir estatística — \${p.displayName} (\${currentMode})</h2>
+        <p style="color:var(--text-muted);font-size:0.8rem;margin-bottom:10px;">Edita direto o total salvo desse jogador nesse clã/modo. Use com cuidado — não mexe em nenhuma partida específica, só no acumulado.</p>
+        <div class="row" style="flex-wrap:wrap;">
+          \${STATS_EDIT_FIELDS.map(([field, label]) => \`
+            <div style="min-width:120px;">
+              <label style="font-size:0.72rem;color:var(--text-muted);display:block;margin-bottom:3px;">\${label}</label>
+              <input id="statsEdit_\${field}" type="number" step="\${field === 'notaMedia' ? '0.1' : '1'}" value="\${p[field] != null ? p[field] : 0}" style="width:100%;">
+            </div>\`).join('')}
+        </div>
+        <div class="row" style="margin-top:12px;">
+          <button class="btn" onclick="salvarEdicaoStats()">💾 Salvar</button>
+          <button class="btn secondary" onclick="cancelarEdicaoStats()">Cancelar</button>
+        </div>
+      </div>\`;
+    }
+
+    async function salvarEdicaoStats() {
+      const discordId = editandoStatsDiscordId;
+      if (!discordId) return;
+      const changes = {};
+      for (const [field] of STATS_EDIT_FIELDS) {
+        const el = document.getElementById('statsEdit_' + field);
+        if (el && el.value !== '') changes[field] = Number(el.value);
+      }
+      try {
+        const data = await api('/api/activities/fut/clans/' + currentClan.id + '/stats/edit', { method: 'POST', body: JSON.stringify({ discordId, mode: currentMode, changes }) });
+        clanStatsOverview = data.overview;
+        clanStatsElenco = data.elenco;
+        editandoStatsDiscordId = null;
+        showToast('✅ Estatística corrigida!');
+        renderClanStatsPanel();
+      } catch (e) { showToast('❌ ' + e.message); }
     }
 
     // ── Simulação (brincadeira): partida FICTÍCIA minuto a minuto, com base
@@ -3739,6 +3927,9 @@ ${activitySdkBootstrap(clientId!)}
         const ehCriador = m.discordId && m.discordId === currentClan.creatorId;
         return \`<span class="chip">\${avatarHtml(m.avatarUrl, m.displayName, 20)}\${m.displayName}
           \${souCriador ? \`<select onchange="definirElenco(this.value, '\${m.discordId || ''}', '\${m.displayName}')" style="margin-left:6px;">\${teamOptionsHtml}</select>\` : ''}
+          \${souCriador && !ehCriador && m.discordId ? \`<label style="margin-left:6px;font-size:0.72rem;color:var(--text-muted);display:flex;align-items:center;gap:3px;cursor:pointer;" title="Deixa essa pessoa criar/gerenciar partida nesse clã">
+            <input type="checkbox" \${m.canRecord ? 'checked' : ''} onchange="toggleCanRecord('\${m.discordId}', '\${m.displayName}', this.checked)"> registra partida
+          </label>\` : ''}
           \${souCriador && !ehCriador ? \`<button class="btn danger" style="padding:2px 8px;margin-left:4px;" onclick="removerMembro('\${m.id}')" title="Remover do elenco">✕</button>\` : ''}
         </span>\`;
       }
@@ -3855,6 +4046,14 @@ ${activitySdkBootstrap(clientId!)}
       } catch (e) { showToast('❌ ' + e.message); }
     }
 
+    async function toggleCanRecord(discordId, displayName, canRecord) {
+      try {
+        const data = await api('/api/activities/fut/clans/' + currentClan.id + '/members/can-record', { method: 'POST', body: JSON.stringify({ discordId, canRecord }) });
+        if (data.clan) currentClan = data.clan;
+        showToast(canRecord ? '✅ ' + displayName + ' agora pode registrar partida.' : '🚫 ' + displayName + ' não registra mais partida.');
+      } catch (e) { showToast('❌ ' + e.message); loadElenco(); }
+    }
+
     // ── Chamar o fut: convite (local, horário, PIX, link) + RSVP ─────────
     async function loadChamadas() {
       const panel = document.getElementById('panelChamar');
@@ -3947,7 +4146,7 @@ ${activitySdkBootstrap(clientId!)}
 
     (async () => {
       await window.activityReady;
-      await Promise.all([loadServers(), loadClans(), loadMinhasPosicoes()]);
+      await Promise.all([loadServers(), loadClans(), loadPerfilGlobal()]);
     })();
   </script>
 </body>

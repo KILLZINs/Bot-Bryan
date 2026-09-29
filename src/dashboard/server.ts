@@ -2263,7 +2263,7 @@ ${activitySdkBootstrap(clientId!)}
   app.post('/api/activities/fut/clans/:id/events/:eventId/animation', requirePlayerAuth, async (req, res) => {
     try {
       const userId = req.cookies!.player_userid as string;
-      const frames = await saveFutGoalAnimation(req.params.eventId, userId, req.body?.frames);
+      const frames = await saveFutGoalAnimation(req.params.eventId, userId, req.body?.frames, req.body?.shot);
       res.json({ frames });
     } catch (err) { handleFutError(res, err); }
   });
@@ -2841,6 +2841,7 @@ ${activitySdkBootstrap(clientId!)}
       currentMode = mode;
       if (currentTab === 'perfil') loadPerfil();
       if (currentTab === 'ranking') loadRanking();
+      if (currentTab === 'stats') loadClanStats();
     }
 
     function modeToggleHtml() {
@@ -3210,6 +3211,7 @@ ${activitySdkBootstrap(clientId!)}
     let animSelectedId = null;
     let animSouCriador = false;
     let animPlaying = false;
+    let animShot = null; // { x, y } em % dentro do desenho do gol, ou null (sem marcação)
 
     const ANIM_TOKEN_LABEL = { bola: '⚽', jogadorA: '🟡', jogadorB: '🔵', seta: '➡️' };
 
@@ -3224,6 +3226,7 @@ ${activitySdkBootstrap(clientId!)}
         animFrameIdx = 0;
         animSelectedId = null;
         animSouCriador = !!data.souCriador;
+        animShot = data.shot || null;
         renderAnimEditor(data.displayName);
         card.scrollIntoView({ behavior: 'smooth', block: 'start' });
       } catch (e) { card.innerHTML = '<div class="card"><div class="empty-hint">❌ ' + e.message + '</div></div>'; }
@@ -3250,6 +3253,12 @@ ${activitySdkBootstrap(clientId!)}
                 <span class="chip" draggable="true" ondragstart="animDragStart(event,'jogadorB')" title="Arraste pro campo">🔵 Jogador B</span>
                 <span class="chip" draggable="true" ondragstart="animDragStart(event,'seta')" title="Arraste pro campo">➡️ Direção</span>
               </div>\` : ''}
+              <div style="margin-top:14px;">
+                <p style="font-size:0.82rem;margin-bottom:4px;">🥅 Local do chute\${animSouCriador ? ' <small style="color:var(--text-muted);">(clique dentro do gol pra marcar)</small>' : ''}</p>
+                <div id="animGoal" style="position:relative;width:160px;height:96px;background:repeating-linear-gradient(0deg,#0d2417,#0d2417 11px,#173a26 11px,#173a26 12px),repeating-linear-gradient(90deg,#0d2417,#0d2417 11px,#173a26 11px,#173a26 12px);border:3px solid #e8e8e8;border-bottom:none;cursor:\${animSouCriador ? 'crosshair' : 'default'};"
+                     \${animSouCriador ? 'onclick="animGoalClick(event)"' : ''}></div>
+                \${animSouCriador ? '<button class="btn secondary" style="margin-top:6px;padding:2px 8px;font-size:0.78rem;" onclick="animClearShot()">Limpar marcação</button>' : ''}
+              </div>
             </div>
             <div style="min-width:200px;">
               <p style="font-size:0.82rem;">Frame <strong id="animFrameIdx">1</strong> / <strong id="animFrameTotal">1</strong></p>
@@ -3271,6 +3280,33 @@ ${activitySdkBootstrap(clientId!)}
           </div>
         </div>\`;
       renderAnimFrame();
+      renderAnimShot();
+    }
+
+    function renderAnimShot() {
+      const goal = document.getElementById('animGoal');
+      if (!goal) return;
+      const old = goal.querySelector('.shot-marker');
+      if (old) old.remove();
+      if (!animShot) return;
+      const dot = document.createElement('div');
+      dot.className = 'shot-marker';
+      dot.style.cssText = 'position:absolute;width:14px;height:14px;border-radius:50%;background:#e74c3c;border:2px solid #fff;box-shadow:0 0 4px rgba(0,0,0,.6);transform:translate(-50%,-50%);left:' + animShot.x + '%;top:' + animShot.y + '%;pointer-events:none;';
+      goal.appendChild(dot);
+    }
+
+    function animGoalClick(ev) {
+      if (!animSouCriador) return;
+      const rect = ev.currentTarget.getBoundingClientRect();
+      const x = Math.max(0, Math.min(100, ((ev.clientX - rect.left) / rect.width) * 100));
+      const y = Math.max(0, Math.min(100, ((ev.clientY - rect.top) / rect.height) * 100));
+      animShot = { x: Math.round(x * 10) / 10, y: Math.round(y * 10) / 10 };
+      renderAnimShot();
+    }
+
+    function animClearShot() {
+      animShot = null;
+      renderAnimShot();
     }
 
     function renderAnimFrame() {
@@ -3391,9 +3427,9 @@ ${activitySdkBootstrap(clientId!)}
 
     async function animSave() {
       try {
-        const data = await api('/api/activities/fut/clans/' + currentClan.id + '/events/' + animEventId + '/animation', { method: 'POST', body: JSON.stringify({ frames: animFrames }) });
+        const data = await api('/api/activities/fut/clans/' + currentClan.id + '/events/' + animEventId + '/animation', { method: 'POST', body: JSON.stringify({ frames: animFrames, shot: animShot }) });
         animFrames = data.frames;
-        showToast('💾 Animação salva!');
+        showToast('💾 Animação e local do chute salvos!');
       } catch (e) { showToast('❌ ' + e.message); }
     }
 
@@ -3446,54 +3482,85 @@ ${activitySdkBootstrap(clientId!)}
     // ── Estatísticas do clã inteiro (agregado) + elenco completo ─────────
     // (item: "salvar tanto os da pelada inteira quanto individualmente,
     // mostrando a de todo o elenco" — sem limite de top-N como o Ranking).
+    let clanStatsOverview = null;
+    let clanStatsElenco = [];
+    // Ordem do "Elenco completo" — guardado à parte pra poder reordenar sem
+    // precisar buscar tudo de novo na API (só reordena o array já carregado).
+    let clanStatsSort = 'xp';
+    const CLAN_STATS_SORTS = {
+      xp: { label: 'XP', cmp: (a, b) => b.xp - a.xp },
+      nota: { label: 'Nota', cmp: (a, b) => b.notaMedia - a.notaMedia },
+      nome: { label: 'Nome (A-Z)', cmp: (a, b) => a.displayName.localeCompare(b.displayName, 'pt-BR') },
+      gols: { label: 'Gols', cmp: (a, b) => b.goals - a.goals },
+      assistencias: { label: 'Assistências', cmp: (a, b) => b.assists - a.assists },
+      partidas: { label: 'Partidas', cmp: (a, b) => b.totalPartidas - a.totalPartidas },
+    };
+
     async function loadClanStats() {
       const panel = document.getElementById('panelStats');
       panel.innerHTML = modeToggleHtml() + '<div class="empty-hint">Carregando...</div>';
       try {
         const data = await api('/api/activities/fut/clans/' + currentClan.id + '/overview?mode=' + currentMode);
-        const o = data.overview;
-        if (!o.totalJogadores) {
-          panel.innerHTML = modeToggleHtml() + '<div class="card"><div class="empty-hint">Ninguém finalizou uma partida de ' + currentMode + ' nesse clã ainda.</div></div>';
-          return;
-        }
-        let html = modeToggleHtml() + \`
-          <div class="card">
-            <h2>📊 Visão geral do clã (\${currentMode})</h2>
-            <table class="stats-table">
-              <tr><td>Partidas finalizadas</td><td style="text-align:right;">\${o.totalPartidas}</td></tr>
-              <tr><td>Jogadores com estatísticas</td><td style="text-align:right;">\${o.totalJogadores}</td></tr>
-              <tr><td>Vitórias / Derrotas / Empates (somado)</td><td style="text-align:right;">\${o.totalVitorias} / \${o.totalDerrotas} / \${o.totalEmpates}</td></tr>
-              <tr><td>Gols do elenco</td><td style="text-align:right;">\${o.totalGols}</td></tr>
-              <tr><td>Assistências do elenco</td><td style="text-align:right;">\${o.totalAssists}</td></tr>
-              <tr><td>Defesas do elenco</td><td style="text-align:right;">\${o.totalDefesas}</td></tr>
-              <tr><td>Gols concedidos</td><td style="text-align:right;">\${o.totalConcedidos}</td></tr>
-              <tr><td>Erros graves</td><td style="text-align:right;">\${o.totalErros}</td></tr>
-              <tr><td>Desarmes</td><td style="text-align:right;">\${o.totalDesarmes}</td></tr>
-              <tr><td>Boas jogadas</td><td style="text-align:right;">\${o.totalBoasJogadas}</td></tr>
-              <tr><td>Bloqueios</td><td style="text-align:right;">\${o.totalBloqueios}</td></tr>
-              <tr><td>Falhas defensivas</td><td style="text-align:right;">\${o.totalFalhasDefensivas}</td></tr>
-              <tr><td>Falhas ofensivas</td><td style="text-align:right;">\${o.totalFalhasOfensivas}</td></tr>
-            </table>\`;
-        if (o.artilheiro) html += \`<p style="margin-top:10px;">👑 <strong>Artilheiro:</strong> \${avatarHtml(o.artilheiro.avatarUrl, o.artilheiro.displayName, 20)}\${o.artilheiro.displayName} — \${o.artilheiro.goals} gols</p>\`;
-        if (o.garcom) html += \`<p>🎯 <strong>Garçom:</strong> \${avatarHtml(o.garcom.avatarUrl, o.garcom.displayName, 20)}\${o.garcom.displayName} — \${o.garcom.assists} assists</p>\`;
-        if (o.melhorNota) html += \`<p>⭐ <strong>Melhor nota média:</strong> \${avatarHtml(o.melhorNota.avatarUrl, o.melhorNota.displayName, 20)}\${o.melhorNota.displayName} — \${notaBadgeHtml(o.melhorNota.notaMedia)}</p>\`;
-        html += '</div>';
-
-        html += '<div class="card"><h2>👥 Elenco completo (' + data.elenco.length + ')</h2><table class="stats-table"><tr><td><strong>Jogador</strong></td><td style="text-align:right;"><strong>Nota</strong></td><td style="text-align:right;"><strong>J</strong></td><td style="text-align:right;"><strong>⚽</strong></td><td style="text-align:right;"><strong>🅰️</strong></td><td style="text-align:right;"><strong>🧤</strong></td><td style="text-align:right;"><strong>🥅</strong></td><td style="text-align:right;"><strong>⚠️</strong></td><td style="text-align:right;"><strong>XP</strong></td></tr>' +
-          data.elenco.map(p => \`<tr>
-            <td>\${avatarHtml(p.avatarUrl, p.displayName, 20)}\${p.displayName}</td>
-            <td style="text-align:right;">\${notaBadgeHtml(p.notaMedia)}</td>
-            <td style="text-align:right;">\${p.totalPartidas}</td>
-            <td style="text-align:right;">\${p.goals}</td>
-            <td style="text-align:right;">\${p.assists}</td>
-            <td style="text-align:right;">\${p.defesas}</td>
-            <td style="text-align:right;">\${p.golsConcedidos}</td>
-            <td style="text-align:right;">\${p.errosGraves}</td>
-            <td style="text-align:right;">\${p.xp}</td>
-          </tr>\`).join('') + '</table></div>';
-
-        panel.innerHTML = html;
+        clanStatsOverview = data.overview;
+        clanStatsElenco = data.elenco;
+        renderClanStatsPanel();
       } catch (e) { panel.innerHTML = modeToggleHtml() + '<div class="card"><div class="empty-hint">❌ ' + e.message + '</div></div>'; }
+    }
+
+    function setElencoSort(sort) { clanStatsSort = sort; renderClanStatsPanel(); }
+
+    function renderClanStatsPanel() {
+      const panel = document.getElementById('panelStats');
+      const o = clanStatsOverview;
+      if (!o || !o.totalJogadores) {
+        panel.innerHTML = modeToggleHtml() + '<div class="card"><div class="empty-hint">Ninguém finalizou uma partida de ' + currentMode + ' nesse clã ainda.</div></div>';
+        return;
+      }
+      let html = modeToggleHtml() + \`
+        <div class="card">
+          <h2>📊 Visão geral do clã (\${currentMode})</h2>
+          <table class="stats-table">
+            <tr><td>Partidas finalizadas</td><td style="text-align:right;">\${o.totalPartidas}</td></tr>
+            <tr><td>Jogadores com estatísticas</td><td style="text-align:right;">\${o.totalJogadores}</td></tr>
+            <tr><td>Vitórias / Derrotas / Empates (somado)</td><td style="text-align:right;">\${o.totalVitorias} / \${o.totalDerrotas} / \${o.totalEmpates}</td></tr>
+            <tr><td>Gols do elenco</td><td style="text-align:right;">\${o.totalGols}</td></tr>
+            <tr><td>Assistências do elenco</td><td style="text-align:right;">\${o.totalAssists}</td></tr>
+            <tr><td>Defesas do elenco</td><td style="text-align:right;">\${o.totalDefesas}</td></tr>
+            <tr><td>Gols concedidos</td><td style="text-align:right;">\${o.totalConcedidos}</td></tr>
+            <tr><td>Erros graves</td><td style="text-align:right;">\${o.totalErros}</td></tr>
+            <tr><td>Desarmes</td><td style="text-align:right;">\${o.totalDesarmes}</td></tr>
+            <tr><td>Boas jogadas</td><td style="text-align:right;">\${o.totalBoasJogadas}</td></tr>
+            <tr><td>Bloqueios</td><td style="text-align:right;">\${o.totalBloqueios}</td></tr>
+            <tr><td>Falhas defensivas</td><td style="text-align:right;">\${o.totalFalhasDefensivas}</td></tr>
+            <tr><td>Falhas ofensivas</td><td style="text-align:right;">\${o.totalFalhasOfensivas}</td></tr>
+          </table>\`;
+      if (o.artilheiro) html += \`<p style="margin-top:10px;">👑 <strong>Artilheiro:</strong> \${avatarHtml(o.artilheiro.avatarUrl, o.artilheiro.displayName, 20)}\${o.artilheiro.displayName} — \${o.artilheiro.goals} gols</p>\`;
+      if (o.garcom) html += \`<p>🎯 <strong>Garçom:</strong> \${avatarHtml(o.garcom.avatarUrl, o.garcom.displayName, 20)}\${o.garcom.displayName} — \${o.garcom.assists} assists</p>\`;
+      if (o.melhorNota) html += \`<p>⭐ <strong>Melhor nota média:</strong> \${avatarHtml(o.melhorNota.avatarUrl, o.melhorNota.displayName, 20)}\${o.melhorNota.displayName} — \${notaBadgeHtml(o.melhorNota.notaMedia)}</p>\`;
+      html += '</div>';
+
+      const ordenado = clanStatsElenco.slice().sort(CLAN_STATS_SORTS[clanStatsSort].cmp);
+      const opcoesOrdem = Object.keys(CLAN_STATS_SORTS).map(k => \`<option value="\${k}" \${k === clanStatsSort ? 'selected' : ''}>\${CLAN_STATS_SORTS[k].label}</option>\`).join('');
+
+      html += \`<div class="card">
+        <div class="row" style="justify-content:space-between;align-items:center;flex-wrap:wrap;">
+          <h2 style="margin:0;">👥 Elenco completo (\${clanStatsElenco.length})</h2>
+          <label style="font-size:0.82rem;color:var(--text-muted);">Ordenar por: <select onchange="setElencoSort(this.value)">\${opcoesOrdem}</select></label>
+        </div>
+        <table class="stats-table"><tr><td><strong>Jogador</strong></td><td style="text-align:right;"><strong>Nota</strong></td><td style="text-align:right;"><strong>J</strong></td><td style="text-align:right;"><strong>⚽</strong></td><td style="text-align:right;"><strong>🅰️</strong></td><td style="text-align:right;"><strong>🧤</strong></td><td style="text-align:right;"><strong>🥅</strong></td><td style="text-align:right;"><strong>⚠️</strong></td><td style="text-align:right;"><strong>XP</strong></td></tr>\` +
+        ordenado.map(p => \`<tr>
+          <td>\${avatarHtml(p.avatarUrl, p.displayName, 20)}\${p.displayName}</td>
+          <td style="text-align:right;">\${notaBadgeHtml(p.notaMedia)}</td>
+          <td style="text-align:right;">\${p.totalPartidas}</td>
+          <td style="text-align:right;">\${p.goals}</td>
+          <td style="text-align:right;">\${p.assists}</td>
+          <td style="text-align:right;">\${p.defesas}</td>
+          <td style="text-align:right;">\${p.golsConcedidos}</td>
+          <td style="text-align:right;">\${p.errosGraves}</td>
+          <td style="text-align:right;">\${p.xp}</td>
+        </tr>\`).join('') + '</table></div>';
+
+      panel.innerHTML = html;
     }
 
     // ── Simulação (brincadeira): partida FICTÍCIA minuto a minuto, com base
@@ -3561,6 +3628,41 @@ ${activitySdkBootstrap(clientId!)}
       } catch (e) { box.innerHTML = '<div class="card"><div class="empty-hint">❌ ' + e.message + '</div></div>'; }
     }
 
+    // Campinho animado do replay: Time A ataca pro gol da DIREITA, Time B pro
+    // da ESQUERDA — a bolinha desliza até a posição de cada lance (gol perto
+    // da trave, defesa um pouco antes dela, chance no meio do ataque) e pisca
+    // verde num gol, só pra ficar mais fácil (e mais daora) de acompanhar o
+    // minuto a minuto do que só lendo a lista de texto.
+    function simPitchHtml() {
+      return \`<div id="simPitch" style="position:relative;width:100%;max-width:480px;height:230px;margin:14px auto 6px;background:#12331f;border-radius:10px;border:2px solid #3a6b4a;overflow:hidden;">
+        <div style="position:absolute;left:50%;top:0;bottom:0;width:2px;background:#3a6b4a;"></div>
+        <div style="position:absolute;left:50%;top:50%;width:76px;height:76px;border:2px solid #3a6b4a;border-radius:50%;transform:translate(-50%,-50%);"></div>
+        <div style="position:absolute;left:0;top:25%;bottom:25%;width:12%;border:2px solid #3a6b4a;border-left:none;"></div>
+        <div style="position:absolute;right:0;top:25%;bottom:25%;width:12%;border:2px solid #3a6b4a;border-right:none;"></div>
+        <div style="position:absolute;left:4px;top:6px;font-size:0.68rem;color:#8fb89c;font-weight:700;">◀ TIME B</div>
+        <div style="position:absolute;right:4px;top:6px;font-size:0.68rem;color:#8fb89c;font-weight:700;">TIME A ▶</div>
+        <div id="simFlash" style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:1.7rem;font-weight:800;color:#fff;background:rgba(46,204,113,0);pointer-events:none;transition:background .25s;"></div>
+        <div id="simBallTag" style="position:absolute;left:50%;top:50%;transform:translate(-50%,-160%);font-size:0.7rem;font-weight:700;color:#fff;background:rgba(0,0,0,.6);padding:2px 6px;border-radius:4px;white-space:nowrap;opacity:0;transition:left .5s ease,top .5s ease,opacity .25s;">-</div>
+        <div id="simBall" style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);font-size:22px;transition:left .5s ease,top .5s ease;">⚽</div>
+      </div>\`;
+    }
+
+    function simMoveBall(x, y, label) {
+      const ball = document.getElementById('simBall');
+      const tag = document.getElementById('simBallTag');
+      if (ball) { ball.style.left = x + '%'; ball.style.top = y + '%'; }
+      if (tag) { tag.style.left = x + '%'; tag.style.top = y + '%'; tag.textContent = label || ''; tag.style.opacity = label ? '1' : '0'; }
+    }
+
+    function simFlashGoal() {
+      const flash = document.getElementById('simFlash');
+      if (!flash) return;
+      flash.textContent = '⚽ GOL!';
+      flash.style.background = 'rgba(46,204,113,.35)';
+      setTimeout(() => { flash.style.background = 'rgba(46,204,113,0)'; }, 550);
+      setTimeout(() => { if (flash.textContent === '⚽ GOL!') flash.textContent = ''; }, 900);
+    }
+
     function renderSimulacaoResultado(sim) {
       const box = document.getElementById('simResultBox');
       const resLabel = sim.resultado === 'empate' ? '🤝 Empate!' : sim.resultado === 'vitoria_a' ? '🏆 Vitória do Time A!' : '🏆 Vitória do Time B!';
@@ -3571,7 +3673,8 @@ ${activitySdkBootstrap(clientId!)}
         </div>
         <div class="score-big" id="simScore">0 x 0</div>
         <p style="text-align:center;color:var(--text-muted);" id="simResultLabel"></p>
-        <div id="simTimeline" style="max-height:320px;overflow-y:auto;margin-top:10px;"></div>
+        \${simPitchHtml()}
+        <div id="simTimeline" style="max-height:220px;overflow-y:auto;margin-top:10px;"></div>
         <div class="row" style="justify-content:center;margin-top:10px;">
           <button class="btn secondary" onclick='renderSimulacaoResultado(\${JSON.stringify(sim).replace(/'/g, "&#39;")})'>🔁 Reassistir</button>
           <button class="btn" onclick="renderSimulacaoSetup()">🎮 Nova simulação</button>
@@ -3585,7 +3688,7 @@ ${activitySdkBootstrap(clientId!)}
       const labelEl = document.getElementById('simResultLabel');
       let scoreA = 0, scoreB = 0, i = 0;
       function passo() {
-        if (i >= sim.timeline.length) { labelEl.textContent = resLabel; return; }
+        if (i >= sim.timeline.length) { labelEl.textContent = resLabel; simMoveBall(50, 50, ''); return; }
         const e = sim.timeline[i++];
         if (e.tipo === 'gol') { if (e.team === 'A') scoreA++; else scoreB++; }
         scoreEl.textContent = scoreA + ' x ' + scoreB;
@@ -3596,7 +3699,18 @@ ${activitySdkBootstrap(clientId!)}
         line.innerHTML = '<span><strong>' + e.minuto + '\\'</strong> ' + icone + ' ' + txt + '</span>';
         timelineEl.appendChild(line);
         timelineEl.scrollTop = timelineEl.scrollHeight;
-        setTimeout(passo, e.tipo === 'gol' ? 550 : 140);
+
+        // Time A ataca pro gol da direita (x alto), Time B pro da esquerda —
+        // gol vai bem em cima da trave, defesa um pouco antes dela, chance
+        // fica pelo meio do ataque (menos preciso).
+        const rumoDireita = e.team === 'A';
+        const yAleatorio = 32 + Math.random() * 36;
+        let x, dwell;
+        if (e.tipo === 'gol') { x = rumoDireita ? 90 : 10; dwell = 1300; simMoveBall(x, yAleatorio, '⚽ ' + e.jogador); setTimeout(simFlashGoal, 480); }
+        else if (e.tipo === 'defesa') { x = rumoDireita ? 80 : 20; dwell = 650; simMoveBall(x, yAleatorio, '🧤 ' + e.jogador); }
+        else { x = rumoDireita ? 68 : 32; dwell = 550; simMoveBall(x, yAleatorio, e.jogador); }
+
+        setTimeout(passo, dwell);
       }
       passo();
     }

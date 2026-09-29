@@ -676,10 +676,10 @@ export default {
 
         await interaction.reply({ embeds: [embed], components });
 
-        // Manda DM pra todo mundo do elenco que tem conta vinculada (menos
-        // quem chamou, que já sabe) — "chamar o fut" precisa realmente
-        // avisar a galera, não só ficar esperando alguém ver o canal.
-        const alvos = clan.members.filter((m) => m.discordId && m.discordId !== interaction.user.id);
+        // Manda DM pra todo mundo do elenco que tem conta vinculada, INCLUSIVE
+        // quem chamou — assim a pessoa sabe que a chamada realmente saiu e
+        // consegue ver com os próprios olhos como o texto ficou.
+        const alvos = clan.members.filter((m) => m.discordId);
         let enviados = 0;
         let falharam = 0;
         await Promise.all(alvos.map(async (m) => {

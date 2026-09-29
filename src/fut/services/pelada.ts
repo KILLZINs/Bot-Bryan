@@ -594,16 +594,33 @@ function sanitizeFrames(frames: unknown): FutAnimationFrame[] {
   });
 }
 
-// Salva a animação (sequência de frames) de um gol específico. Feito no
-// PÓS-PARTIDA, no site — só quem criou a partida pode editar.
-export async function saveGoalAnimation(eventId: string, requesterId: string, frames: unknown) {
+// Só aceita um ponto dentro do desenho do gol (0-100 em cada eixo) ou null
+// (sem marcação ainda / removida).
+function sanitizeShot(shot: unknown): { x: number; y: number } | null {
+  if (shot == null) return null;
+  const s = shot as any;
+  if (typeof s.x !== 'number' || typeof s.y !== 'number' || Number.isNaN(s.x) || Number.isNaN(s.y)) return null;
+  return { x: Math.max(0, Math.min(100, s.x)), y: Math.max(0, Math.min(100, s.y)) };
+}
+
+// Salva a animação (sequência de frames) e/ou o local do chute dentro do gol
+// de um evento de gol específico. Feito no PÓS-PARTIDA, no site — só quem
+// criou a partida pode editar. `shot` é opcional — quando omitido, o local
+// do chute salvo anteriormente (se tiver) não é mexido.
+export async function saveGoalAnimation(eventId: string, requesterId: string, frames: unknown, shot?: unknown) {
   const event = await prisma.futMatchEvent.findUnique({ where: { id: eventId }, include: { partida: true } });
   if (!event) throw new FutError('Gol não encontrado.');
   if (event.type !== 'gol') throw new FutError('Só dá pra montar animação em eventos de gol.');
   if (event.partida.creatorId !== requesterId) throw new FutError('Só quem criou a partida pode editar a animação desse gol.');
 
   const clean = sanitizeFrames(frames);
-  await prisma.futMatchEvent.update({ where: { id: eventId }, data: { animationFrames: JSON.stringify(clean) } });
+  const data: { animationFrames: string; shotX?: number | null; shotY?: number | null } = { animationFrames: JSON.stringify(clean) };
+  if (shot !== undefined) {
+    const cleanShot = sanitizeShot(shot);
+    data.shotX = cleanShot?.x ?? null;
+    data.shotY = cleanShot?.y ?? null;
+  }
+  await prisma.futMatchEvent.update({ where: { id: eventId }, data });
   return clean;
 }
 
@@ -614,7 +631,8 @@ export async function getGoalAnimation(eventId: string) {
   if (event.animationFrames) {
     try { frames = JSON.parse(event.animationFrames); } catch { frames = []; }
   }
-  return { eventId: event.id, displayName: event.player?.displayName || 'Desconhecido', partidaId: event.partidaId, clanId: event.partida.clanId, creatorId: event.partida.creatorId, frames };
+  const shot = (event.shotX != null && event.shotY != null) ? { x: event.shotX, y: event.shotY } : null;
+  return { eventId: event.id, displayName: event.player?.displayName || 'Desconhecido', partidaId: event.partidaId, clanId: event.partida.clanId, creatorId: event.partida.creatorId, frames, shot };
 }
 
 // Log completo de eventos da partida (play-by-play) — pra acessar/revisar

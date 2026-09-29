@@ -1012,6 +1012,10 @@ model FutClanMember {
   discordId   String?  // opcional — membro sem conta vinculada (offline)
   displayName String
   teamId      String?  // time interno do clã ao qual o jogador pertence (opcional)
+  // Quem pode "registrar partida" nesse clã (criar/iniciar/finalizar partida,
+  // registrar gol/evento, etc) além do dono do clã — setado pelo dono nas
+  // configurações do clã. Dono sempre pode, independente desse campo.
+  canRecord   Boolean  @default(false)
   joinedAt    DateTime @default(now())
 
   clan FutClan  @relation(fields: [clanId], references: [id], onDelete: Cascade)
@@ -1152,6 +1156,14 @@ model FutUserProfile {
   discordId      String   @unique
   positionFutsal String?
   positionCampo  String?
+  // Perfil PRÓPRIO do Rachão, fora de qualquer clã — igual um perfil de
+  // verdade: nome de exibição, foto e banner (colados como link de imagem,
+  // não upload) e uma bio livre. Quando vazio, cai pro nome/avatar do
+  // Discord de verdade.
+  displayName    String?
+  bio            String?  @db.Text
+  avatarUrl      String?
+  bannerUrl      String?
   updatedAt      DateTime @updatedAt
 
   @@map("fut_user_profiles")

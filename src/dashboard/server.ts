@@ -47,6 +47,11 @@ import {
   getClanOverview as getFutClanOverview, listFullClanStats as listFullFutClanStats,
   addClanMemberToPartida as addClanMemberToFutPartida, listAvailableClanMembers as listAvailableFutClanMembers,
   simulateClanMatch as simulateFutClanMatch,
+  getRankTier as getFutRankTier, getPlayerSkillRanks as getFutPlayerSkillRanks, getClanRankInfo as getFutClanRankInfo,
+  getServerLeaderboard as getFutServerLeaderboard, getGlobalLeaderboard as getFutGlobalLeaderboard,
+  getServerClanLeaderboard as getFutServerClanLeaderboard, getGlobalClanLeaderboard as getFutGlobalClanLeaderboard,
+  getLeaderboardConfig as getFutLeaderboardConfig,
+  setServerLeaderboardEnabled as setFutServerLeaderboardEnabled, setGlobalLeaderboardEnabled as setFutGlobalLeaderboardEnabled,
   type FutEventType, type FutMode, type FutTeam, type FutResultado, type FutRsvpStatus, type FutVisibility,
 } from '../fut/services/pelada';
 
@@ -1833,14 +1838,34 @@ ${activitySdkBootstrap(clientId!)}
     // O código de convite (pra clã privado) só aparece pra quem já é
     // membro/criador — pra essa pessoa poder compartilhar com quem quiser.
     const souMembro = !!viewerId && (clan.creatorId === viewerId || members.some((m) => m.discordId === viewerId));
+
+    // Ranque/leaderboard: quem pode ligar cada interruptor é diferente de
+    // quem criou o clã — o leaderboard do SERVIDOR é do dono de verdade do
+    // Discord (guild.ownerId), e o GLOBAL é só do dono do bot. Nenhum dos
+    // dois depende de ser dono do clã.
+    let souDonoServidor = false;
+    if (viewerId) {
+      const guild = discordClient.guilds.cache.get(clan.guildId) ?? await discordClient.guilds.fetch(clan.guildId).catch(() => null);
+      souDonoServidor = guild?.ownerId === viewerId;
+    }
+    const souDonoBot = viewerId === BOT_OWNER_ID;
+    const leaderboardCfg = await getFutLeaderboardConfig(clan.guildId);
+
     return {
       id: clan.id,
+      guildId: clan.guildId,
       name: clan.name,
       creatorId: clan.creatorId,
       visibility: clan.visibility,
       joinCode: souMembro ? clan.joinCode : null,
       members,
       teams: clan.teams.map((t) => ({ id: t.id, name: t.name, color: t.color })),
+      leaderboard: {
+        featFutLeaderboard: leaderboardCfg.featFutLeaderboard,
+        futGlobalLeaderboard: leaderboardCfg.futGlobalLeaderboard,
+        souDonoServidor,
+        souDonoBot,
+      },
     };
   }
 
@@ -2303,13 +2328,18 @@ ${activitySdkBootstrap(clientId!)}
   app.get('/api/activities/fut/clans/:id/overview', requirePlayerAuth, async (req, res) => {
     const mode: FutMode = req.query.mode === 'campo' ? 'campo' : 'futsal';
     const [overview, elenco] = await Promise.all([getFutClanOverview(req.params.id, mode), listFullFutClanStats(req.params.id, mode)]);
-    const elencoComNomes = await Promise.all(elenco.map(async (p) => ({ ...p, ...(await resolveStatIdentity(p.discordId, p.displayName)) })));
+    const elencoComNomes = await Promise.all(elenco.map(async (p) => ({
+      ...p,
+      ...(await resolveStatIdentity(p.discordId, p.displayName)),
+      rankTier: p.totalPartidas > 0 ? getFutRankTier(p.notaMedia) : null,
+      skillRanks: getFutPlayerSkillRanks(p),
+    })));
     const withUser = async (stat: typeof overview.artilheiro) => {
       if (!stat) return null;
       return { ...stat, ...(await resolveStatIdentity(stat.discordId, stat.displayName)) };
     };
-    const [artilheiro, garcom, melhorNota] = await Promise.all([withUser(overview.artilheiro), withUser(overview.garcom), withUser(overview.melhorNota)]);
-    res.json({ overview: { ...overview, artilheiro, garcom, melhorNota }, elenco: elencoComNomes });
+    const [artilheiro, garcom, melhorNota, clanRank] = await Promise.all([withUser(overview.artilheiro), withUser(overview.garcom), withUser(overview.melhorNota), getFutClanRankInfo(req.params.id, mode)]);
+    res.json({ overview: { ...overview, artilheiro, garcom, melhorNota, clanRank }, elenco: elencoComNomes });
   });
 
   app.get('/api/activities/fut/clans/:id/historico', requirePlayerAuth, async (req, res) => {
@@ -2386,8 +2416,72 @@ ${activitySdkBootstrap(clientId!)}
       const changes = req.body?.changes || {};
       await updateFutClanPlayerStats(req.params.id, userId, targetDiscordId, mode, changes);
       const [overview, elenco] = await Promise.all([getFutClanOverview(req.params.id, mode), listFullFutClanStats(req.params.id, mode)]);
-      const elencoComNomes = await Promise.all(elenco.map(async (p) => ({ ...p, ...(await resolveStatIdentity(p.discordId, p.displayName)) })));
+      const elencoComNomes = await Promise.all(elenco.map(async (p) => ({
+        ...p,
+        ...(await resolveStatIdentity(p.discordId, p.displayName)),
+        rankTier: p.totalPartidas > 0 ? getFutRankTier(p.notaMedia) : null,
+        skillRanks: getFutPlayerSkillRanks(p),
+      })));
       res.json({ overview, elenco: elencoComNomes });
+    } catch (err) { handleFutError(res, err); }
+  });
+
+  // ── Ranque / Leaderboard ─────────────────────────────────────────────
+  // Liga/desliga o leaderboard DESTE servidor — autoservice do DONO DE
+  // VERDADE do servidor Discord (guild.ownerId), checado de verdade contra
+  // a API do Discord (via o Client do próprio bot), não pelo cargo de
+  // admin/aliança que outras telas do painel usam.
+  app.post('/api/activities/fut/clans/:id/leaderboard/server', requirePlayerAuth, async (req, res) => {
+    try {
+      const userId = req.cookies!.player_userid as string;
+      const clan = await getClanById(req.params.id);
+      if (!clan) return res.status(404).json({ error: 'Clã não encontrado.' });
+      const guild = discordClient.guilds.cache.get(clan.guildId) ?? await discordClient.guilds.fetch(clan.guildId).catch(() => null);
+      const souDonoServidor = guild?.ownerId === userId;
+      if (!souDonoServidor && userId !== BOT_OWNER_ID) return res.status(403).json({ error: 'Só o dono de verdade deste servidor pode ligar/desligar o leaderboard aqui.' });
+      await setFutServerLeaderboardEnabled(clan.guildId, !!req.body?.enabled);
+      res.json({ clan: await serializeFutClan(clan, userId) });
+    } catch (err) { handleFutError(res, err); }
+  });
+
+  // Inclui/remove este servidor do leaderboard GLOBAL (cross-server) — só o
+  // dono do BOT decide isso, nenhum dono de servidor consegue ligar por
+  // conta própria.
+  app.post('/api/activities/fut/clans/:id/leaderboard/global', requirePlayerAuth, async (req, res) => {
+    try {
+      const userId = req.cookies!.player_userid as string;
+      if (userId !== BOT_OWNER_ID) return res.status(403).json({ error: 'Só o dono do bot pode incluir/remover um servidor do leaderboard global.' });
+      const clan = await getClanById(req.params.id);
+      if (!clan) return res.status(404).json({ error: 'Clã não encontrado.' });
+      await setFutGlobalLeaderboardEnabled(clan.guildId, !!req.body?.enabled);
+      res.json({ clan: await serializeFutClan(clan, userId) });
+    } catch (err) { handleFutError(res, err); }
+  });
+
+  // Leaderboard em si — servidor ou global, jogadores ou clãs. Se o
+  // leaderboard do servidor ainda não foi autorizado (escopo=servidor), a
+  // lista some (e não erro) pra combinar com o comando /fut leaderboard.
+  app.get('/api/activities/fut/clans/:id/leaderboard', requirePlayerAuth, async (req, res) => {
+    try {
+      const mode: FutMode = req.query.mode === 'campo' ? 'campo' : 'futsal';
+      const escopo = req.query.escopo === 'global' ? 'global' : 'servidor';
+      const tipo = req.query.tipo === 'clas' ? 'clas' : 'jogadores';
+      const clan = await getClanById(req.params.id);
+      if (!clan) return res.status(404).json({ error: 'Clã não encontrado.' });
+
+      if (escopo === 'servidor') {
+        const cfg = await getFutLeaderboardConfig(clan.guildId);
+        if (!cfg.featFutLeaderboard) return res.json({ habilitado: false, entradas: [] });
+      }
+
+      if (tipo === 'jogadores') {
+        const entradas = escopo === 'servidor' ? await getFutServerLeaderboard(clan.guildId, mode, 20) : await getFutGlobalLeaderboard(mode, 30);
+        const comNomes = await Promise.all(entradas.map(async (p) => ({ ...p, ...(await resolveStatIdentity(p.discordId, p.displayName)) })));
+        return res.json({ habilitado: true, entradas: comNomes });
+      }
+
+      const entradas = escopo === 'servidor' ? await getFutServerClanLeaderboard(clan.guildId, mode, 20) : await getFutGlobalClanLeaderboard(mode, 30);
+      res.json({ habilitado: true, entradas });
     } catch (err) { handleFutError(res, err); }
   });
 
@@ -2700,6 +2794,7 @@ ${activitySdkBootstrap(clientId!)}
         <button class="tab" id="tabRanking" onclick="showTab('ranking')">Ranking</button>
         <button class="tab" id="tabStats" onclick="showTab('stats')">Estatísticas do clã</button>
         <button class="tab" id="tabSimulacao" onclick="showTab('simulacao')">🎮 Simulação</button>
+        <button class="tab" id="tabLeaderboard" onclick="showTab('leaderboard')">🏆 Leaderboard</button>
       </div>
       <div id="panelPelada"></div>
       <div id="panelChamar" style="display:none"></div>
@@ -2709,6 +2804,7 @@ ${activitySdkBootstrap(clientId!)}
       <div id="panelRanking" style="display:none"></div>
       <div id="panelStats" style="display:none"></div>
       <div id="panelSimulacao" style="display:none"></div>
+      <div id="panelLeaderboard" style="display:none"></div>
     </div>
   </div>
   <div class="toast" id="toast"></div>
@@ -2906,6 +3002,7 @@ ${activitySdkBootstrap(clientId!)}
       document.getElementById('tabRanking').classList.toggle('active', tab === 'ranking');
       document.getElementById('tabStats').classList.toggle('active', tab === 'stats');
       document.getElementById('tabSimulacao').classList.toggle('active', tab === 'simulacao');
+      document.getElementById('tabLeaderboard').classList.toggle('active', tab === 'leaderboard');
       document.getElementById('panelPelada').style.display = tab === 'pelada' ? 'block' : 'none';
       document.getElementById('panelChamar').style.display = tab === 'chamar' ? 'block' : 'none';
       document.getElementById('panelElenco').style.display = tab === 'elenco' ? 'block' : 'none';
@@ -2914,6 +3011,7 @@ ${activitySdkBootstrap(clientId!)}
       document.getElementById('panelRanking').style.display = tab === 'ranking' ? 'block' : 'none';
       document.getElementById('panelStats').style.display = tab === 'stats' ? 'block' : 'none';
       document.getElementById('panelSimulacao').style.display = tab === 'simulacao' ? 'block' : 'none';
+      document.getElementById('panelLeaderboard').style.display = tab === 'leaderboard' ? 'block' : 'none';
       if (skipLoad) return;
       if (tab === 'pelada') refreshPartida();
       if (tab === 'chamar') loadChamadas();
@@ -2923,6 +3021,7 @@ ${activitySdkBootstrap(clientId!)}
       if (tab === 'ranking') loadRanking();
       if (tab === 'stats') loadClanStats();
       if (tab === 'simulacao') loadSimulacao();
+      if (tab === 'leaderboard') loadLeaderboard();
     }
 
     function avatarHtml(url, name, size) {
@@ -2943,6 +3042,20 @@ ${activitySdkBootstrap(clientId!)}
       else if (n >= 7) { bg = '#2ecc71'; fg = '#0a2a12'; }
       else if (n >= 6) { bg = '#f39c12'; fg = '#1a1a1a'; }
       return '<span style="display:inline-block;min-width:32px;padding:2px 6px;border-radius:6px;background:' + bg + ';color:' + fg + ';font-weight:700;font-size:0.78rem;text-align:center;">' + n.toFixed(1) + '</span>';
+    }
+
+    // Badge do RANQUE OFICIAL (tier estilo dificuldade do FIFA, calculado a
+    // partir da nota média) — mostrado ao lado do nome, junto da nota.
+    function rankBadgeHtml(tier) {
+      if (!tier) return '';
+      return '<span title="Ranque Oficial: ' + tier.name + '" style="display:inline-block;margin-right:4px;padding:1px 6px;border-radius:5px;background:' + tier.color + '22;border:1px solid ' + tier.color + ';color:' + tier.color + ';font-weight:700;font-size:0.72rem;white-space:nowrap;">' + tier.icon + ' ' + tier.name + '</span>';
+    }
+
+    function skillRanksHtml(skills) {
+      if (!skills || !skills.length) return '';
+      return '<div style="margin-top:4px;display:flex;gap:6px;flex-wrap:wrap;">' +
+        skills.map(s => '<span title="' + s.label + ': ' + s.tier.name + ' (' + s.rate.toFixed(2) + '/partida)" style="font-size:0.68rem;padding:1px 5px;border-radius:4px;background:' + s.tier.color + '22;color:' + s.tier.color + ';border:1px solid ' + s.tier.color + ';">' + s.tier.icon + ' ' + s.label + '</span>').join('') +
+        '</div>';
     }
 
     // Notas extras (desarme/boa jogada/bloqueio/falhas) só aparecem quando
@@ -3639,7 +3752,7 @@ ${activitySdkBootstrap(clientId!)}
       }
       let html = modeToggleHtml() + \`
         <div class="card">
-          <h2>📊 Visão geral do clã (\${currentMode})</h2>
+          <h2>📊 Visão geral do clã (\${currentMode}) \${o.clanRank && o.clanRank.tier ? rankBadgeHtml(o.clanRank.tier) : ''}</h2>
           <table class="stats-table">
             <tr><td>Partidas finalizadas</td><td style="text-align:right;">\${o.totalPartidas}</td></tr>
             <tr><td>Jogadores com estatísticas</td><td style="text-align:right;">\${o.totalJogadores}</td></tr>
@@ -3671,8 +3784,8 @@ ${activitySdkBootstrap(clientId!)}
         </div>
         <table class="stats-table"><tr><td><strong>Jogador</strong></td><td style="text-align:right;"><strong>Nota</strong></td><td style="text-align:right;"><strong>J</strong></td><td style="text-align:right;"><strong>⚽</strong></td><td style="text-align:right;"><strong>🅰️</strong></td><td style="text-align:right;"><strong>🧤</strong></td><td style="text-align:right;"><strong>🥅</strong></td><td style="text-align:right;"><strong>⚠️</strong></td><td style="text-align:right;"><strong>XP</strong></td>\${podeEditar ? '<td></td>' : ''}</tr>\` +
         ordenado.map(p => \`<tr>
-          <td>\${avatarHtml(p.avatarUrl, p.displayName, 20)}\${p.displayName}</td>
-          <td style="text-align:right;">\${notaBadgeHtml(p.notaMedia)}</td>
+          <td>\${avatarHtml(p.avatarUrl, p.displayName, 20)}\${p.displayName}\${skillRanksHtml(p.skillRanks)}</td>
+          <td style="text-align:right;">\${rankBadgeHtml(p.rankTier)}\${notaBadgeHtml(p.notaMedia)}</td>
           <td style="text-align:right;">\${p.totalPartidas}</td>
           <td style="text-align:right;">\${p.goals}</td>
           <td style="text-align:right;">\${p.assists}</td>
@@ -3686,6 +3799,110 @@ ${activitySdkBootstrap(clientId!)}
       html += '<div id="statsEditBox"></div>';
       panel.innerHTML = html;
       if (editandoStatsDiscordId) renderStatsEditForm();
+    }
+
+    // ── Leaderboard (servidor / global) ──────────────────────────────────
+    let leaderboardEscopo = 'servidor';
+    let leaderboardTipo = 'jogadores';
+
+    function setLeaderboardEscopo(escopo) { leaderboardEscopo = escopo; loadLeaderboard(); }
+    function setLeaderboardTipo(tipo) { leaderboardTipo = tipo; loadLeaderboard(); }
+
+    async function toggleServerLeaderboard(enabled) {
+      try {
+        const data = await api('/api/activities/fut/clans/' + currentClan.id + '/leaderboard/server', { method: 'POST', body: JSON.stringify({ enabled }) });
+        currentClan = data.clan;
+        loadLeaderboard();
+        showToast(enabled ? '✅ Leaderboard do servidor ativado!' : '❌ Leaderboard do servidor desativado.');
+      } catch (e) { showToast('❌ ' + e.message); }
+    }
+
+    async function toggleGlobalLeaderboard(enabled) {
+      try {
+        const data = await api('/api/activities/fut/clans/' + currentClan.id + '/leaderboard/global', { method: 'POST', body: JSON.stringify({ enabled }) });
+        currentClan = data.clan;
+        loadLeaderboard();
+        showToast(enabled ? '✅ Servidor incluído no leaderboard global!' : '❌ Servidor removido do leaderboard global.');
+      } catch (e) { showToast('❌ ' + e.message); }
+    }
+
+    function leaderboardConfigHtml() {
+      const lb = currentClan?.leaderboard;
+      if (!lb) return '';
+      let html = '<div class="card" style="margin-bottom:12px;">';
+      if (lb.souDonoServidor || lb.souDonoBot) {
+        html += \`<label style="display:flex;align-items:center;gap:8px;font-size:0.85rem;margin-bottom:6px;">
+          <input type="checkbox" \${lb.featFutLeaderboard ? 'checked' : ''} onchange="toggleServerLeaderboard(this.checked)">
+          Ativar leaderboard <strong>deste servidor</strong> (você é o dono de verdade do servidor)
+        </label>\`;
+      } else {
+        html += \`<p style="font-size:0.82rem;color:var(--text-muted);margin-bottom:6px;">Leaderboard do servidor: \${lb.featFutLeaderboard ? '✅ ativado' : '❌ desativado'} — só o dono de verdade do servidor pode mudar isso.</p>\`;
+      }
+      if (lb.souDonoBot) {
+        html += \`<label style="display:flex;align-items:center;gap:8px;font-size:0.85rem;">
+          <input type="checkbox" \${lb.futGlobalLeaderboard ? 'checked' : ''} onchange="toggleGlobalLeaderboard(this.checked)">
+          Incluir este servidor no leaderboard <strong>GLOBAL</strong> (só dono do bot vê essa opção)
+        </label>\`;
+      }
+      html += '</div>';
+      return html;
+    }
+
+    async function loadLeaderboard() {
+      const panel = document.getElementById('panelLeaderboard');
+      panel.innerHTML = modeToggleHtml() + leaderboardConfigHtml() + '<div class="empty-hint">Carregando...</div>';
+      try {
+        const url = '/api/activities/fut/clans/' + currentClan.id + '/leaderboard?mode=' + currentMode + '&escopo=' + leaderboardEscopo + '&tipo=' + leaderboardTipo;
+        const data = await api(url);
+        renderLeaderboardPanel(data);
+      } catch (e) {
+        panel.innerHTML = modeToggleHtml() + leaderboardConfigHtml() + '<div class="card"><div class="empty-hint">❌ ' + e.message + '</div></div>';
+      }
+    }
+
+    function renderLeaderboardPanel(data) {
+      const panel = document.getElementById('panelLeaderboard');
+      let html = modeToggleHtml() + leaderboardConfigHtml();
+      html += \`<div class="card">
+        <div class="row" style="flex-wrap:wrap;gap:8px;margin-bottom:10px;">
+          <button class="btn \${leaderboardEscopo === 'servidor' ? '' : 'secondary'}" onclick="setLeaderboardEscopo('servidor')">Servidor</button>
+          <button class="btn \${leaderboardEscopo === 'global' ? '' : 'secondary'}" onclick="setLeaderboardEscopo('global')">🌐 Global</button>
+          <button class="btn \${leaderboardTipo === 'jogadores' ? '' : 'secondary'}" onclick="setLeaderboardTipo('jogadores')">Jogadores</button>
+          <button class="btn \${leaderboardTipo === 'clas' ? '' : 'secondary'}" onclick="setLeaderboardTipo('clas')">Clãs</button>
+        </div>\`;
+
+      if (leaderboardEscopo === 'servidor' && !data.habilitado) {
+        html += '<div class="empty-hint">O dono deste servidor ainda não autorizou o leaderboard aqui.</div></div>';
+        panel.innerHTML = html;
+        return;
+      }
+      if (!data.entradas || !data.entradas.length) {
+        html += '<div class="empty-hint">Ninguém tem estatísticas de ' + currentMode + ' ' + (leaderboardEscopo === 'global' ? 'nos servidores liberados pro global' : 'neste servidor') + ' ainda.</div></div>';
+        panel.innerHTML = html;
+        return;
+      }
+
+      if (leaderboardTipo === 'jogadores') {
+        html += '<table class="stats-table"><tr><td><strong>#</strong></td><td><strong>Jogador</strong></td><td style="text-align:right;"><strong>Ranque</strong></td><td style="text-align:right;"><strong>Nota</strong></td><td style="text-align:right;"><strong>XP</strong></td></tr>' +
+          data.entradas.map((p, i) => \`<tr>
+            <td>\${i + 1}</td>
+            <td>\${avatarHtml(p.avatarUrl, p.displayName, 20)}\${p.displayName}</td>
+            <td style="text-align:right;">\${rankBadgeHtml(p.tier)}</td>
+            <td style="text-align:right;">\${notaBadgeHtml(p.notaMedia)}</td>
+            <td style="text-align:right;">\${p.xp}</td>
+          </tr>\`).join('') + '</table>';
+      } else {
+        html += '<table class="stats-table"><tr><td><strong>#</strong></td><td><strong>Clã</strong></td><td style="text-align:right;"><strong>Ranque</strong></td><td style="text-align:right;"><strong>Nota</strong></td><td style="text-align:right;"><strong>Partidas</strong></td></tr>' +
+          data.entradas.map((c, i) => \`<tr>
+            <td>\${i + 1}</td>
+            <td>\${c.clanName}</td>
+            <td style="text-align:right;">\${rankBadgeHtml(c.tier)}</td>
+            <td style="text-align:right;">\${notaBadgeHtml(c.notaMedia)}</td>
+            <td style="text-align:right;">\${c.totalPartidas}</td>
+          </tr>\`).join('') + '</table>';
+      }
+      html += '</div>';
+      panel.innerHTML = html;
     }
 
     // Quem pode registrar partida nesse clã (dono ou autorizado nas

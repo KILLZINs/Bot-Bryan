@@ -5,6 +5,7 @@
 import { SlashCommandBuilder, ChatInputCommandInteraction, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
 import { Command } from '../types';
 import { errorEmbed, successEmbed, COLORS } from '../utils/embeds';
+import { isOwner } from '../utils/permissions';
 import {
   FutError,
   createClan, joinClan, addClanMember, removeClanMember, listClans, getClanByName, getClanById, deleteClan, resolveMember,
@@ -15,6 +16,9 @@ import {
   createChamada, listChamadas, deleteChamada, respondChamada, calcValorPorPessoa,
   undoLastEvent, reopenPartida, getClanOverview, listFullClanStats,
   addClanMemberToPartida, listAvailableClanMembers, simulateClanMatch,
+  getRankTier, getPlayerSkillRanks, getServerLeaderboard, getGlobalLeaderboard,
+  getServerClanLeaderboard, getGlobalClanLeaderboard, getLeaderboardConfig,
+  setServerLeaderboardEnabled, setGlobalLeaderboardEnabled,
   type FutEventType, type FutMode, type FutRsvpStatus, type FutVisibility,
 } from '../fut/services/pelada';
 
@@ -240,7 +244,27 @@ export default {
     .addSubcommand((sub) => sub.setName('simular').setDescription('Simula, de brincadeira, uma partida fictícia minuto a minuto com base nas notas')
       .addStringOption((o) => o.setName('cla').setDescription('Nome do clã').setRequired(true))
       .addStringOption((o) => o.setName('modo').setDescription('Futsal ou campo').setRequired(true)
-        .addChoices({ name: 'Futsal', value: 'futsal' }, { name: 'Campo', value: 'campo' }))),
+        .addChoices({ name: 'Futsal', value: 'futsal' }, { name: 'Campo', value: 'campo' })))
+    .addSubcommand((sub) => sub.setName('ranque').setDescription('Mostra o ranque (tier estilo FIFA) oficial e por habilidade de alguém')
+      .addStringOption((o) => o.setName('cla').setDescription('Nome do clã').setRequired(true))
+      .addStringOption((o) => o.setName('modo').setDescription('Futsal ou campo').setRequired(true)
+        .addChoices({ name: 'Futsal', value: 'futsal' }, { name: 'Campo', value: 'campo' }))
+      .addUserOption((o) => o.setName('usuario').setDescription('Ver o ranque de outra pessoa (opcional)')))
+    .addSubcommand((sub) => sub.setName('leaderboard').setDescription('Mostra o leaderboard (ranque) do servidor ou global')
+      .addStringOption((o) => o.setName('escopo').setDescription('Leaderboard do servidor ou global (cross-server)').setRequired(true)
+        .addChoices({ name: 'Servidor', value: 'servidor' }, { name: 'Global', value: 'global' }))
+      .addStringOption((o) => o.setName('tipo').setDescription('Ranquear jogadores ou clãs').setRequired(true)
+        .addChoices({ name: 'Jogadores', value: 'jogadores' }, { name: 'Clãs', value: 'clas' }))
+      .addStringOption((o) => o.setName('modo').setDescription('Futsal ou campo').setRequired(true)
+        .addChoices({ name: 'Futsal', value: 'futsal' }, { name: 'Campo', value: 'campo' })))
+    .addSubcommand((sub) => sub.setName('leaderboard_config').setDescription('Liga/desliga o leaderboard deste servidor (dono do servidor) ou a entrada no global (dono do bot)')
+      .addStringOption((o) => o.setName('acao').setDescription('O que fazer').setRequired(true)
+        .addChoices(
+          { name: 'Ligar leaderboard do servidor (dono do servidor)', value: 'servidor_ligar' },
+          { name: 'Desligar leaderboard do servidor (dono do servidor)', value: 'servidor_desligar' },
+          { name: 'Incluir este servidor no leaderboard global (só dono do bot)', value: 'global_ligar' },
+          { name: 'Remover este servidor do leaderboard global (só dono do bot)', value: 'global_desligar' },
+        ))),
 
   async execute(interaction: ChatInputCommandInteraction) {
     const group = interaction.options.getSubcommandGroup(false);
@@ -781,6 +805,97 @@ export default {
         }));
         const embed = new EmbedBuilder().setColor(COLORS.GOLD).setTitle(`🏆 Ranking — ${clan.name} (${modo})`).setDescription(lines.join('\n'));
         await interaction.reply({ embeds: [embed] });
+        return;
+      }
+
+      if (sub === 'ranque') {
+        const clan = await resolveClan(interaction);
+        const modo = interaction.options.getString('modo', true) as FutMode;
+        const target = interaction.options.getUser('usuario') ?? interaction.user;
+        const profile = await getProfile(clan.id, target.id, modo);
+
+        if (!profile || !profile.totalPartidas) {
+          await interaction.reply({ embeds: [errorEmbed('Sem ranque ainda', `${target.username} ainda não finalizou nenhuma partida de ${modo} nesse clã — o ranque só aparece depois da primeira partida.`)], ephemeral: true });
+          return;
+        }
+
+        const oficial = getRankTier(profile.notaMedia);
+        const skills = getPlayerSkillRanks(profile);
+        const embed = new EmbedBuilder()
+          .setColor(oficial.color as `#${string}`)
+          .setTitle(`${oficial.icon} Ranque de ${target.username} — ${clan.name} (${modo})`)
+          .setDescription(`**Ranque Oficial:** ${oficial.icon} **${oficial.name}** — nota média ${notaTag(profile.notaMedia)}`)
+          .addFields((skills ?? []).map((s) => ({ name: `${s.tier.icon} ${s.label}`, value: `${s.tier.name} _(${s.rate.toFixed(2)}/partida)_`, inline: true })))
+          .setFooter({ text: `${profile.totalPartidas} partida(s) jogada(s) nesse clã/modo` });
+        await interaction.reply({ embeds: [embed] });
+        return;
+      }
+
+      if (sub === 'leaderboard') {
+        const escopo = interaction.options.getString('escopo', true) as 'servidor' | 'global';
+        const tipo = interaction.options.getString('tipo', true) as 'jogadores' | 'clas';
+        const modo = interaction.options.getString('modo', true) as FutMode;
+
+        if (escopo === 'servidor') {
+          const cfg = await getLeaderboardConfig(guildId);
+          if (!cfg.featFutLeaderboard) {
+            await interaction.reply({ embeds: [errorEmbed('Leaderboard desativado', 'O dono deste servidor ainda não autorizou o leaderboard aqui. Peça pra ele usar `/fut leaderboard_config acao:servidor_ligar`.')], ephemeral: true });
+            return;
+          }
+        }
+
+        if (tipo === 'jogadores') {
+          const entries = escopo === 'servidor' ? await getServerLeaderboard(guildId, modo, 15) : await getGlobalLeaderboard(modo, 20);
+          if (!entries.length) {
+            const msg = escopo === 'servidor' ? `Ninguém tem estatísticas de ${modo} ainda neste servidor.` : `Nenhum servidor foi liberado pelo dono do bot pro leaderboard global ainda (ou ninguém jogou ${modo} lá).`;
+            await interaction.reply({ embeds: [errorEmbed('Leaderboard vazio', msg)], ephemeral: true });
+            return;
+          }
+          const lines = await Promise.all(entries.map(async (p, i) => {
+            const user = await interaction.client.users.fetch(p.discordId).catch(() => null);
+            const nome = user ? user.username : (p.displayName || p.discordId);
+            return `**${i + 1}.** ${p.tier.icon} ${nome} — ${notaTag(p.notaMedia)} _(${p.tier.name})_`;
+          }));
+          const embed = new EmbedBuilder().setColor(COLORS.GOLD).setTitle(`🏆 Leaderboard ${escopo === 'servidor' ? 'do servidor' : 'GLOBAL'} — jogadores (${modo})`).setDescription(lines.join('\n'));
+          await interaction.reply({ embeds: [embed] });
+          return;
+        }
+
+        const clanEntries = escopo === 'servidor' ? await getServerClanLeaderboard(guildId, modo, 15) : await getGlobalClanLeaderboard(modo, 20);
+        if (!clanEntries.length) {
+          const msg = escopo === 'servidor' ? `Nenhum clã tem estatísticas de ${modo} ainda neste servidor.` : `Nenhum servidor foi liberado pelo dono do bot pro leaderboard global ainda (ou nenhum clã de lá jogou ${modo}).`;
+          await interaction.reply({ embeds: [errorEmbed('Leaderboard vazio', msg)], ephemeral: true });
+          return;
+        }
+        const lines = clanEntries.map((c, i) => `**${i + 1}.** ${c.tier.icon} ${c.clanName} — ${notaTag(c.notaMedia)} _(${c.tier.name})_`);
+        const embed = new EmbedBuilder().setColor(COLORS.GOLD).setTitle(`🏆 Leaderboard ${escopo === 'servidor' ? 'do servidor' : 'GLOBAL'} — clãs (${modo})`).setDescription(lines.join('\n'));
+        await interaction.reply({ embeds: [embed] });
+        return;
+      }
+
+      if (sub === 'leaderboard_config') {
+        const acao = interaction.options.getString('acao', true) as 'servidor_ligar' | 'servidor_desligar' | 'global_ligar' | 'global_desligar';
+        const souDonoBot = isOwner(interaction.user.id);
+
+        if (acao === 'global_ligar' || acao === 'global_desligar') {
+          if (!souDonoBot) {
+            await interaction.reply({ embeds: [errorEmbed('Sem permissão', 'Só o dono do bot pode incluir/remover um servidor do leaderboard GLOBAL.')], ephemeral: true });
+            return;
+          }
+          await setGlobalLeaderboardEnabled(guildId, acao === 'global_ligar');
+          await interaction.reply({ embeds: [successEmbed('Leaderboard global', acao === 'global_ligar' ? '✅ Este servidor agora entra no leaderboard GLOBAL.' : '❌ Este servidor foi removido do leaderboard global.')], ephemeral: true });
+          return;
+        }
+
+        // servidor_ligar / servidor_desligar — autoservice do DONO DE VERDADE
+        // do servidor (guild.ownerId), não de qualquer admin/cargo de aliança.
+        const souDonoServidor = interaction.guild?.ownerId === interaction.user.id;
+        if (!souDonoServidor && !souDonoBot) {
+          await interaction.reply({ embeds: [errorEmbed('Sem permissão', 'Só o dono de verdade deste servidor (ou o dono do bot) pode ligar/desligar o leaderboard daqui.')], ephemeral: true });
+          return;
+        }
+        await setServerLeaderboardEnabled(guildId, acao === 'servidor_ligar');
+        await interaction.reply({ embeds: [successEmbed('Leaderboard do servidor', acao === 'servidor_ligar' ? '✅ Leaderboard deste servidor ativado! Use `/fut leaderboard escopo:servidor`.' : '❌ Leaderboard deste servidor desativado.')], ephemeral: true });
         return;
       }
     } catch (err) {

@@ -333,6 +333,17 @@ model GuildConfig {
   featVoiceAi           Boolean  @default(true)
   featFut               Boolean  @default(true)
 
+  // 🏆 Ranking do Rachão (Fut) — dois interruptores INDEPENDENTES:
+  // featFutLeaderboard: mostra o leaderboard DESSE servidor no site/Discord.
+  // Autorizado pelo DONO DE VERDADE do servidor (guild.ownerId), não por
+  // quem tem cargo de admin/aliança — é autoservice, sem aprovação do dono
+  // do bot.
+  featFutLeaderboard    Boolean  @default(false)
+  // futGlobalLeaderboard: inclui os clãs desse servidor no leaderboard
+  // GLOBAL (cross-server). Só quem tem BOT_OWNER_ID pode ligar isso —
+  // nenhum dono de servidor consegue ligar por conta própria.
+  futGlobalLeaderboard  Boolean  @default(false)
+
   logFlags              Int      @default(31)
   updatedAt             DateTime @updatedAt @default(now())
 

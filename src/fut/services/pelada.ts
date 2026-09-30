@@ -1326,3 +1326,277 @@ export async function respondChamada(chamadaId: string, discordId: string, displ
     update: { status, displayName: displayName.slice(0, 40), respondedAt: new Date() },
   });
 }
+
+// ═══════════════════════════════════════════════════════════════════════
+// RANQUE — tier estilo "nível de dificuldade do FIFA", tanto individual
+// quanto de clã. Todo mundo/clã COM pelo menos 1 partida jogada TEM um
+// ranque (calculado on-the-fly a partir da estatística já salva — não fica
+// guardado em coluna nenhuma, então nunca fica "desatualizado"). Aparecer
+// num LEADERBOARD é outra coisa, gated separadamente (ver seção de
+// leaderboard abaixo): o ranque em si nunca é escondido de quem já tem.
+//
+// Ranque Oficial = tier tirado do notaMedia (a média de todas as notas
+// estilo Sofascore) — é o "resumo geral" da pessoa/clã.
+// Ranques por HABILIDADE = tiers separados por área específica (ex: um
+// artilheiro pode ser "Lendário" em Finalização mas só "Amador" em Defesa),
+// tirados de uma taxa por partida de cada área (pra não virar "quem jogou
+// mais é melhor" — normaliza pelo número de partidas).
+// ═══════════════════════════════════════════════════════════════════════
+
+export type RankTier = {
+  key: string;
+  name: string;
+  icon: string;
+  color: string;
+  order: number; // 1 (mais baixo) .. 7 (mais alto) — pra ordenar/comparar
+};
+
+// Nomeação inspirada nos níveis de dificuldade clássicos do FIFA/EA FC.
+// Ícone e cor são invenção livre (o pedido do usuário foi literal: "o
+// simbolo e cor tu inventa") — uma progressão cinza → bronze → verde →
+// azul → roxo → laranja → dourado, do mais fácil/iniciante ao topo.
+export const RANK_TIERS: RankTier[] = [
+  { key: 'iniciante',        name: 'Iniciante',        icon: '⚪', color: '#9aa0a6', order: 1 },
+  { key: 'amador',           name: 'Amador',           icon: '🟤', color: '#a9744f', order: 2 },
+  { key: 'semiprofissional', name: 'Semiprofissional', icon: '🟢', color: '#2ecc71', order: 3 },
+  { key: 'profissional',     name: 'Profissional',     icon: '🔵', color: '#3498db', order: 4 },
+  { key: 'world_class',      name: 'World Class',      icon: '🟣', color: '#9b59b6', order: 5 },
+  { key: 'lendario',         name: 'Lendário',         icon: '🟠', color: '#e67e22', order: 6 },
+  { key: 'icone',            name: 'Ícone',             icon: '⭐', color: '#f1c40f', order: 7 },
+];
+
+function pickTier(value: number, thresholds: number[]): RankTier {
+  // thresholds[i] = valor mínimo pra alcançar RANK_TIERS[i]. Pega o mais
+  // alto cujo mínimo a pessoa bateu.
+  let idx = 0;
+  for (let i = 0; i < thresholds.length; i++) {
+    if (value >= thresholds[i]) idx = i;
+  }
+  return RANK_TIERS[idx];
+}
+
+// Faixas do RANQUE OFICIAL — tirado direto do notaMedia (escala 0-10). Uma
+// nota 6.0 (a nota "base", sem nenhum destaque nem cagada) cai bem no meio
+// (Semiprofissional), o que faz sentido: jogo mediano = ranque médio.
+const NOTA_TIER_THRESHOLDS = [0, 5.0, 5.8, 6.4, 7.0, 7.7, 8.5];
+
+export function getRankTier(notaMedia: number): RankTier {
+  return pickTier(notaMedia, NOTA_TIER_THRESHOLDS);
+}
+
+// Definição de cada RANQUE POR HABILIDADE: como calcular a "taxa" (por
+// partida) que representa aquela habilidade, e as faixas específicas dela
+// (escalas bem diferentes entre si — não dá pra usar o mesmo corte de 0-10
+// da nota geral).
+type StatsLike = {
+  totalPartidas: number; goals: number; assists: number; defesas: number;
+  desarmes: number; boasJogadas: number; bloqueios: number;
+  errosGraves: number; falhasDefensivas: number; falhasOfensivas: number;
+};
+
+const SKILL_DEFS: { key: string; label: string; rate: (s: StatsLike) => number; thresholds: number[] }[] = [
+  {
+    key: 'finalizacao',
+    label: 'Finalização',
+    rate: (s) => (s.goals + s.boasJogadas * 0.3) / s.totalPartidas,
+    thresholds: [0, 0.15, 0.35, 0.60, 0.90, 1.30, 1.80],
+  },
+  {
+    key: 'criacao',
+    label: 'Criação',
+    rate: (s) => s.assists / s.totalPartidas,
+    thresholds: [0, 0.10, 0.25, 0.45, 0.70, 1.00, 1.40],
+  },
+  {
+    key: 'defesa',
+    label: 'Defesa',
+    rate: (s) => (s.defesas + s.bloqueios + s.desarmes) / s.totalPartidas,
+    thresholds: [0, 0.5, 1.2, 2.0, 3.0, 4.0, 5.5],
+  },
+  {
+    key: 'disciplina',
+    label: 'Disciplina',
+    // Quanto MENOS erro/falha por partida, melhor — é a única habilidade
+    // "invertida" (parte de 10 e desconta em vez de somar).
+    rate: (s) => Math.max(0, 10 - (s.errosGraves * 1.5 + s.falhasDefensivas * 0.7 + s.falhasOfensivas * 0.6) / s.totalPartidas),
+    thresholds: NOTA_TIER_THRESHOLDS,
+  },
+];
+
+export type SkillRank = { key: string; label: string; rate: number; tier: RankTier };
+
+// Ranques por habilidade específica de um jogador — null se ele ainda não
+// jogou nenhuma partida nesse modo (não tem taxa pra calcular).
+export function getPlayerSkillRanks(stats: StatsLike): SkillRank[] | null {
+  if (!stats.totalPartidas || stats.totalPartidas <= 0) return null;
+  return SKILL_DEFS.map((def) => {
+    const rate = Math.round(def.rate(stats) * 100) / 100;
+    return { key: def.key, label: def.label, rate, tier: pickTier(rate, def.thresholds) };
+  });
+}
+
+// Ranque agregado de um CLÃ inteiro (num modo): média das notas de TODO o
+// elenco, ponderada por quantas partidas cada um jogou — assim um clã não
+// vira "Ícone" só porque teve UM cara com nota alta em UMA partida.
+export async function getClanRankInfo(clanId: string, mode: FutMode) {
+  const stats = await prisma.futClanPlayerStats.findMany({ where: { clanId, mode, notaCount: { gt: 0 } } });
+  if (stats.length === 0) return { notaMedia: null, totalPartidas: 0, jogadoresRanqueados: 0, tier: null as RankTier | null };
+
+  const notaSomada = stats.reduce((s, x) => s + x.notaMedia * x.notaCount, 0);
+  const notaCount = stats.reduce((s, x) => s + x.notaCount, 0);
+  const totalPartidas = stats.reduce((s, x) => s + x.totalPartidas, 0);
+  const notaMedia = notaCount > 0 ? Math.round((notaSomada / notaCount) * 100) / 100 : null;
+
+  return {
+    notaMedia,
+    totalPartidas,
+    jogadoresRanqueados: stats.length,
+    tier: notaMedia != null ? getRankTier(notaMedia) : null,
+  };
+}
+
+// ── Leaderboard ──────────────────────────────────────────────────────────
+// Dois níveis, cada um com seu próprio dono de decisão:
+//   • Servidor: o DONO DE VERDADE daquele servidor Discord (guild.ownerId
+//     — não qualquer admin/aliança) autoriza no próprio painel do clã/
+//     servidor. Guardado em guild_config.featFutLeaderboard.
+//   • Global (cross-server): só quem tem BOT_OWNER_ID decide incluir um
+//     servidor ali. Guardado em guild_config.futGlobalLeaderboard.
+// As funções abaixo SÓ fazem a consulta/agregação — a permissão de quem
+// pode LIGAR cada flag é checada em quem chama (comando/rota), não aqui.
+
+type AggregatedPlayer = {
+  discordId: string; displayName: string | null;
+  totalPartidas: number; goals: number; assists: number; defesas: number; golsConcedidos: number; errosGraves: number;
+  desarmes: number; boasJogadas: number; bloqueios: number; falhasDefensivas: number; falhasOfensivas: number;
+  xp: number; notaMedia: number; notaCount: number;
+};
+
+function aggregatePlayerStats(rows: {
+  discordId: string; displayName: string | null; totalPartidas: number; goals: number; assists: number; defesas: number;
+  golsConcedidos: number; errosGraves: number; desarmes: number; boasJogadas: number; bloqueios: number;
+  falhasDefensivas: number; falhasOfensivas: number; xp: number; notaMedia: number; notaCount: number;
+}[]): AggregatedPlayer[] {
+  const byId = new Map<string, AggregatedPlayer & { notaSomada: number }>();
+  for (const s of rows) {
+    // Leaderboard cross-clã só faz sentido pra quem tem conta de verdade —
+    // gente do elenco offline ("offline:<id>") não é a "mesma pessoa" fora
+    // daquele clã específico, então não entra na agregação.
+    if (s.discordId.startsWith('offline:')) continue;
+
+    const cur = byId.get(s.discordId) ?? {
+      discordId: s.discordId, displayName: s.displayName,
+      totalPartidas: 0, goals: 0, assists: 0, defesas: 0, golsConcedidos: 0, errosGraves: 0,
+      desarmes: 0, boasJogadas: 0, bloqueios: 0, falhasDefensivas: 0, falhasOfensivas: 0,
+      xp: 0, notaMedia: 0, notaCount: 0, notaSomada: 0,
+    };
+    cur.displayName = s.displayName || cur.displayName;
+    cur.totalPartidas += s.totalPartidas;
+    cur.goals += s.goals; cur.assists += s.assists; cur.defesas += s.defesas;
+    cur.golsConcedidos += s.golsConcedidos; cur.errosGraves += s.errosGraves;
+    cur.desarmes += s.desarmes; cur.boasJogadas += s.boasJogadas; cur.bloqueios += s.bloqueios;
+    cur.falhasDefensivas += s.falhasDefensivas; cur.falhasOfensivas += s.falhasOfensivas;
+    cur.xp += s.xp;
+    cur.notaSomada += s.notaMedia * s.notaCount;
+    cur.notaCount += s.notaCount;
+    byId.set(s.discordId, cur);
+  }
+
+  return [...byId.values()]
+    .map((c) => ({ ...c, notaMedia: c.notaCount > 0 ? Math.round((c.notaSomada / c.notaCount) * 100) / 100 : 0 }))
+    .filter((c) => c.notaCount > 0);
+}
+
+export type LeaderboardEntry = AggregatedPlayer & { tier: RankTier; skills: SkillRank[] | null };
+
+function toLeaderboardEntries(agg: AggregatedPlayer[], limit: number): LeaderboardEntry[] {
+  return agg
+    .sort((a, b) => b.notaMedia - a.notaMedia || b.xp - a.xp)
+    .slice(0, limit)
+    .map((p) => ({ ...p, tier: getRankTier(p.notaMedia), skills: getPlayerSkillRanks(p) }));
+}
+
+// Leaderboard INDIVIDUAL desse servidor — agrega todos os clãs (públicos e
+// privados) do guildId informado, por discordId. Chamador é responsável por
+// checar guild_config.featFutLeaderboard antes de mostrar isso pra alguém.
+export async function getServerLeaderboard(guildId: string, mode: FutMode, limit = 20): Promise<LeaderboardEntry[]> {
+  const clans = await prisma.futClan.findMany({ where: { guildId }, select: { id: true } });
+  if (clans.length === 0) return [];
+  const stats = await prisma.futClanPlayerStats.findMany({ where: { clanId: { in: clans.map((c) => c.id) }, mode } });
+  return toLeaderboardEntries(aggregatePlayerStats(stats), limit);
+}
+
+// Leaderboard INDIVIDUAL global — só entram clãs de servidores cujo dono do
+// BOT liberou (guild_config.futGlobalLeaderboard = true). Chamador é quem
+// filtra os guildIds elegíveis (ver getGlobalLeaderboardGuildIds).
+export async function getGlobalLeaderboard(mode: FutMode, limit = 50): Promise<LeaderboardEntry[]> {
+  const guildIds = await getGlobalLeaderboardGuildIds();
+  if (guildIds.length === 0) return [];
+  const clans = await prisma.futClan.findMany({ where: { guildId: { in: guildIds } }, select: { id: true } });
+  if (clans.length === 0) return [];
+  const stats = await prisma.futClanPlayerStats.findMany({ where: { clanId: { in: clans.map((c) => c.id) }, mode } });
+  return toLeaderboardEntries(aggregatePlayerStats(stats), limit);
+}
+
+// Servidores autorizados pelo DONO DO BOT a entrar no leaderboard global.
+export async function getGlobalLeaderboardGuildIds(): Promise<string[]> {
+  const rows = await prisma.guildConfig.findMany({ where: { futGlobalLeaderboard: true }, select: { guildId: true } });
+  return rows.map((r) => r.guildId);
+}
+
+export type ClanLeaderboardEntry = { clanId: string; clanName: string; guildId: string; notaMedia: number; totalPartidas: number; jogadoresRanqueados: number; tier: RankTier };
+
+async function buildClanLeaderboard(clans: { id: string; name: string; guildId: string }[], mode: FutMode, limit: number): Promise<ClanLeaderboardEntry[]> {
+  const entries = await Promise.all(clans.map(async (c) => {
+    const info = await getClanRankInfo(c.id, mode);
+    if (info.notaMedia == null || !info.tier) return null;
+    return { clanId: c.id, clanName: c.name, guildId: c.guildId, notaMedia: info.notaMedia, totalPartidas: info.totalPartidas, jogadoresRanqueados: info.jogadoresRanqueados, tier: info.tier };
+  }));
+  return entries
+    .filter((e): e is ClanLeaderboardEntry => e != null)
+    .sort((a, b) => b.notaMedia - a.notaMedia)
+    .slice(0, limit);
+}
+
+// Leaderboard de CLÃS desse servidor (ranqueia os clãs entre si).
+export async function getServerClanLeaderboard(guildId: string, mode: FutMode, limit = 20): Promise<ClanLeaderboardEntry[]> {
+  const clans = await prisma.futClan.findMany({ where: { guildId }, select: { id: true, name: true, guildId: true } });
+  return buildClanLeaderboard(clans, mode, limit);
+}
+
+// Leaderboard de CLÃS global (só servidores liberados pelo dono do bot).
+export async function getGlobalClanLeaderboard(mode: FutMode, limit = 50): Promise<ClanLeaderboardEntry[]> {
+  const guildIds = await getGlobalLeaderboardGuildIds();
+  if (guildIds.length === 0) return [];
+  const clans = await prisma.futClan.findMany({ where: { guildId: { in: guildIds } }, select: { id: true, name: true, guildId: true } });
+  return buildClanLeaderboard(clans, mode, limit);
+}
+
+// ── Config do leaderboard (flags por servidor) ──────────────────────────
+
+export async function getLeaderboardConfig(guildId: string) {
+  const cfg = await prisma.guildConfig.findUnique({ where: { guildId } });
+  return { featFutLeaderboard: cfg?.featFutLeaderboard ?? false, futGlobalLeaderboard: cfg?.futGlobalLeaderboard ?? false };
+}
+
+// Liga/desliga o leaderboard DO SERVIDOR — só quem chama essa função depois
+// de confirmar que é o DONO DE VERDADE do servidor (guild.ownerId) deveria
+// invocar isso (a checagem em si fica na rota/comando, que tem acesso ao
+// objeto `guild` de verdade do Discord).
+export async function setServerLeaderboardEnabled(guildId: string, enabled: boolean) {
+  return prisma.guildConfig.upsert({
+    where: { guildId },
+    update: { featFutLeaderboard: enabled },
+    create: { guildId, featFutLeaderboard: enabled },
+  });
+}
+
+// Liga/desliga a entrada de um servidor no leaderboard GLOBAL — só o dono
+// do BOT deveria chamar isso (checagem de BOT_OWNER_ID fica em quem chama).
+export async function setGlobalLeaderboardEnabled(guildId: string, enabled: boolean) {
+  return prisma.guildConfig.upsert({
+    where: { guildId },
+    update: { futGlobalLeaderboard: enabled },
+    create: { guildId, futGlobalLeaderboard: enabled },
+  });
+}

@@ -56,7 +56,65 @@ import {
 } from '../fut/services/pelada';
 
 const BOT_OWNER_ID = '1195254699943796791';
-const TMDB_KEY = '3fd2be6f0c70a2a598f084ddfb75487c'; 
+const TMDB_KEY = '3fd2be6f0c70a2a598f084ddfb75487c';
+
+// =====================================================================
+// 🎨 ÍCONES — set próprio de ícones de linha (SVG inline), pra parar de usar
+// emoji como ícone de interface (abas, botões, menus, títulos de seção).
+// Emoji continua liberado como CONTEÚDO (ex: ⚽🅰️ nas colunas de estatística,
+// ✅/❌ de RSVP) — isso aqui é só pra identidade visual/navegação.
+// Estilo consistente: traço (stroke), sem preenchimento, cor herdada
+// (currentColor) — assim some junto com o texto ao redor em qualquer tema.
+// =====================================================================
+const ICONS: Record<string, string> = {
+  home: '<path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/>',
+  grid: '<rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/>',
+  film: '<rect x="3" y="4" width="18" height="16" rx="2"/><line x1="8" y1="4" x2="8" y2="20"/><line x1="16" y1="4" x2="16" y2="20"/><line x1="3" y1="9" x2="8" y2="9"/><line x1="3" y1="15" x2="8" y2="15"/><line x1="16" y1="9" x2="21" y2="9"/><line x1="16" y1="15" x2="21" y2="15"/>',
+  play: '<polygon points="6,4 20,12 6,20" fill="currentColor" stroke="none"/>',
+  search: '<circle cx="10" cy="10" r="6"/><line x1="15" y1="15" x2="20" y2="20"/>',
+  flame: '<path d="M12 2c1 4-3 5-3 9a3 3 0 0 0 6 0c0-1-1-2-1-3 2 1 3 3 3 5a5 5 0 0 1-10 0c0-4 3-6 5-11z"/>',
+  tv: '<rect x="3" y="5" width="18" height="12" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/>',
+  chat: '<path d="M4 5h16a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H9l-4 4v-4H4a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1z"/>',
+  music: '<circle cx="7" cy="18" r="2.5"/><circle cx="17" cy="16" r="2.5"/><path d="M9.5 18V5l10-2v13"/>',
+  mic: '<rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0"/><line x1="12" y1="18" x2="12" y2="22"/><line x1="8" y1="22" x2="16" y2="22"/>',
+  camera: '<rect x="3" y="7" width="18" height="13" rx="2"/><path d="M8 7l2-3h4l2 3"/><circle cx="12" cy="13.5" r="3.5"/>',
+  sword: '<line x1="4" y1="20" x2="16" y2="8"/><path d="M14 6l4 4-2 2-4-4z"/><line x1="4" y1="20" x2="7" y2="20"/><line x1="4" y1="20" x2="4" y2="17"/>',
+  gem: '<path d="M6 3h12l3 6-9 12L3 9z"/><path d="M3 9h18M9 3l3 6 3-6M9 9l3 12 3-12"/>',
+  ticket: '<path d="M3 8a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v2a2 2 0 0 0 0 4v2a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-2a2 2 0 0 0 0-4z"/><line x1="10" y1="7" x2="10" y2="17" stroke-dasharray="2 2"/>',
+  ball: '<circle cx="12" cy="12" r="9"/><polygon points="12,8 15,10.5 14,14 10,14 9,10.5" fill="currentColor" stroke="none"/><line x1="12" y1="3" x2="12" y2="8"/><line x1="15" y1="10.5" x2="19.5" y2="8.5"/><line x1="14" y1="14" x2="16.5" y2="19"/><line x1="10" y1="14" x2="7.5" y2="19"/><line x1="9" y1="10.5" x2="4.5" y2="8.5"/>',
+  trophy: '<path d="M8 4h8v4a4 4 0 0 1-8 0V4z"/><path d="M8 5H5a3 3 0 0 0 3 5"/><path d="M16 5h3a3 3 0 0 1-3 5"/><line x1="12" y1="13" x2="12" y2="17"/><path d="M8 21h8"/><path d="M9 21v-2h6v2"/>',
+  megaphone: '<path d="M3 10v4h3l7 4V6l-7 4z"/><path d="M13 9a4 4 0 0 1 0 6"/><path d="M16 7a7 7 0 0 1 0 10"/>',
+  gamepad: '<rect x="2" y="8" width="20" height="10" rx="5"/><line x1="7" y1="11" x2="7" y2="15"/><line x1="5" y1="13" x2="9" y2="13"/><circle cx="16" cy="12" r="1" fill="currentColor" stroke="none"/><circle cx="18.5" cy="14.5" r="1" fill="currentColor" stroke="none"/>',
+  users: '<circle cx="9" cy="8" r="3"/><path d="M3 20a6 6 0 0 1 12 0"/><circle cx="17" cy="9" r="2.5"/><path d="M15 20a5 5 0 0 1 6-4.8"/>',
+  user: '<circle cx="12" cy="8" r="4"/><path d="M4 20a8 8 0 0 1 16 0"/>',
+  globe: '<circle cx="12" cy="12" r="9"/><ellipse cx="12" cy="12" rx="4" ry="9"/><line x1="3" y1="12" x2="21" y2="12"/>',
+  key: '<circle cx="8" cy="15" r="4"/><line x1="11" y1="12" x2="20" y2="3"/><line x1="16" y1="7" x2="19" y2="10"/><line x1="13" y1="10" x2="16" y2="13"/>',
+  edit: '<path d="M4 20l1-4 11-11 3 3-11 11z"/><line x1="14" y1="6" x2="18" y2="10"/>',
+  history: '<circle cx="12" cy="12" r="9"/><polyline points="12,7 12,12 16,14"/>',
+  chart: '<line x1="5" y1="20" x2="5" y2="12"/><line x1="12" y1="20" x2="12" y2="6"/><line x1="19" y1="20" x2="19" y2="15"/>',
+  sparkles: '<path d="M12 2l1.5 4.5L18 8l-4.5 1.5L12 14l-1.5-4.5L6 8l4.5-1.5z"/><path d="M19 15l.7 2.1L22 18l-2.3.9L19 21l-.7-2.1L16 18l2.3-.9z"/>',
+  shield: '<path d="M12 3l7 3v6c0 5-3.5 7.5-7 9-3.5-1.5-7-4-7-9V6z"/>',
+  heart: '<path d="M12 21s-7-4.6-9.5-9A5.5 5.5 0 0 1 12 6a5.5 5.5 0 0 1 9.5 6c-2.5 4.4-9.5 9-9.5 9z"/>',
+  clipboard: '<rect x="5" y="4" width="14" height="17" rx="2"/><rect x="9" y="2" width="6" height="4" rx="1"/><line x1="8" y1="11" x2="16" y2="11"/><line x1="8" y1="15" x2="16" y2="15"/>',
+  clapper: '<path d="M3 9l1.5-4h15L21 9z"/><rect x="3" y="9" width="18" height="11" rx="1"/>',
+  gear: '<circle cx="12" cy="12" r="3"/><path d="M19 12a7 7 0 0 0-.2-1.6l2-1.6-2-3.4-2.3.9a7 7 0 0 0-2.8-1.6L13.3 2h-2.6l-.4 2.7a7 7 0 0 0-2.8 1.6l-2.3-.9-2 3.4 2 1.6A7 7 0 0 0 5 12c0 .5 0 1.1.2 1.6l-2 1.6 2 3.4 2.3-.9a7 7 0 0 0 2.8 1.6l.4 2.7h2.6l.4-2.7a7 7 0 0 0 2.8-1.6l2.3.9 2-3.4-2-1.6c.1-.5.2-1 .2-1.6z"/>',
+  bolt: '<polygon points="13,2 4,14 11,14 10,22 20,9 13,9"/>',
+  lock: '<rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/>',
+  disc: '<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="2.5" fill="currentColor" stroke="none"/>',
+};
+function icon(name: keyof typeof ICONS, size = 18, style = ''): string {
+  const body = ICONS[name] || '';
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="${size}" height="${size}" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;flex-shrink:0;${style}">${body}</svg>`;
+}
+// Espelho client-side do mesmo set de ícones — injetado dentro das páginas
+// que montam HTML dinamicamente via JS (ex: o SPA do Fut), já que ali o
+// `icon()` do servidor não existe em tempo de execução no navegador.
+const ICON_JS = `const ICONS = ${JSON.stringify(ICONS)};
+function icon(name, size, style) {
+  size = size || 18; style = style || '';
+  const body = ICONS[name] || '';
+  return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="' + size + '" height="' + size + '" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;flex-shrink:0;' + style + '">' + body + '</svg>';
+}`;
 
 // =====================================================================
 // 🕹️ CATÁLOGO DE ATIVIDADES DO BRYAN
@@ -64,8 +122,8 @@ const TMDB_KEY = '3fd2be6f0c70a2a598f084ddfb75487c';
 const ACTIVITIES = [
   {
     id: 'rpg',
-    name: 'RPG Skyline',
-    icon: '⚔️',
+    name: 'RPG Skying',
+    icon: 'sword',
     tagline: 'Batalhe, veja sua ficha e inventário — login com Discord.',
     status: 'live',
     href: '/atividades/rpg'
@@ -73,7 +131,7 @@ const ACTIVITIES = [
   {
     id: 'chat',
     name: 'Falar com o Bryan',
-    icon: '🤖',
+    icon: 'chat',
     tagline: 'Converse com a IA do bot direto pelo navegador.',
     status: 'live',
     href: '/atividades/chat'
@@ -81,7 +139,7 @@ const ACTIVITIES = [
   {
     id: 'music',
     name: 'Música',
-    icon: '🎵',
+    icon: 'music',
     tagline: 'Busque músicas, favorite e monte playlists — login com Discord.',
     status: 'live',
     href: '/atividades/musica'
@@ -89,7 +147,7 @@ const ACTIVITIES = [
   {
     id: 'fut',
     name: 'Rachão',
-    icon: '⚽',
+    icon: 'ball',
     tagline: 'Crie seu clã, jogue partidas de futsal/campo e acompanhe seu ranking — login com Discord.',
     status: 'live',
     href: '/atividades/fut'
@@ -97,7 +155,7 @@ const ACTIVITIES = [
   {
     id: 'social',
     name: 'Feed Social',
-    icon: '📸',
+    icon: 'camera',
     tagline: 'Reviva as postagens do Instagram interno do servidor.',
     status: 'soon',
     href: '#'
@@ -105,7 +163,7 @@ const ACTIVITIES = [
   {
     id: 'missions',
     name: 'Missões Diárias',
-    icon: '📜',
+    icon: 'clipboard',
     tagline: 'Acompanhe suas missões e recompensas do dia.',
     status: 'soon',
     href: '#'
@@ -205,10 +263,10 @@ function renderAtividadesHub(res: express.Response, clientId: string) {
     const soon = a.status === 'soon';
     return `
       <a href="${soon ? '#' : a.href}" class="act-card ${soon ? 'soon' : ''}" ${soon ? 'onclick="return false;"' : ''}>
-        <div class="act-icon">${a.icon}</div>
+        <div class="act-icon">${icon(a.icon, 28)}</div>
         <h3>${a.name}</h3>
         <p>${a.tagline}</p>
-        <span class="act-badge">${soon ? '🔒 Em breve' : '▶ Abrir'}</span>
+        <span class="act-badge">${soon ? icon('lock', 13) + ' Em breve' : icon('play', 13) + ' Abrir'}</span>
       </a>`;
   }).join('');
 
@@ -245,7 +303,7 @@ ${activitySdkBootstrap(clientId)}
 </head>
 <body>
   <nav>
-    <a href="/" class="brand">🌌 Bryan Bot</a>
+    <a href="/" class="brand">${icon('grid', 20)} Bryan Bot</a>
     <a href="/painel" class="back">← Voltar ao Painel</a>
   </nav>
   <header class="hub-hero">
@@ -409,7 +467,7 @@ async function renderBryanflix(res: express.Response) {
 <body>
 
 <nav>
-  <div class="brand">🍿 BRYANFLIX</div>
+  <div class="brand">${icon('film', 22)} BRYANFLIX</div>
   <div class="search-box">
     <span>🔍</span>
     <input type="text" id="searchInput" placeholder="Buscar filmes ou séries...">
@@ -419,23 +477,23 @@ async function renderBryanflix(res: express.Response) {
 <header class="hero" id="hero-header">
   <h1 id="hero-title">Lançamentos da Aliança</h1>
   <p id="hero-desc">Assista aos melhores filmes e séries com os seus amigos direto nas calls de voz do servidor, sem sair do Discord. Sem anúncios, sem interrupções.</p>
-  <div><button id="btn-hero-play" class="btn-play clickable-movie" data-type="movie" data-id="" data-title="">▶ Assistir Agora</button></div>
+  <div><button id="btn-hero-play" class="btn-play clickable-movie" data-type="movie" data-id="" data-title="">${icon('play', 16)} Assistir Agora</button></div>
 </header>
 
 <div class="section" id="search-section" style="display: none;">
-  <h2>🔍 Resultados da Busca</h2>
+  <h2>${icon('search', 18)} Resultados da Busca</h2>
   <div class="movie-row" id="search-grid" style="flex-wrap: wrap;"></div>
 </div>
 
 <div class="section">
-  <h2>🔥 Filmes em Alta</h2>
+  <h2>${icon('flame', 18)} Filmes em Alta</h2>
   <div class="movie-row" id="trending-movies">
     <p style="color:#9CA3AF; padding:20px; font-weight:600;">⏳ Carregando os melhores filmes...</p>
   </div>
 </div>
 
 <div class="section">
-  <h2>📺 Séries Populares</h2>
+  <h2>${icon('tv', 18)} Séries Populares</h2>
   <div class="movie-row" id="trending-tv">
     <p style="color:#9CA3AF; padding:20px; font-weight:600;">⏳ Carregando as melhores séries...</p>
   </div>
@@ -655,7 +713,7 @@ export function startDashboard(discordClient: Client) {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Bryan Bot — Aliança Skyline</title>
+  <title>Bryan Bot — Parceria Skying</title>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <style>
     :root {
@@ -668,7 +726,7 @@ export function startDashboard(discordClient: Client) {
       --primary-hover: #D8D9DE;
       --text: #F2F3F5;
       --text-muted: #9CA3AF;
-      /* Cor exclusiva da parceria com a Aliança Skyline — usada SÓ no selo
+      /* Cor exclusiva da parceria com a Skying — usada SÓ no selo
          (.hero-badge), não no resto da identidade visual do site. */
       --skying: #8B5CF6;
     }
@@ -730,12 +788,12 @@ export function startDashboard(discordClient: Client) {
   
   <header class="hero">
     <div class="hero-bg"></div>
-    <span class="hero-badge">✨ Rede Aliança Skyline</span>
+    <span class="hero-badge">${icon('sparkles', 15)} Em parceria com a Skying</span>
     <h1>O Guardião da Aliança.</h1>
     <p>Traga o <b>Bryan</b> para o seu servidor e conecte-se à maior rede interdimensional. Inteligência Artificial por voz, Feed Social, RPG imersivo e moderação absoluta.</p>
     <div class="btn-group">
       <a href="${botInviteUrl}" class="btn btn-primary">Adicionar ao Discord</a>
-      <a href="/atividades" class="btn btn-ghost">🕹️ Ver Atividades</a>
+      <a href="/atividades" class="btn btn-ghost">${icon('gamepad', 16)} Ver Atividades</a>
       <a href="/login" class="btn btn-secondary">Configurar Bot</a>
     </div>
   </header>
@@ -744,26 +802,26 @@ export function startDashboard(discordClient: Client) {
     <h2 class="features-title">Sistemas Integrados</h2>
     <p class="features-sub">Tudo o que a sua Aliança precisa, em um só bot.</p>
     <div class="grid">
-      <div class="card"><div class="card-icon">🎙️</div><h3>Inteligência Artificial</h3><p>Acesse chamadas de voz com o Bryan, com a Suki ou crie a IA exclusiva do seu servidor.</p></div>
-      <div class="card"><div class="card-icon">📸</div><h3>Feed Social (Instagram)</h3><p>Crie uma rede social interna perfeita com direito a seguidores, curtidas e comentários.</p></div>
-      <div class="card"><div class="card-icon">⚔️</div><h3>RPG & Economia</h3><p>Um ecossistema gigante com Dungeons, World Bosses, inventário e missões diárias.</p></div>
-      <div class="card"><div class="card-icon">💎</div><h3>Sistema VIP</h3><p>Recompense os apoiadores com cargos, painéis especiais e gradientes exclusivos.</p></div>
-      <div class="card"><div class="card-icon">🎫</div><h3>Sistema de Tickets</h3><p>Organize o atendimento da sua comunidade com logs automáticos e transcrições.</p></div>
-      <div class="card"><div class="card-icon">🎵</div><h3>Música FFmpeg</h3><p>Qualidade de áudio de estúdio para escutar Spotify ou YouTube com os amigos na call.</p></div>
+      <div class="card"><div class="card-icon">${icon('mic', 24)}</div><h3>Inteligência Artificial</h3><p>Acesse chamadas de voz com o Bryan, com a Suki ou crie a IA exclusiva do seu servidor.</p></div>
+      <div class="card"><div class="card-icon">${icon('camera', 24)}</div><h3>Feed Social (Instagram)</h3><p>Crie uma rede social interna perfeita com direito a seguidores, curtidas e comentários.</p></div>
+      <div class="card"><div class="card-icon">${icon('sword', 24)}</div><h3>RPG & Economia</h3><p>Um ecossistema gigante com Dungeons, World Bosses, inventário e missões diárias.</p></div>
+      <div class="card"><div class="card-icon">${icon('gem', 24)}</div><h3>Sistema VIP</h3><p>Recompense os apoiadores com cargos, painéis especiais e gradientes exclusivos.</p></div>
+      <div class="card"><div class="card-icon">${icon('ticket', 24)}</div><h3>Sistema de Tickets</h3><p>Organize o atendimento da sua comunidade com logs automáticos e transcrições.</p></div>
+      <div class="card"><div class="card-icon">${icon('music', 24)}</div><h3>Música FFmpeg</h3><p>Qualidade de áudio de estúdio para escutar Spotify ou YouTube com os amigos na call.</p></div>
     </div>
   </section>
 
   <section class="activities-strip">
     <div class="strip-card">
       <div>
-        <h3>🕹️ Novo: Atividades do Bryan</h3>
+        <h3>${icon('gamepad', 20)} Novo: Atividades do Bryan</h3>
         <p>Veja sua ficha de RPG e converse com a IA do bot direto pelo navegador, sem precisar abrir o Discord.</p>
       </div>
       <a href="/atividades" class="btn btn-primary">Explorar Atividades</a>
     </div>
   </section>
   
-  <footer><p>© 2026 Bryan Bot • Sistema Oficial da Aliança Skyline</p></footer>
+  <footer><p>© 2026 Bryan Bot • Em parceria com a Skying</p></footer>
 </body>
 </html>`);
   });
@@ -812,7 +870,7 @@ export function startDashboard(discordClient: Client) {
 </head>
 <body>
   <nav>
-    <span class="brand">🤖 Falar com o Bryan</span>
+    <span class="brand">${icon('chat', 20)} Falar com o Bryan</span>
     <a href="/atividades">← Atividades</a>
   </nav>
   <div id="chat-wrap">
@@ -1140,7 +1198,7 @@ ${activitySdkBootstrap(clientId!)}
 </head>
 <body>
   <div class="box" id="gateBox">
-    <h1 id="gateTitle">🎵 Música do Bryan</h1>
+    <h1 id="gateTitle">${icon('music', 26)} Música do Bryan</h1>
     <p id="gateDesc">Pra buscar músicas, favoritar e montar suas playlists, entra com sua conta do Discord.</p>
     <a class="btn" id="gateBtn" href="/login/player?next=/atividades/musica">Entrar com Discord</a>
     <a class="back" href="/atividades">← Voltar às Atividades</a>
@@ -1270,7 +1328,7 @@ ${activitySdkBootstrap(clientId!)}
 </head>
 <body>
   <aside class="sidebar">
-    <div class="brand">🎵 Música</div>
+    <div class="brand">${icon('music', 20)} Música</div>
     <button class="nav-item active" id="navHome" onclick="showView('home')">🏠 Início</button>
     <button class="nav-item" id="navSearch" onclick="showView('search')">🔎 Buscar</button>
     <button class="nav-item" id="navFavorites" onclick="showView('favorites')">💚 Favoritas</button>
@@ -1649,7 +1707,7 @@ ${activitySdkBootstrap(clientId!)}
       const content = document.getElementById('content');
       content.innerHTML = \`
         <div class="home-hero">
-          <h2>🎧 E aí, bora ouvir algo?</h2>
+          <h2>${icon('music', 18)} E aí, bora ouvir algo?</h2>
           <p>Cole o link de uma playlist do Spotify, YouTube, SoundCloud (ou até uma música só) pra importar tudo de uma vez pra uma playlist sua.</p>
           <div class="import-row">
             <input id="importUrlInput" type="text" placeholder="Cole aqui o link da playlist ou música...">
@@ -1677,7 +1735,7 @@ ${activitySdkBootstrap(clientId!)}
       }
       grid.innerHTML = playlists.map(p => \`
         <div class="pl-card" onclick="openPlaylist('\${p.id}')">
-          <div class="pl-card-icon">🎼</div>
+          <div class="pl-card-icon">${icon('disc', 26)}</div>
           <div class="pl-card-name">\${p.name}</div>
           <div class="pl-card-count">\${p.tracks.length} música(s)</div>
         </div>\`).join('');
@@ -2596,7 +2654,7 @@ ${activitySdkBootstrap(clientId!)}
 </head>
 <body>
   <div class="card">
-    <h1>📣 Vai ter fut!</h1>
+    <h1>${icon('megaphone', 26)} Vai ter fut!</h1>
     <div class="sub">${chamada.clan.name}</div>
     <div class="row"><b>📍 Local</b> ${chamada.local}</div>
     <div class="row"><b>🕒 Horário</b> ${chamada.horario}</div>
@@ -2640,12 +2698,12 @@ ${activitySdkBootstrap(clientId!)}
 </style>
 </head>
 <body>
-  <nav><span class="brand">⚽ Rachão</span><a href="/atividades">← Atividades</a></nav>
+  <nav><span class="brand">${icon('ball', 20)} Rachão</span><a href="/atividades">← Atividades</a></nav>
   <div class="gate" id="gateBox">
     <div class="icon">🔒</div>
     <h1 id="gateTitle">Entre com sua conta do Discord</h1>
     <p id="gateDesc">Suas estatísticas de Rachão são pessoais — por isso pedimos login com o Discord.</p>
-    <a class="discord-btn" id="gateBtn" href="/login/player?next=/atividades/fut">🎮 Entrar com Discord</a>
+    <a class="discord-btn" id="gateBtn" href="/login/player?next=/atividades/fut">${icon('gamepad', 16)} Entrar com Discord</a>
     <p class="note">Isso não te dá acesso ao painel administrativo do bot — é só pra identificar seu jogador.</p>
   </div>
   <script>
@@ -2727,18 +2785,18 @@ ${activitySdkBootstrap(clientId!)}
 </head>
 <body>
   <nav>
-    <span class="brand">⚽ Rachão</span>
+    <span class="brand">${icon('ball', 20)} Rachão</span>
     <a href="/atividades">← Atividades</a>
   </nav>
   <div class="wrap">
     <div id="clanListView">
       <div class="card" id="serverSelectCard" style="display:none;">
-        <h2>🌐 Servidor</h2>
+        <h2>${icon('globe', 18)} Servidor</h2>
         <p style="color:var(--text-muted);font-size:0.85rem;margin-bottom:12px;">Você tá em mais de um servidor da Aliança — escolha qual usar.</p>
         <div class="row"><select id="guildSelect" onchange="selecionarServidor()" style="flex:1;min-width:200px;"></select></div>
       </div>
       <div class="card" id="perfilGlobalCard">
-        <h2>👤 Meu perfil</h2>
+        <h2>${icon('user', 18)} Meu perfil</h2>
         <p style="color:var(--text-muted);font-size:0.85rem;margin-bottom:12px;">Seu perfil do Rachão — fora de qualquer clã específico. Aparece assim pra quem olhar seus clãs públicos.</p>
         <div id="perfilGlobalBanner" style="height:70px;border-radius:8px;background:var(--card2);margin-bottom:-30px;background-size:cover;background-position:center;"></div>
         <div class="row" style="align-items:flex-end;margin-bottom:10px;">
@@ -2777,7 +2835,7 @@ ${activitySdkBootstrap(clientId!)}
         <div class="clan-list" id="clanList"></div>
       </div>
       <div class="card">
-        <h2>🔑 Tenho um código de convite</h2>
+        <h2>${icon('key', 18)} Tenho um código de convite</h2>
         <div class="row">
           <input id="joinCodeInput" type="text" placeholder="Código do clã privado" style="flex:1;min-width:160px;text-transform:uppercase;">
           <button class="btn secondary" onclick="entrarPorCodigo()">Entrar</button>
@@ -2795,8 +2853,8 @@ ${activitySdkBootstrap(clientId!)}
         <button class="tab" id="tabPerfil" onclick="showTab('perfil')">Perfil</button>
         <button class="tab" id="tabRanking" onclick="showTab('ranking')">Ranking</button>
         <button class="tab" id="tabStats" onclick="showTab('stats')">Estatísticas do clã</button>
-        <button class="tab" id="tabSimulacao" onclick="showTab('simulacao')">🎮 Simulação</button>
-        <button class="tab" id="tabLeaderboard" onclick="showTab('leaderboard')">🏆 Leaderboard</button>
+        <button class="tab" id="tabSimulacao" onclick="showTab('simulacao')">${icon('gamepad', 14)} Simulação</button>
+        <button class="tab" id="tabLeaderboard" onclick="showTab('leaderboard')">${icon('trophy', 14)} Leaderboard</button>
       </div>
       <div id="panelPelada"></div>
       <div id="panelChamar" style="display:none"></div>
@@ -3173,7 +3231,7 @@ ${activitySdkBootstrap(clientId!)}
           </div>
           <div class="row"><input id="eventVideo" type="text" placeholder="Link do vídeo do gol (opcional)" style="flex:1;min-width:200px;"></div>
           <div class="row">
-            <button class="btn" onclick="registrarEvento('gol')">⚽ Gol</button>
+            <button class="btn" onclick="registrarEvento('gol')">${icon('ball', 14)} Gol</button>
             <button class="btn secondary" onclick="registrarEvento('defesa')">🧤 Defesa</button>
             <button class="btn secondary" onclick="registrarEvento('concedido')">🥅 Concedido</button>
             <button class="btn secondary" onclick="registrarEvento('erro')" title="CAGADA MASTER — pesa mais na nota">⚠️ Erro grave</button>
@@ -3195,15 +3253,15 @@ ${activitySdkBootstrap(clientId!)}
         const resLabel = partida.resultado === 'empate' ? 'Empate' : partida.resultado === 'vitoria_a' ? 'Vitória do Time A' : 'Vitória do Time B';
         html += \`<p style="text-align:center;color:var(--text-muted);">\${resLabel} — estatísticas salvas em \${partida.mode}. Crie uma nova partida quando quiser.</p>
           <div class="row" style="justify-content:center;">
-            \${souCriador ? '<button class="btn secondary" onclick="reabrirPartida(\\''+partida.id+'\\')" title="Corrigir gols, estatísticas ou resultado dessa partida">✏️ Reabrir pra editar</button>' : ''}
-            <button class="btn secondary" onclick="abrirDetalhesPartida('\${partida.id}')">📋 Ver detalhes / animação dos gols</button>
+            \${souCriador ? '<button class="btn secondary" onclick="reabrirPartida(\\''+partida.id+'\\')" title="Corrigir gols, estatísticas ou resultado dessa partida">'+icon('edit',14)+' Reabrir pra editar</button>' : ''}
+            <button class="btn secondary" onclick="abrirDetalhesPartida('\${partida.id}')">${icon('clipboard', 14)} Ver detalhes / animação dos gols</button>
             <button class="btn" onclick="criarPartida()">Criar nova partida</button>
           </div>\`;
       }
 
       if (partida.status !== 'aberta') {
         html += \`<div class="row" style="justify-content:center;margin-top:8px;">
-          <button class="btn secondary" onclick="verVideosGol()">🎬 Vídeos de gol</button>
+          <button class="btn secondary" onclick="verVideosGol()">${icon('clapper', 14)} Vídeos de gol</button>
         </div><div id="videosGolBox"></div>\`;
       }
 
@@ -3378,7 +3436,7 @@ ${activitySdkBootstrap(clientId!)}
       try {
         const data = await api('/api/activities/fut/clans/' + currentClan.id + '/historico');
         if (!data.partidas.length) { panel.innerHTML = '<div class="card"><div class="empty-hint">Nenhuma partida finalizada nesse clã ainda.</div></div>'; return; }
-        panel.innerHTML = '<div class="card"><h2>📜 Histórico</h2><p style="color:var(--text-muted);font-size:0.8rem;margin-bottom:10px;">Clique numa partida pra ver detalhes, editar ou montar a animação dos gols.</p>' + data.partidas.map(p => {
+        panel.innerHTML = '<div class="card"><h2>'+icon('history',18)+' Histórico</h2><p style="color:var(--text-muted);font-size:0.8rem;margin-bottom:10px;">Clique numa partida pra ver detalhes, editar ou montar a animação dos gols.</p>' + data.partidas.map(p => {
           const resLabel = p.resultado === 'empate' ? 'Empate' : p.resultado === 'vitoria_a' ? 'Vitória do Time A' : 'Vitória do Time B';
           return \`<div class="rank-item" style="cursor:pointer;" onclick="abrirDetalhesPartida('\${p.id}')">
             <span>\${p.name || 'Partida'} <span class="status-badge" style="text-transform:capitalize;">\${p.mode}</span></span>
@@ -3413,7 +3471,7 @@ ${activitySdkBootstrap(clientId!)}
           desarme: '🛡️', boa_jogada: '✨', bloqueio: '🧱', falha_defensiva: '🔸', falha_ofensiva: '🔹',
         };
         const eventosHtml = data.events.length ? data.events.map(e => {
-          const animBtn = e.type === 'gol' ? '<button class="btn secondary" onclick="abrirAnimacaoGol(\\'' + e.id + '\\')">' + (e.hasAnimation ? '🎬 Ver animação' : '🎬 Montar animação') + '</button>' : '';
+          const animBtn = e.type === 'gol' ? '<button class="btn secondary" onclick="abrirAnimacaoGol(\\'' + e.id + '\\')">' + (e.hasAnimation ? icon('clapper',14)+' Ver animação' : icon('clapper',14)+' Montar animação') + '</button>' : '';
           const videoLink = e.videoUrl ? ' <a href="' + e.videoUrl + '" target="_blank" rel="noopener">vídeo</a>' : '';
           return \`<div class="rank-item"><span>\${eventIcon[e.type] || '•'} \${e.displayName}</span><span>\${animBtn}\${videoLink}</span></div>\`;
         }).join('') : '<div class="empty-hint">Nenhum evento registrado.</div>';
@@ -3428,10 +3486,10 @@ ${activitySdkBootstrap(clientId!)}
               <div class="team-col"><h3>Time A</h3>\${timeA.length ? timeA.map(rowHtml).join('') : '<div class="empty-hint">vazio</div>'}</div>
               <div class="team-col"><h3>Time B</h3>\${timeB.length ? timeB.map(rowHtml).join('') : '<div class="empty-hint">vazio</div>'}</div>
             </div>
-            \${souCriador ? \`<div class="row" style="justify-content:center;margin-top:10px;"><button class="btn secondary" onclick="reabrirPartida('\${partida.id}')">✏️ Reabrir pra editar (gols/estatísticas/resultado)</button></div>\` : ''}
+            \${souCriador ? \`<div class="row" style="justify-content:center;margin-top:10px;"><button class="btn secondary" onclick="reabrirPartida('\${partida.id}')">${icon('edit',14)} Reabrir pra editar (gols/estatísticas/resultado)</button></div>\` : ''}
           </div>
           <div class="card">
-            <h2>📋 Eventos da partida</h2>
+            <h2>${icon('clipboard', 18)} Eventos da partida</h2>
             \${eventosHtml}
           </div>
           <div id="animEditorCard"></div>\`;
@@ -3473,7 +3531,7 @@ ${activitySdkBootstrap(clientId!)}
       if (!card) return;
       card.innerHTML = \`
         <div class="card">
-          <h2>🎬 Animação do gol — \${displayName}</h2>
+          <h2>${icon('clapper', 18)} Animação do gol — \${displayName}</h2>
           <p style="color:var(--text-muted);font-size:0.8rem;">\${animSouCriador ? 'Arraste os itens pro campo pra montar o frame atual. Arraste um item já colocado pra reposicionar. Clique 2x nele pra remover. Clique 1x numa seta pra ajustar o ângulo.' : 'Modo visualização — só quem criou a partida pode editar.'}</p>
           <div class="row" style="align-items:flex-start;gap:20px;flex-wrap:wrap;">
             <div>
@@ -3710,7 +3768,7 @@ ${activitySdkBootstrap(clientId!)}
       try {
         const data = await api('/api/activities/fut/clans/' + currentClan.id + '/ranking?mode=' + currentMode);
         if (!data.ranking.length) { panel.innerHTML = modeToggleHtml() + '<div class="card"><div class="empty-hint">Ninguém finalizou uma partida de ' + currentMode + ' ainda.</div></div>'; return; }
-        panel.innerHTML = modeToggleHtml() + '<div class="card"><h2>🏆 Ranking (' + currentMode + ')</h2>' + data.ranking.map((p, i) => \`
+        panel.innerHTML = modeToggleHtml() + '<div class="card"><h2>'+icon('trophy',18)+' Ranking (' + currentMode + ')</h2>' + data.ranking.map((p, i) => \`
           <div class="rank-item"><span>\${i + 1}. \${avatarHtml(p.avatarUrl, p.displayName, 24)}\${p.displayName}</span><span>\${p.xp} XP · \${notaBadgeHtml(p.notaMedia)}</span></div>\`).join('') + '</div>';
       } catch (e) { panel.innerHTML = modeToggleHtml() + '<div class="card"><div class="empty-hint">❌ ' + e.message + '</div></div>'; }
     }
@@ -3868,7 +3926,7 @@ ${activitySdkBootstrap(clientId!)}
       html += \`<div class="card">
         <div class="row" style="flex-wrap:wrap;gap:8px;margin-bottom:10px;">
           <button class="btn \${leaderboardEscopo === 'servidor' ? '' : 'secondary'}" onclick="setLeaderboardEscopo('servidor')">Servidor</button>
-          <button class="btn \${leaderboardEscopo === 'global' ? '' : 'secondary'}" onclick="setLeaderboardEscopo('global')">🌐 Global</button>
+          <button class="btn \${leaderboardEscopo === 'global' ? '' : 'secondary'}" onclick="setLeaderboardEscopo('global')">${icon('globe', 14)} Global</button>
           <button class="btn \${leaderboardTipo === 'jogadores' ? '' : 'secondary'}" onclick="setLeaderboardTipo('jogadores')">Jogadores</button>
           <button class="btn \${leaderboardTipo === 'clas' ? '' : 'secondary'}" onclick="setLeaderboardTipo('clas')">Clãs</button>
         </div>\`;
@@ -3936,7 +3994,7 @@ ${activitySdkBootstrap(clientId!)}
       const box = document.getElementById('statsEditBox');
       if (!p || !box) return;
       box.innerHTML = \`<div class="card" style="border-color:var(--primary);">
-        <h2>✏️ Corrigir estatística — \${p.displayName} (\${currentMode})</h2>
+        <h2>${icon('edit', 18)} Corrigir estatística — \${p.displayName} (\${currentMode})</h2>
         <p style="color:var(--text-muted);font-size:0.8rem;margin-bottom:10px;">Edita direto o total salvo desse jogador nesse clã/modo. Use com cuidado — não mexe em nenhuma partida específica, só no acumulado.</p>
         <div class="row" style="flex-wrap:wrap;">
           \${STATS_EDIT_FIELDS.map(([field, label]) => \`
@@ -3991,7 +4049,7 @@ ${activitySdkBootstrap(clientId!)}
         </span>\`;
       }
       panel.innerHTML = \`<div class="card">
-        <h2>🎮 Simulação (de brincadeira!)</h2>
+        <h2>${icon('gamepad', 18)} Simulação (de brincadeira!)</h2>
         <p style="color:var(--text-muted);font-size:0.85rem;margin-bottom:14px;">Gera uma partida FICTÍCIA minuto a minuto com base na nota de cada um. Não conta ponto nem estatística — é só diversão. 😄</p>
         <div class="mode-toggle" style="margin-bottom:12px;">
           <button class="btn \${simMode === 'futsal' ? '' : 'secondary'}" onclick="simSetMode('futsal')">Futsal</button>
@@ -4072,7 +4130,7 @@ ${activitySdkBootstrap(clientId!)}
 
     function renderSimulacaoResultado(sim) {
       const box = document.getElementById('simResultBox');
-      const resLabel = sim.resultado === 'empate' ? '🤝 Empate!' : sim.resultado === 'vitoria_a' ? '🏆 Vitória do Time A!' : '🏆 Vitória do Time B!';
+      const resLabel = sim.resultado === 'empate' ? '🤝 Empate!' : sim.resultado === 'vitoria_a' ? icon('trophy',16)+' Vitória do Time A!' : icon('trophy',16)+' Vitória do Time B!';
       box.innerHTML = \`<div class="card" style="margin-top:12px;">
         <div class="teams" style="margin-bottom:10px;">
           <div class="team-col"><h3>Time A (força \${sim.forcaA.toFixed(1)})</h3>\${sim.jogadoresA.map(p => '<div class="player-row"><span>' + p.displayName + '</span><span class="stats">' + p.nota.toFixed(1) + '</span></div>').join('')}</div>
@@ -4084,7 +4142,7 @@ ${activitySdkBootstrap(clientId!)}
         <div id="simTimeline" style="max-height:220px;overflow-y:auto;margin-top:10px;"></div>
         <div class="row" style="justify-content:center;margin-top:10px;">
           <button class="btn secondary" onclick='renderSimulacaoResultado(\${JSON.stringify(sim).replace(/'/g, "&#39;")})'>🔁 Reassistir</button>
-          <button class="btn" onclick="renderSimulacaoSetup()">🎮 Nova simulação</button>
+          <button class="btn" onclick="renderSimulacaoSetup()">${icon('gamepad', 14)} Nova simulação</button>
         </div>
       </div>\`;
 
@@ -4153,7 +4211,7 @@ ${activitySdkBootstrap(clientId!)}
         </span>\`;
       }
 
-      let html = '<div class="card"><div class="row" style="justify-content:space-between;align-items:center;"><h2 style="margin:0;">👕 Elenco</h2></div>';
+      let html = '<div class="card"><div class="row" style="justify-content:space-between;align-items:center;"><h2 style="margin:0;">'+icon('users',18)+' Elenco</h2></div>';
       html += '<p style="color:var(--text-muted);font-size:0.85rem;">Todo mundo que faz parte do clã (' + todosMembros.length + ' no total).</p>';
 
       if (souCriador) {
@@ -4286,7 +4344,7 @@ ${activitySdkBootstrap(clientId!)}
     function renderChamadas(chamadas) {
       const panel = document.getElementById('panelChamar');
       let html = \`<div class="card">
-        <h2>📣 Chamar o fut</h2>
+        <h2>${icon('megaphone', 18)} Chamar o fut</h2>
         <p style="color:var(--text-muted);font-size:0.85rem;margin-bottom:14px;">Marque local, horário e PIX pra galera confirmar presença.</p>
         <div class="row"><input id="chamarLocal" type="text" placeholder="Local" style="flex:1;min-width:140px;"><input id="chamarHorario" type="text" placeholder="Horário (ex: Hoje 20h)" style="flex:1;min-width:140px;"></div>
         <div class="row"><input id="chamarPix" type="text" placeholder="PIX (opcional)" style="flex:1;min-width:140px;"><input id="chamarValorTotal" type="number" step="0.01" min="0" placeholder="Valor total da quadra (opcional)" style="flex:1;min-width:140px;"><input id="chamarLink" type="text" placeholder="Link do grupo (opcional)" style="flex:1;min-width:140px;"></div>
@@ -4318,7 +4376,7 @@ ${activitySdkBootstrap(clientId!)}
             </div>
             <div class="row">
               <button class="btn secondary" onclick="compartilharChamada('\${chamadaUrl}')">🔗 Copiar link pra compartilhar</button>
-              <a class="btn secondary" style="text-decoration:none;text-align:center;" href="https://wa.me/?text=\${encodeURIComponent('📣 Vai ter fut! (' + c.local + ' — ' + c.horario + ')\\n' + chamadaUrl)}" target="_blank" rel="noopener">💬 WhatsApp</a>
+              <a class="btn secondary" style="text-decoration:none;text-align:center;" href="https://wa.me/?text=\${encodeURIComponent('📣 Vai ter fut! (' + c.local + ' — ' + c.horario + ')\\n' + chamadaUrl)}" target="_blank" rel="noopener">${icon('chat', 14)} WhatsApp</a>
             </div>
             \${vou.length ? '<p style="font-size:0.8rem;color:var(--text-muted);margin-top:8px;">Confirmados: ' + vou.map(r => r.displayName).join(', ') + '</p>' : ''}
           </div>\`;
@@ -4383,7 +4441,7 @@ ${activitySdkBootstrap(clientId!)}
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>RPG Skyline — Login</title>
+<title>RPG Skying — Login</title>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
 ${activitySdkBootstrap(clientId!)}
 <style>
@@ -4403,12 +4461,12 @@ ${activitySdkBootstrap(clientId!)}
 </style>
 </head>
 <body>
-  <nav><span class="brand">⚔️ RPG Skyline</span><a href="/atividades">← Atividades</a></nav>
+  <nav><span class="brand">${icon('sword', 20)} RPG Skying</span><a href="/atividades">← Atividades</a></nav>
   <div class="gate" id="gateBox">
     <div class="icon">🔒</div>
     <h1 id="gateTitle">Entre com sua conta do Discord</h1>
     <p id="gateDesc">Sua ficha de RPG é pessoal — por isso pedimos login com o Discord em vez de um ID digitado, pra garantir que só você veja e jogue com o seu personagem.</p>
-    <a class="discord-btn" id="gateBtn" href="/login/player?next=/atividades/rpg">🎮 Entrar com Discord</a>
+    <a class="discord-btn" id="gateBtn" href="/login/player?next=/atividades/rpg">${icon('gamepad', 16)} Entrar com Discord</a>
     <p class="note">Isso não te dá acesso ao painel administrativo do bot — é só pra identificar seu personagem de RPG.</p>
   </div>
   <script>
@@ -4443,7 +4501,7 @@ ${activitySdkBootstrap(clientId!)}
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>RPG Skyline</title>
+<title>RPG Skying</title>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
 <style>
   :root { --bg: #121214; --primary: #6B6C76; --primary2: #B9BAC2; --card: #1C1D22; --card2: #202127; --border: #2E2F36; --text: #F2F3F5; --text-muted: #9CA3AF; --green:#2ECC71; --red:#E74C3C; --gold:#F5C242; --orange:#F39C12; }
@@ -4694,7 +4752,7 @@ ${activitySdkBootstrap(clientId!)}
 </head>
 <body>
   <nav>
-    <span class="brand">⚔️ RPG Skyline</span>
+    <span class="brand">${icon('sword', 20)} RPG Skying</span>
     <div class="nav-user">
       ${avatarUrl ? `<img src="${avatarUrl}" alt="">` : ''}
       <span>${username}</span>
@@ -7261,7 +7319,7 @@ ${activitySdkBootstrap(clientId!)}
 <body>
   <div class="sidebar">
     <div class="brand"><img src="/skylineicon.jpg" alt="Logo"> Bryan Bot</div>
-    <a href="/atividades" class="sidebar-cta" target="_blank">🕹️ Ver Atividades</a>
+    <a href="/atividades" class="sidebar-cta" target="_blank">${icon('gamepad', 15)} Ver Atividades</a>
     <div class="nav-items" id="sidebar-nav">
       <!-- Nav gerada via JS -->
     </div>
@@ -7579,7 +7637,7 @@ ${activitySdkBootstrap(clientId!)}
 
       let parsedDesc = desc
         .replace(/\{user\}/g, '<span class="discord-mention">@NovoMembro</span>')
-        .replace(/\{guild\}/g, '<b>Aliança Skyline</b>')
+        .replace(/\{guild\}/g, '<b>Skying</b>')
         .replace(/\{memberCount\}/g, '<b>1.500</b>')
         .replace(/\\n/g, '<br>');
       document.getElementById(inputId + '_preview_desc').innerHTML = parsedDesc;

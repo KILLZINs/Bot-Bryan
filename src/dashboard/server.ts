@@ -201,6 +201,19 @@ async function resolveGuildId(explicit?: string, cookieGuildId?: string): Promis
 function activitySdkBootstrap(clientId: string): string {
   return `
 <script type="module">
+  // O SDK é servido pelo NOSSO próprio domínio (/vendor/...), nunca de um CDN
+  // externo — dentro do iframe da Activity, o Discord bloqueia por padrão
+  // qualquer requisição de rede pra fora do domínio mapeado, então um
+  // import() de um CDN (ex: jsdelivr) pode ficar travado pra sempre sem
+  // nunca resolver NEM rejeitar — e é exatamente isso que deixava o botão
+  // "Entrar com Discord" parado na tela sem fazer nada dentro da call.
+  function withTimeout(promise, ms) {
+    return Promise.race([
+      promise,
+      new Promise((resolve) => setTimeout(() => resolve('__timeout__'), ms)),
+    ]);
+  }
+
   window.activityReady = (async () => {
     const params = new URLSearchParams(window.location.search);
     const isActivity = params.has('frame_id') || params.has('instance_id');
@@ -208,28 +221,36 @@ function activitySdkBootstrap(clientId: string): string {
     if (!isActivity) return false;
 
     try {
-      const { DiscordSDK } = await import('https://cdn.jsdelivr.net/npm/@discord/embedded-app-sdk@2.5.0/+esm');
-      const discordSdk = new DiscordSDK('${clientId}');
-      await discordSdk.ready();
+      const result = await withTimeout((async () => {
+        const { DiscordSDK } = await import('/vendor/discord-embedded-app-sdk.js');
+        const discordSdk = new DiscordSDK('${clientId}');
+        await discordSdk.ready();
 
-      window.discordChannelId = discordSdk.channelId || null;
-      window.discordGuildId = discordSdk.guildId || null;
+        window.discordChannelId = discordSdk.channelId || null;
+        window.discordGuildId = discordSdk.guildId || null;
 
-      const { code } = await discordSdk.commands.authorize({
-        client_id: '${clientId}',
-        response_type: 'code',
-        state: '',
-        prompt: 'none',
-        scope: ['identify'],
-      });
+        const { code } = await discordSdk.commands.authorize({
+          client_id: '${clientId}',
+          response_type: 'code',
+          state: '',
+          prompt: 'none',
+          scope: ['identify'],
+        });
 
-      const res = await fetch('/api/activity/auth', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ code }),
-      });
+        const res = await fetch('/api/activity/auth', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ code }),
+        });
 
-      return res.ok;
+        return res.ok;
+      })(), 8000);
+
+      if (result === '__timeout__') {
+        console.error('[Discord Activity] Autenticação travou (timeout de 8s) — provavelmente bloqueada pelo proxy da Activity.');
+        return false;
+      }
+      return result;
     } catch (err) {
       console.error('[Discord Activity] Falha ao autenticar dentro da call:', err);
       return false;
@@ -1218,7 +1239,7 @@ ${activitySdkBootstrap(clientId!)}
           window.location.reload();
         } else {
           document.getElementById('gateTitle').innerText = '⚠️ Não deu pra autenticar automaticamente';
-          document.getElementById('gateDesc').innerText = 'Tenta fechar e abrir a Activity de novo.';
+          document.getElementById('gateDesc').innerText = 'Tenta fechar e abrir a Activity de novo. Se continuar assim, abra essa atividade direto pelo navegador (fora da call) pra entrar.';
         }
       }
     });
@@ -2716,7 +2737,7 @@ ${activitySdkBootstrap(clientId!)}
           window.location.reload();
         } else {
           document.getElementById('gateTitle').innerText = '⚠️ Não deu pra autenticar automaticamente';
-          document.getElementById('gateDesc').innerText = 'Tenta fechar e abrir a Activity de novo.';
+          document.getElementById('gateDesc').innerText = 'Tenta fechar e abrir a Activity de novo. Se continuar assim, abra essa atividade direto pelo navegador (fora da call) pra entrar.';
         }
       }
     });
@@ -4482,7 +4503,7 @@ ${activitySdkBootstrap(clientId!)}
           window.location.reload();
         } else {
           document.getElementById('gateTitle').innerText = '⚠️ Não deu pra autenticar automaticamente';
-          document.getElementById('gateDesc').innerText = 'Tenta fechar e abrir a Activity de novo.';
+          document.getElementById('gateDesc').innerText = 'Tenta fechar e abrir a Activity de novo. Se continuar assim, abra essa atividade direto pelo navegador (fora da call) pra entrar.';
         }
       }
     });

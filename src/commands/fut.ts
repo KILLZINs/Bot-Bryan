@@ -1,25 +1,23 @@
 // ═══════════════════════════════════════════════════════════════════════
-// COMANDO /fut — Sistema "Rachão" (fase 2: clãs + partidas por modo)
+// COMANDO /fut — Sistema "Rachão"
 // ═══════════════════════════════════════════════════════════════════════
+// Gerenciar clã/elenco/partida (criar, times, gols, finalizar, ranking,
+// leaderboard etc.) virou tudo Activity no site — fica mais rápido e visual
+// por lá do que digitando opção por opção aqui. Este comando ficou só com o
+// que faz sentido continuar sendo um comando rápido de Discord: avisar que
+// vai ter fut, responder presença, ver os gols com vídeo e conferir
+// stats/ranque sem precisar abrir o navegador.
 
 import { SlashCommandBuilder, ChatInputCommandInteraction, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
 import { Command } from '../types';
 import { errorEmbed, successEmbed, COLORS } from '../utils/embeds';
-import { isOwner } from '../utils/permissions';
 import {
-  FutError,
-  createClan, joinClan, addClanMember, removeClanMember, listClans, getClanByName, getClanById, deleteClan, resolveMember,
-  listTeams, createTeam, deleteTeam, setMemberTeam,
-  createPartida, getOpenPartida, getPartidaById, deletePartida, listPartidaHistory,
-  joinPartida, addOfflinePlayer, setTeam, removePlayerFromPartida, autoBalanceTeams, startPartida, recordEvent, finishPartida,
-  getProfile, getRanking, getUserProfile, setUserPosition, listGoalVideos, notaBand,
-  createChamada, listChamadas, deleteChamada, respondChamada, calcValorPorPessoa,
-  undoLastEvent, reopenPartida, getClanOverview, listFullClanStats,
-  addClanMemberToPartida, listAvailableClanMembers, simulateClanMatch,
-  getRankTier, getPlayerSkillRanks, getServerLeaderboard, getGlobalLeaderboard,
-  getServerClanLeaderboard, getGlobalClanLeaderboard, getLeaderboardConfig,
-  setServerLeaderboardEnabled, setGlobalLeaderboardEnabled,
-  type FutEventType, type FutMode, type FutRsvpStatus, type FutVisibility,
+  FutError, getClanByName,
+  getOpenPartida, listPartidaHistory,
+  getProfile, getUserProfile, listGoalVideos, notaBand,
+  createChamada, listChamadas, respondChamada, calcValorPorPessoa,
+  getRankTier, getPlayerSkillRanks,
+  type FutMode, type FutRsvpStatus,
 } from '../fut/services/pelada';
 
 // Mesma faixa (notaBand) usada no site, só que como emoji colorido — pra
@@ -29,204 +27,17 @@ function notaTag(nota: number): string {
   return `${NOTA_EMOJI[notaBand(nota)]} ${nota.toFixed(1)}`;
 }
 
-// Pra estatística de gente do elenco sem conta vinculada (discordId sintético
-// "offline:<clanMemberId>" — ver addClanMemberToPartida/finishPartida em
-// pelada.ts): não dá pra usar <@mention> porque não existe usuário de
-// verdade, então mostra o displayName salvo em texto puro.
-function mentionOrName(discordId: string, displayName?: string | null): string {
-  return discordId.startsWith('offline:') ? (displayName || 'Jogador do elenco') : `<@${discordId}>`;
-}
-
-function playerRefFrom(interaction: ChatInputCommandInteraction) {
-  const user = interaction.options.getUser('jogador');
-  const apelido = interaction.options.getString('apelido');
-  return { discordId: user?.id, apelido: apelido ?? undefined };
-}
-
 async function resolveClan(interaction: ChatInputCommandInteraction) {
   const nome = interaction.options.getString('cla', true);
   const clan = await getClanByName(interaction.guildId!, nome);
-  if (!clan) throw new FutError(`Não achei nenhum clã chamado **${nome}** neste servidor. Use \`/fut cla criar\` primeiro.`);
+  if (!clan) throw new FutError(`Não achei nenhum clã chamado **${nome}** neste servidor. Crie um pela Activity (Atividades → Rachão) primeiro.`);
   return clan;
-}
-
-function buildPartidaEmbed(partida: Awaited<ReturnType<typeof getPartidaById>>, clanName: string) {
-  if (!partida) return errorEmbed('Partida não encontrada.');
-
-  const timeA = partida.players.filter((p) => p.team === 'A');
-  const timeB = partida.players.filter((p) => p.team === 'B');
-  const semTime = partida.players.filter((p) => !p.team);
-  const statusLabel = partida.status === 'aberta' ? '🟡 Aberta (inscrições)' : partida.status === 'em_andamento' ? '🟢 Em andamento' : '🔴 Finalizada';
-  const finalizada = partida.status === 'finalizada';
-  const notaTxt = (p: (typeof partida.players)[number]) => (finalizada && p.nota != null ? ` — ${notaTag(p.nota)}` : '');
-
-  const embed = new EmbedBuilder()
-    .setColor(COLORS.PRIMARY)
-    .setTitle(`⚽ ${partida.name || 'Partida'} — clã ${clanName}`)
-    .setDescription(`**Modo:** ${partida.mode === 'futsal' ? 'Futsal' : 'Campo'}\n**Status:** ${statusLabel}`)
-    .addFields(
-      { name: `Time A (${timeA.length})`, value: timeA.length ? timeA.map((p) => `${p.displayName} — ⚽${p.goals} 🅰️${p.assists}${notaTxt(p)}`).join('\n') : '_vazio_', inline: true },
-      { name: `Time B (${timeB.length})`, value: timeB.length ? timeB.map((p) => `${p.displayName} — ⚽${p.goals} 🅰️${p.assists}${notaTxt(p)}`).join('\n') : '_vazio_', inline: true },
-    );
-
-  if (semTime.length) embed.addFields({ name: 'Sem time definido', value: semTime.map((p) => p.displayName).join(', ') });
-  if (partida.status !== 'aberta') embed.addFields({ name: 'Placar', value: `**${partida.scoreA} x ${partida.scoreB}**` });
-
-  return embed;
 }
 
 export default {
   data: new SlashCommandBuilder()
     .setName('fut')
-    .setDescription('⚽ Sistema de Rachão — clãs, partidas e estatísticas')
-    .addSubcommandGroup((group) => group
-      .setName('cla')
-      .setDescription('Gerenciar clãs (grupos persistentes de rachão)')
-      .addSubcommand((sub) => sub.setName('criar').setDescription('Cria um novo clã')
-        .addStringOption((o) => o.setName('nome').setDescription('Nome do clã').setRequired(true))
-        .addStringOption((o) => o.setName('visibilidade').setDescription('Público (padrão) ou privado (só entra com código)')
-          .addChoices({ name: 'Público', value: 'publico' }, { name: 'Privado', value: 'privado' })))
-      .addSubcommand((sub) => sub.setName('entrar').setDescription('Entra em um clã existente')
-        .addStringOption((o) => o.setName('nome').setDescription('Nome do clã').setRequired(true))
-        .addStringOption((o) => o.setName('codigo').setDescription('Código de convite (só pra clãs privados)')))
-      .addSubcommand((sub) => sub.setName('listar').setDescription('Lista os clãs deste servidor'))
-      .addSubcommand((sub) => sub.setName('deletar').setDescription('Deleta um clã (só quem criou)')
-        .addStringOption((o) => o.setName('nome').setDescription('Nome do clã').setRequired(true)))
-      .addSubcommand((sub) => sub.setName('adicionar').setDescription('Adiciona alguém direto no elenco do clã, com nome e ID (só quem criou o clã)')
-        .addStringOption((o) => o.setName('nome').setDescription('Nome do clã').setRequired(true))
-        .addStringOption((o) => o.setName('apelido').setDescription('Nome/apelido da pessoa').setRequired(true))
-        .addUserOption((o) => o.setName('jogador').setDescription('A pessoa, se ela estiver nesse servidor (preenche o ID sozinho)'))
-        .addStringOption((o) => o.setName('id_discord').setDescription('ID do Discord (se "jogador" não achar a pessoa) — modo dev + "Copiar ID"')))
-      .addSubcommand((sub) => sub.setName('remover').setDescription('Remove alguém do elenco do clã (só quem criou o clã)')
-        .addStringOption((o) => o.setName('nome').setDescription('Nome do clã').setRequired(true))
-        .addUserOption((o) => o.setName('jogador').setDescription('A pessoa a remover, se tiver conta no Discord'))
-        .addStringOption((o) => o.setName('apelido').setDescription('Apelido (pra gente offline, sem conta)')))
-      .addSubcommand((sub) => sub.setName('stats').setDescription('Estatísticas do clã inteiro (elenco completo) num modo')
-        .addStringOption((o) => o.setName('nome').setDescription('Nome do clã').setRequired(true))
-        .addStringOption((o) => o.setName('modo').setDescription('Futsal ou campo').setRequired(true)
-          .addChoices({ name: 'Futsal', value: 'futsal' }, { name: 'Campo', value: 'campo' }))))
-    .addSubcommandGroup((group) => group
-      .setName('elenco')
-      .setDescription('Times internos e fixos do clã (ex: Time Amarelo x Time Azul)')
-      .addSubcommand((sub) => sub.setName('criar').setDescription('Cria um time interno no clã (só quem criou o clã)')
-        .addStringOption((o) => o.setName('cla').setDescription('Nome do clã').setRequired(true))
-        .addStringOption((o) => o.setName('nome').setDescription('Nome do time').setRequired(true))
-        .addStringOption((o) => o.setName('cor').setDescription('Cor do time (opcional, ex: Amarelo, #FFD700)')))
-      .addSubcommand((sub) => sub.setName('deletar').setDescription('Deleta um time interno (só quem criou o clã)')
-        .addStringOption((o) => o.setName('cla').setDescription('Nome do clã').setRequired(true))
-        .addStringOption((o) => o.setName('nome').setDescription('Nome do time').setRequired(true)))
-      .addSubcommand((sub) => sub.setName('listar').setDescription('Lista os times internos do clã e seus jogadores')
-        .addStringOption((o) => o.setName('cla').setDescription('Nome do clã').setRequired(true)))
-      .addSubcommand((sub) => sub.setName('definir').setDescription('Coloca um membro do clã dentro de um time interno')
-        .addStringOption((o) => o.setName('cla').setDescription('Nome do clã').setRequired(true))
-        .addStringOption((o) => o.setName('nome').setDescription('Nome do time (deixe vazio pra tirar do time atual)'))
-        .addUserOption((o) => o.setName('jogador').setDescription('Membro com conta no Discord'))
-        .addStringOption((o) => o.setName('apelido').setDescription('Apelido (membro offline)'))))
-    .addSubcommandGroup((group) => group
-      .setName('partida')
-      .setDescription('Gerenciar a partida em aberto de um clã')
-      .addSubcommand((sub) => sub.setName('criar').setDescription('Cria uma nova partida dentro de um clã')
-        .addStringOption((o) => o.setName('cla').setDescription('Nome do clã').setRequired(true))
-        .addStringOption((o) => o.setName('modo').setDescription('Futsal ou campo').setRequired(true)
-          .addChoices({ name: 'Futsal', value: 'futsal' }, { name: 'Campo', value: 'campo' }))
-        .addStringOption((o) => o.setName('nome').setDescription('Nome da partida (opcional)')))
-      .addSubcommand((sub) => sub.setName('deletar').setDescription('Deleta a partida em aberto do clã (só quem criou ela)')
-        .addStringOption((o) => o.setName('cla').setDescription('Nome do clã').setRequired(true)))
-      .addSubcommand((sub) => sub.setName('entrar').setDescription('Entra na partida em aberto do clã')
-        .addStringOption((o) => o.setName('cla').setDescription('Nome do clã').setRequired(true))
-        .addStringOption((o) => o.setName('posicao').setDescription('Sua posição (opcional)')))
-      .addSubcommand((sub) => sub.setName('adicionar').setDescription('Adiciona um jogador sem conta no Discord (offline)')
-        .addStringOption((o) => o.setName('cla').setDescription('Nome do clã').setRequired(true))
-        .addStringOption((o) => o.setName('apelido').setDescription('Apelido do jogador').setRequired(true))
-        .addStringOption((o) => o.setName('posicao').setDescription('Posição (opcional)')))
-      .addSubcommand((sub) => sub.setName('convocar').setDescription('Chama alguém que já está no elenco do clã direto pra dentro da partida')
-        .addStringOption((o) => o.setName('cla').setDescription('Nome do clã').setRequired(true))
-        .addUserOption((o) => o.setName('jogador').setDescription('Pessoa do elenco com conta no Discord'))
-        .addStringOption((o) => o.setName('apelido').setDescription('Apelido de quem não tem conta vinculada')))
-      .addSubcommand((sub) => sub.setName('time').setDescription('Define o time (A ou B) de um jogador')
-        .addStringOption((o) => o.setName('cla').setDescription('Nome do clã').setRequired(true))
-        .addStringOption((o) => o.setName('time').setDescription('Time').setRequired(true)
-          .addChoices({ name: 'Time A', value: 'A' }, { name: 'Time B', value: 'B' }))
-        .addUserOption((o) => o.setName('jogador').setDescription('Jogador com conta no Discord'))
-        .addStringOption((o) => o.setName('apelido').setDescription('Apelido (jogador offline)')))
-      .addSubcommand((sub) => sub.setName('auto_equilibrar').setDescription('Distribui os jogadores em times A/B tentando equilibrar o nível (só quem criou a partida)')
-        .addStringOption((o) => o.setName('cla').setDescription('Nome do clã').setRequired(true)))
-      .addSubcommand((sub) => sub.setName('remover').setDescription('Tira alguém da partida (sem informar ninguém, sai você mesmo)')
-        .addStringOption((o) => o.setName('cla').setDescription('Nome do clã').setRequired(true))
-        .addUserOption((o) => o.setName('jogador').setDescription('Quem remover (deixe vazio pra sair você mesmo)'))
-        .addStringOption((o) => o.setName('apelido').setDescription('Apelido (jogador offline)')))
-      .addSubcommand((sub) => sub.setName('iniciar').setDescription('Inicia a partida (fecha as inscrições)')
-        .addStringOption((o) => o.setName('cla').setDescription('Nome do clã').setRequired(true)))
-      .addSubcommand((sub) => sub.setName('gol').setDescription('Registra um gol')
-        .addStringOption((o) => o.setName('cla').setDescription('Nome do clã').setRequired(true))
-        .addUserOption((o) => o.setName('jogador').setDescription('Quem fez o gol'))
-        .addStringOption((o) => o.setName('apelido').setDescription('Apelido (jogador offline)'))
-        .addUserOption((o) => o.setName('assistencia_de').setDescription('Quem deu a assistência (opcional)'))
-        .addStringOption((o) => o.setName('assistencia_apelido').setDescription('Apelido de quem assistiu (opcional)'))
-        .addStringOption((o) => o.setName('video').setDescription('Link do vídeo do gol (opcional, ex: YouTube)')))
-      .addSubcommand((sub) => sub.setName('gols').setDescription('Lista os gols com vídeo salvos na partida')
-        .addStringOption((o) => o.setName('cla').setDescription('Nome do clã').setRequired(true)))
-      .addSubcommand((sub) => sub.setName('desfazer').setDescription('Desfaz o último evento registrado (gol/defesa/erro/etc), em caso de engano')
-        .addStringOption((o) => o.setName('cla').setDescription('Nome do clã').setRequired(true)))
-      .addSubcommand((sub) => sub.setName('reabrir').setDescription('Reabre uma partida finalizada pra corrigir gols/estatísticas/resultado (só quem criou)')
-        .addStringOption((o) => o.setName('cla').setDescription('Nome do clã').setRequired(true))
-        .addIntegerOption((o) => o.setName('posicao').setDescription('Qual partida do histórico (1 = mais recente, padrão). Veja `/fut partida historico`.').setMinValue(1)))
-      .addSubcommand((sub) => sub.setName('detalhes').setDescription('Mostra os detalhes/estatísticas completas de uma partida do histórico')
-        .addStringOption((o) => o.setName('cla').setDescription('Nome do clã').setRequired(true))
-        .addIntegerOption((o) => o.setName('posicao').setDescription('Qual partida do histórico (1 = mais recente, padrão). Veja `/fut partida historico`.').setMinValue(1)))
-      .addSubcommand((sub) => sub.setName('defesa').setDescription('Registra uma defesa')
-        .addStringOption((o) => o.setName('cla').setDescription('Nome do clã').setRequired(true))
-        .addUserOption((o) => o.setName('jogador').setDescription('Quem defendeu'))
-        .addStringOption((o) => o.setName('apelido').setDescription('Apelido (jogador offline)')))
-      .addSubcommand((sub) => sub.setName('concedido').setDescription('Registra um gol concedido (sofrido)')
-        .addStringOption((o) => o.setName('cla').setDescription('Nome do clã').setRequired(true))
-        .addUserOption((o) => o.setName('jogador').setDescription('Quem sofreu o gol'))
-        .addStringOption((o) => o.setName('apelido').setDescription('Apelido (jogador offline)')))
-      .addSubcommand((sub) => sub.setName('erro').setDescription('Registra um erro grave / lance ruim (CAGADA MASTER — pesa mais na nota)')
-        .addStringOption((o) => o.setName('cla').setDescription('Nome do clã').setRequired(true))
-        .addUserOption((o) => o.setName('jogador').setDescription('Quem errou'))
-        .addStringOption((o) => o.setName('apelido').setDescription('Apelido (jogador offline)')))
-      .addSubcommand((sub) => sub.setName('desarme').setDescription('Registra um desarme importante')
-        .addStringOption((o) => o.setName('cla').setDescription('Nome do clã').setRequired(true))
-        .addUserOption((o) => o.setName('jogador').setDescription('Quem desarmou'))
-        .addStringOption((o) => o.setName('apelido').setDescription('Apelido (jogador offline)')))
-      .addSubcommand((sub) => sub.setName('boa_jogada').setDescription('Registra uma boa jogada (lance de destaque)')
-        .addStringOption((o) => o.setName('cla').setDescription('Nome do clã').setRequired(true))
-        .addUserOption((o) => o.setName('jogador').setDescription('Quem fez a jogada'))
-        .addStringOption((o) => o.setName('apelido').setDescription('Apelido (jogador offline)')))
-      .addSubcommand((sub) => sub.setName('bloqueio').setDescription('Registra um bloqueio')
-        .addStringOption((o) => o.setName('cla').setDescription('Nome do clã').setRequired(true))
-        .addUserOption((o) => o.setName('jogador').setDescription('Quem bloqueou'))
-        .addStringOption((o) => o.setName('apelido').setDescription('Apelido (jogador offline)')))
-      .addSubcommand((sub) => sub.setName('falha_defensiva').setDescription('Registra uma falha defensiva (pesa menos que erro grave)')
-        .addStringOption((o) => o.setName('cla').setDescription('Nome do clã').setRequired(true))
-        .addUserOption((o) => o.setName('jogador').setDescription('Quem falhou'))
-        .addStringOption((o) => o.setName('apelido').setDescription('Apelido (jogador offline)')))
-      .addSubcommand((sub) => sub.setName('falha_ofensiva').setDescription('Registra uma falha ofensiva (pesa menos que erro grave)')
-        .addStringOption((o) => o.setName('cla').setDescription('Nome do clã').setRequired(true))
-        .addUserOption((o) => o.setName('jogador').setDescription('Quem falhou'))
-        .addStringOption((o) => o.setName('apelido').setDescription('Apelido (jogador offline)')))
-      .addSubcommand((sub) => sub.setName('placar').setDescription('Mostra o placar da partida em aberto do clã')
-        .addStringOption((o) => o.setName('cla').setDescription('Nome do clã').setRequired(true)))
-      .addSubcommand((sub) => sub.setName('historico').setDescription('Mostra as últimas partidas finalizadas do clã')
-        .addStringOption((o) => o.setName('cla').setDescription('Nome do clã').setRequired(true)))
-      .addSubcommand((sub) => sub.setName('finalizar').setDescription('Finaliza a partida e salva as estatísticas')
-        .addStringOption((o) => o.setName('cla').setDescription('Nome do clã').setRequired(true))
-        .addStringOption((o) => o.setName('resultado').setDescription('Forçar um resultado (opcional — por padrão usa o placar)')
-          .addChoices({ name: 'Vitória Time A', value: 'vitoria_a' }, { name: 'Vitória Time B', value: 'vitoria_b' }, { name: 'Empate', value: 'empate' }))))
-    .addSubcommand((sub) => sub.setName('perfil').setDescription('Mostra suas estatísticas num clã')
-      .addStringOption((o) => o.setName('cla').setDescription('Nome do clã').setRequired(true))
-      .addStringOption((o) => o.setName('modo').setDescription('Futsal ou campo').setRequired(true)
-        .addChoices({ name: 'Futsal', value: 'futsal' }, { name: 'Campo', value: 'campo' }))
-      .addUserOption((o) => o.setName('usuario').setDescription('Ver o perfil de outra pessoa (opcional)')))
-    .addSubcommand((sub) => sub.setName('ranking').setDescription('Mostra o ranking de um clã')
-      .addStringOption((o) => o.setName('cla').setDescription('Nome do clã').setRequired(true))
-      .addStringOption((o) => o.setName('modo').setDescription('Futsal ou campo').setRequired(true)
-        .addChoices({ name: 'Futsal', value: 'futsal' }, { name: 'Campo', value: 'campo' })))
-    .addSubcommand((sub) => sub.setName('posicao').setDescription('Define sua posição preferida (usada como padrão ao entrar em partidas)')
-      .addStringOption((o) => o.setName('modo').setDescription('Futsal ou campo').setRequired(true)
-        .addChoices({ name: 'Futsal', value: 'futsal' }, { name: 'Campo', value: 'campo' }))
-      .addStringOption((o) => o.setName('posicao').setDescription('Ex: Goleiro, Zagueiro, Meia, Atacante, Pivô...').setRequired(true)))
+    .setDescription('⚽ Rachão — chame o fut, confirme presença e veja suas stats (o resto é na Activity do site)')
     .addSubcommand((sub) => sub.setName('chamar').setDescription('Chama o fut! Anuncia local, horário, PIX e link pro clã')
       .addStringOption((o) => o.setName('cla').setDescription('Nome do clã').setRequired(true))
       .addStringOption((o) => o.setName('local').setDescription('Onde vai ser').setRequired(true))
@@ -241,392 +52,23 @@ export default {
       .addStringOption((o) => o.setName('cla').setDescription('Nome do clã').setRequired(true))
       .addStringOption((o) => o.setName('status').setDescription('Sua resposta').setRequired(true)
         .addChoices({ name: '✅ Vou', value: 'vou' }, { name: '🤔 Talvez', value: 'talvez' }, { name: '❌ Não vou', value: 'nao_vou' })))
-    .addSubcommand((sub) => sub.setName('simular').setDescription('Simula, de brincadeira, uma partida fictícia minuto a minuto com base nas notas')
+    .addSubcommand((sub) => sub.setName('perfil').setDescription('Mostra suas estatísticas num clã')
       .addStringOption((o) => o.setName('cla').setDescription('Nome do clã').setRequired(true))
       .addStringOption((o) => o.setName('modo').setDescription('Futsal ou campo').setRequired(true)
-        .addChoices({ name: 'Futsal', value: 'futsal' }, { name: 'Campo', value: 'campo' })))
+        .addChoices({ name: 'Futsal', value: 'futsal' }, { name: 'Campo', value: 'campo' }))
+      .addUserOption((o) => o.setName('usuario').setDescription('Ver o perfil de outra pessoa (opcional)')))
     .addSubcommand((sub) => sub.setName('ranque').setDescription('Mostra o ranque (tier estilo FIFA) oficial e por habilidade de alguém')
       .addStringOption((o) => o.setName('cla').setDescription('Nome do clã').setRequired(true))
       .addStringOption((o) => o.setName('modo').setDescription('Futsal ou campo').setRequired(true)
         .addChoices({ name: 'Futsal', value: 'futsal' }, { name: 'Campo', value: 'campo' }))
       .addUserOption((o) => o.setName('usuario').setDescription('Ver o ranque de outra pessoa (opcional)')))
-    .addSubcommand((sub) => sub.setName('leaderboard').setDescription('Mostra o leaderboard (ranque) do servidor ou global')
-      .addStringOption((o) => o.setName('escopo').setDescription('Leaderboard do servidor ou global (cross-server)').setRequired(true)
-        .addChoices({ name: 'Servidor', value: 'servidor' }, { name: 'Global', value: 'global' }))
-      .addStringOption((o) => o.setName('tipo').setDescription('Ranquear jogadores ou clãs').setRequired(true)
-        .addChoices({ name: 'Jogadores', value: 'jogadores' }, { name: 'Clãs', value: 'clas' }))
-      .addStringOption((o) => o.setName('modo').setDescription('Futsal ou campo').setRequired(true)
-        .addChoices({ name: 'Futsal', value: 'futsal' }, { name: 'Campo', value: 'campo' })))
-    .addSubcommand((sub) => sub.setName('leaderboard_config').setDescription('Liga/desliga o leaderboard deste servidor (dono do servidor) ou a entrada no global (dono do bot)')
-      .addStringOption((o) => o.setName('acao').setDescription('O que fazer').setRequired(true)
-        .addChoices(
-          { name: 'Ligar leaderboard do servidor (dono do servidor)', value: 'servidor_ligar' },
-          { name: 'Desligar leaderboard do servidor (dono do servidor)', value: 'servidor_desligar' },
-          { name: 'Incluir este servidor no leaderboard global (só dono do bot)', value: 'global_ligar' },
-          { name: 'Remover este servidor do leaderboard global (só dono do bot)', value: 'global_desligar' },
-        ))),
+    .addSubcommand((sub) => sub.setName('gols').setDescription('Lista/compartilha os gols com vídeo da partida mais recente do clã')
+      .addStringOption((o) => o.setName('cla').setDescription('Nome do clã').setRequired(true))),
 
   async execute(interaction: ChatInputCommandInteraction) {
-    const group = interaction.options.getSubcommandGroup(false);
     const sub = interaction.options.getSubcommand();
-    const guildId = interaction.guildId!;
 
     try {
-      // ── /fut cla ─────────────────────────────────────────────────────
-      if (group === 'cla') {
-        if (sub === 'criar') {
-          const nome = interaction.options.getString('nome', true);
-          const visibilidade = (interaction.options.getString('visibilidade') ?? 'publico') as FutVisibility;
-          const clan = await createClan(guildId, interaction.user.id, interaction.user.username, nome, visibilidade);
-          const desc = clan.visibility === 'privado'
-            ? `**${clan.name}** (privado) — use \`/fut partida criar\` pra começar. Código de convite: \`${clan.joinCode}\` (compartilhe só com quem quiser trazer).`
-            : `**${clan.name}** — use \`/fut partida criar\` pra começar uma partida.`;
-          await interaction.reply({ embeds: [successEmbed('Clã criado!', desc)], ephemeral: clan.visibility === 'privado' });
-          return;
-        }
-        if (sub === 'entrar') {
-          const nome = interaction.options.getString('nome', true);
-          const codigo = interaction.options.getString('codigo') ?? undefined;
-          const clan = await getClanByName(guildId, nome);
-          if (!clan) throw new FutError(`Não achei nenhum clã chamado **${nome}**.`);
-          await joinClan(clan.id, interaction.user.id, interaction.user.username, codigo);
-          await interaction.reply({ embeds: [successEmbed('Você entrou no clã!', `Bem-vindo ao **${clan.name}**.`)] });
-          return;
-        }
-        if (sub === 'listar') {
-          const clans = await listClans(guildId, interaction.user.id);
-          if (!clans.length) {
-            await interaction.reply({ embeds: [errorEmbed('Nenhum clã ainda', 'Crie um com `/fut cla criar`.')], ephemeral: true });
-            return;
-          }
-          const embed = new EmbedBuilder().setColor(COLORS.PRIMARY).setTitle('⚽ Clãs do servidor')
-            .setDescription(clans.map((c) => `**${c.name}**${c.visibility === 'privado' ? ' 🔒' : ''} — ${c.members.length} membro(s)`).join('\n'));
-          await interaction.reply({ embeds: [embed] });
-          return;
-        }
-        if (sub === 'deletar') {
-          const nome = interaction.options.getString('nome', true);
-          const clan = await getClanByName(guildId, nome);
-          if (!clan) throw new FutError(`Não achei nenhum clã chamado **${nome}**.`);
-          await deleteClan(clan.id, interaction.user.id);
-          await interaction.reply({ embeds: [successEmbed('Clã deletado', `**${clan.name}** e todas as partidas dele foram apagados.`)] });
-          return;
-        }
-        if (sub === 'adicionar') {
-          const nome = interaction.options.getString('nome', true);
-          const apelido = interaction.options.getString('apelido', true);
-          const jogador = interaction.options.getUser('jogador');
-          const idManual = interaction.options.getString('id_discord') ?? undefined;
-          const clan = await getClanByName(guildId, nome);
-          if (!clan) throw new FutError(`Não achei nenhum clã chamado **${nome}**.`);
-
-          const discordId = jogador?.id ?? idManual;
-          const member = await addClanMember(clan.id, interaction.user.id, { discordId, displayName: apelido });
-          const desc = member.discordId
-            ? `**${member.displayName}** (<@${member.discordId}>) agora faz parte do elenco de **${clan.name}**.`
-            : `**${member.displayName}** agora faz parte do elenco de **${clan.name}** (sem conta do Discord vinculada).`;
-          await interaction.reply({ embeds: [successEmbed('Membro adicionado!', desc)] });
-          return;
-        }
-        if (sub === 'remover') {
-          const nome = interaction.options.getString('nome', true);
-          const jogador = interaction.options.getUser('jogador');
-          const apelido = interaction.options.getString('apelido') ?? undefined;
-          if (!jogador && !apelido) { await interaction.reply({ embeds: [errorEmbed('Faltou a pessoa', 'Informe `jogador` ou `apelido`.')], ephemeral: true }); return; }
-          const clan = await getClanByName(guildId, nome);
-          if (!clan) throw new FutError(`Não achei nenhum clã chamado **${nome}**.`);
-
-          const removido = await removeClanMember(clan.id, interaction.user.id, { discordId: jogador?.id, apelido });
-          await interaction.reply({ embeds: [successEmbed('Membro removido', `**${removido.displayName}** saiu do elenco de **${clan.name}**.`)] });
-          return;
-        }
-        if (sub === 'stats') {
-          const nome = interaction.options.getString('nome', true);
-          const modo = interaction.options.getString('modo', true) as FutMode;
-          const clan = await getClanByName(guildId, nome);
-          if (!clan) throw new FutError(`Não achei nenhum clã chamado **${nome}**.`);
-
-          const [overview, elenco] = await Promise.all([getClanOverview(clan.id, modo), listFullClanStats(clan.id, modo)]);
-          if (!overview.totalJogadores) {
-            await interaction.reply({ embeds: [errorEmbed('Sem estatísticas ainda', `Ninguém finalizou uma partida de ${modo} nesse clã ainda.`)], ephemeral: true });
-            return;
-          }
-
-          const embed = new EmbedBuilder()
-            .setColor(COLORS.GOLD)
-            .setTitle(`📊 Estatísticas do clã — ${clan.name} (${modo})`)
-            .addFields(
-              { name: 'Partidas finalizadas', value: `${overview.totalPartidas}`, inline: true },
-              { name: 'Jogadores com stats', value: `${overview.totalJogadores}`, inline: true },
-              { name: 'V / D / E (somado)', value: `${overview.totalVitorias} / ${overview.totalDerrotas} / ${overview.totalEmpates}`, inline: true },
-              { name: 'Gols (elenco)', value: `${overview.totalGols}`, inline: true },
-              { name: 'Assistências (elenco)', value: `${overview.totalAssists}`, inline: true },
-              { name: 'Defesas (elenco)', value: `${overview.totalDefesas}`, inline: true },
-              { name: 'Gols concedidos', value: `${overview.totalConcedidos}`, inline: true },
-              { name: 'Erros graves', value: `${overview.totalErros}`, inline: true },
-              { name: 'Desarmes', value: `${overview.totalDesarmes}`, inline: true },
-              { name: 'Boas jogadas', value: `${overview.totalBoasJogadas}`, inline: true },
-              { name: 'Bloqueios', value: `${overview.totalBloqueios}`, inline: true },
-              { name: 'Falhas defensivas', value: `${overview.totalFalhasDefensivas}`, inline: true },
-              { name: 'Falhas ofensivas', value: `${overview.totalFalhasOfensivas}`, inline: true },
-            );
-          if (overview.artilheiro) embed.addFields({ name: '👑 Artilheiro', value: `${mentionOrName(overview.artilheiro.discordId, overview.artilheiro.displayName)} — ${overview.artilheiro.goals} gols`, inline: false });
-          if (overview.garcom) embed.addFields({ name: '🎯 Garçom (mais assistências)', value: `${mentionOrName(overview.garcom.discordId, overview.garcom.displayName)} — ${overview.garcom.assists} assists`, inline: false });
-          if (overview.melhorNota) embed.addFields({ name: '⭐ Melhor nota média', value: `${mentionOrName(overview.melhorNota.discordId, overview.melhorNota.displayName)} — ${notaTag(overview.melhorNota.notaMedia)}`, inline: false });
-
-          // Elenco completo (individual) — corta se passar do limite de um
-          // campo de embed do Discord (1024 caracteres).
-          const linhasElenco = elenco.map((p, i) => `**${i + 1}.** ${mentionOrName(p.discordId, p.displayName)} — ${notaTag(p.notaMedia)} — ⚽${p.goals} 🅰️${p.assists} 🧤${p.defesas} — ${p.totalPartidas}J`);
-          let elencoTxt = linhasElenco.join('\n');
-          if (elencoTxt.length > 1000) elencoTxt = `${elencoTxt.slice(0, 990)}\n… (veja o elenco completo no site)`;
-          embed.addFields({ name: `Elenco completo (${elenco.length})`, value: elencoTxt || '_sem dados_', inline: false });
-
-          await interaction.reply({ embeds: [embed] });
-          return;
-        }
-      }
-
-      // ── /fut elenco ──────────────────────────────────────────────────
-      if (group === 'elenco') {
-        const clan = await resolveClan(interaction);
-
-        if (sub === 'criar') {
-          const nome = interaction.options.getString('nome', true);
-          const cor = interaction.options.getString('cor') ?? undefined;
-          const team = await createTeam(clan.id, interaction.user.id, nome, cor);
-          await interaction.reply({ embeds: [successEmbed('Time criado!', `**${team.name}** agora faz parte do elenco do clã **${clan.name}**. Use \`/fut elenco definir\` pra colocar jogadores nele.`)] });
-          return;
-        }
-        if (sub === 'deletar') {
-          const nome = interaction.options.getString('nome', true);
-          const teams = await listTeams(clan.id);
-          const team = teams.find((t) => t.name.toLowerCase() === nome.trim().toLowerCase());
-          if (!team) throw new FutError(`Não achei nenhum time chamado **${nome}** nesse clã.`);
-          await deleteTeam(team.id, interaction.user.id);
-          await interaction.reply({ embeds: [successEmbed('Time deletado', `**${team.name}** foi removido do elenco.`)] });
-          return;
-        }
-        if (sub === 'listar') {
-          const teams = await listTeams(clan.id);
-          if (!teams.length) { await interaction.reply({ embeds: [errorEmbed('Nenhum time interno ainda', 'Crie um com `/fut elenco criar`.')], ephemeral: true }); return; }
-          const embed = new EmbedBuilder().setColor(COLORS.PRIMARY).setTitle(`👕 Elenco — ${clan.name}`);
-          for (const t of teams) {
-            embed.addFields({ name: `${t.name}${t.color ? ` (${t.color})` : ''} — ${t.members.length} jogador(es)`, value: t.members.length ? t.members.map((m) => m.displayName).join(', ') : '_vazio_' });
-          }
-          await interaction.reply({ embeds: [embed] });
-          return;
-        }
-        if (sub === 'definir') {
-          const nome = interaction.options.getString('nome');
-          const ref = playerRefFrom(interaction);
-          if (!ref.discordId && !ref.apelido) { await interaction.reply({ embeds: [errorEmbed('Faltou o jogador', 'Informe `jogador` ou `apelido`.')], ephemeral: true }); return; }
-
-          let teamId: string | null = null;
-          if (nome && nome.trim()) {
-            const teams = await listTeams(clan.id);
-            const team = teams.find((t) => t.name.toLowerCase() === nome.trim().toLowerCase());
-            if (!team) throw new FutError(`Não achei nenhum time chamado **${nome}** nesse clã.`);
-            teamId = team.id;
-          }
-          const member = await setMemberTeam(clan.id, ref, teamId);
-          await interaction.reply({ embeds: [successEmbed('Elenco atualizado', teamId ? `**${member.displayName}** agora faz parte de um time interno do clã.` : `**${member.displayName}** saiu do time interno.`)] });
-          return;
-        }
-      }
-
-      // ── /fut partida ─────────────────────────────────────────────────
-      if (group === 'partida') {
-        if (sub === 'criar') {
-          const clan = await resolveClan(interaction);
-          const modo = interaction.options.getString('modo', true) as FutMode;
-          const nome = interaction.options.getString('nome') ?? undefined;
-          const partida = await createPartida(clan.id, interaction.user.id, interaction.user.username, modo, nome);
-          await interaction.reply({ embeds: [successEmbed('Partida criada!', 'Use `/fut partida entrar` pra se inscrever. Quando estiver pronto, `/fut partida iniciar`.'), buildPartidaEmbed(partida, clan.name)] });
-          return;
-        }
-
-        if (sub === 'historico') {
-          const clan = await resolveClan(interaction);
-          const partidas = await listPartidaHistory(clan.id, 10);
-          if (!partidas.length) {
-            await interaction.reply({ embeds: [errorEmbed('Sem histórico ainda', 'Nenhuma partida finalizada nesse clã ainda.')], ephemeral: true });
-            return;
-          }
-          const lines = partidas.map((p) => {
-            const resLabel = p.resultado === 'empate' ? 'Empate' : p.resultado === 'vitoria_a' ? 'Vitória A' : 'Vitória B';
-            const data = p.finishedAt ? p.finishedAt.toLocaleDateString('pt-BR') : '';
-            return `**${p.name || 'Partida'}** (${p.mode}) — ${p.scoreA}x${p.scoreB} — ${resLabel} — ${data}`;
-          });
-          const embed = new EmbedBuilder().setColor(COLORS.PRIMARY).setTitle(`📜 Histórico — ${clan.name}`).setDescription(lines.join('\n'));
-          await interaction.reply({ embeds: [embed] });
-          return;
-        }
-
-        if (sub === 'gols') {
-          const clan = await resolveClan(interaction);
-          const partidaAtual = await getOpenPartida(clan.id) ?? (await listPartidaHistory(clan.id, 1))[0];
-          if (!partidaAtual) { await interaction.reply({ embeds: [errorEmbed('Nenhuma partida ainda', 'Esse clã ainda não tem nenhuma partida.')], ephemeral: true }); return; }
-          const videos = await listGoalVideos(partidaAtual.id);
-          if (!videos.length) { await interaction.reply({ embeds: [errorEmbed('Sem vídeos ainda', 'Nenhum gol com vídeo salvo nessa partida. Use `video:` ao registrar um gol.')], ephemeral: true }); return; }
-          const embed = new EmbedBuilder().setColor(COLORS.GOLD).setTitle(`🎬 Gols com vídeo — ${partidaAtual.name || 'Partida'}`)
-            .setDescription(videos.map((v, i) => `**${i + 1}.** ${v.player?.displayName || 'Desconhecido'} — [assistir](${v.videoUrl})`).join('\n'));
-          await interaction.reply({ embeds: [embed] });
-          return;
-        }
-
-        if (sub === 'detalhes') {
-          const clan = await resolveClan(interaction);
-          const posicao = interaction.options.getInteger('posicao') ?? 1;
-          const historico = await listPartidaHistory(clan.id, Math.max(posicao, 20));
-          const alvo = historico[posicao - 1];
-          if (!alvo) { await interaction.reply({ embeds: [errorEmbed('Não encontrada', `Não achei a partida #${posicao} do histórico. Veja \`/fut partida historico\`.`)], ephemeral: true }); return; }
-          const siteUrl = process.env.DASHBOARD_URL || 'https://bryanfut.up.railway.app';
-          const embed = buildPartidaEmbed(alvo, clan.name);
-          embed.setFooter({ text: `Partida #${posicao} do histórico · edite/veja a animação dos gols no site` });
-          const components = [new ActionRowBuilder<ButtonBuilder>().addComponents(
-            new ButtonBuilder().setStyle(ButtonStyle.Link).setLabel('🌐 Ver/editar no site').setURL(`${siteUrl.replace(/\/$/, '')}/atividades/fut`),
-          )];
-          await interaction.reply({ embeds: [embed], components });
-          return;
-        }
-
-        if (sub === 'reabrir') {
-          const clan = await resolveClan(interaction);
-          const posicao = interaction.options.getInteger('posicao') ?? 1;
-          const historico = await listPartidaHistory(clan.id, Math.max(posicao, 20));
-          const alvo = historico[posicao - 1];
-          if (!alvo) { await interaction.reply({ embeds: [errorEmbed('Não encontrada', `Não achei a partida #${posicao} do histórico. Veja \`/fut partida historico\`.`)], ephemeral: true }); return; }
-          const reaberta = await reopenPartida(alvo.id, interaction.user.id);
-          await interaction.reply({ embeds: [successEmbed('Partida reaberta!', 'As estatísticas dela foram revertidas do clã. Corrija o que precisar (`gol`, `defesa`, `desfazer`, `time`, etc.) e finalize de novo com `/fut partida finalizar` quando terminar.'), buildPartidaEmbed(reaberta, clan.name)] });
-          return;
-        }
-
-        const clan = await resolveClan(interaction);
-        const partida = await getOpenPartida(clan.id);
-        if (!partida && sub !== 'deletar') {
-          await interaction.reply({ embeds: [errorEmbed('Nenhuma partida em aberto', `Crie uma com \`/fut partida criar cla:${clan.name}\`.`)], ephemeral: true });
-          return;
-        }
-
-        if (sub === 'deletar') {
-          if (!partida) { await interaction.reply({ embeds: [errorEmbed('Nenhuma partida em aberto', 'Não tem nada pra deletar.')], ephemeral: true }); return; }
-          await deletePartida(partida.id, interaction.user.id);
-          await interaction.reply({ embeds: [successEmbed('Partida deletada', 'A partida em aberto foi apagada.')] });
-          return;
-        }
-
-        if (sub === 'entrar') {
-          const posicao = interaction.options.getString('posicao') ?? undefined;
-          await joinPartida(partida!.id, interaction.user.id, interaction.user.username, posicao);
-          await interaction.reply({ embeds: [buildPartidaEmbed(await getPartidaById(partida!.id), clan.name)] });
-          return;
-        }
-
-        if (sub === 'adicionar') {
-          const apelido = interaction.options.getString('apelido', true);
-          const posicao = interaction.options.getString('posicao') ?? undefined;
-          await addOfflinePlayer(partida!.id, apelido, posicao);
-          await interaction.reply({ embeds: [buildPartidaEmbed(await getPartidaById(partida!.id), clan.name)] });
-          return;
-        }
-
-        if (sub === 'convocar') {
-          const ref = playerRefFrom(interaction);
-          if (!ref.discordId && !ref.apelido) { await interaction.reply({ embeds: [errorEmbed('Faltou o jogador', 'Informe `jogador` ou `apelido`.')], ephemeral: true }); return; }
-          const fullClan = await getClanById(clan.id);
-          if (!fullClan) throw new FutError('Clã não encontrado.');
-          const member = resolveMember(fullClan, ref);
-          await addClanMemberToPartida(partida!.id, interaction.user.id, member.id);
-          await interaction.reply({ embeds: [successEmbed('Convocado!', `**${member.displayName}** entrou na partida.`), buildPartidaEmbed(await getPartidaById(partida!.id), clan.name)] });
-          return;
-        }
-
-        if (sub === 'time') {
-          const time = interaction.options.getString('time', true) as 'A' | 'B';
-          const ref = playerRefFrom(interaction);
-          if (!ref.discordId && !ref.apelido) { await interaction.reply({ embeds: [errorEmbed('Faltou o jogador', 'Informe `jogador` ou `apelido`.')], ephemeral: true }); return; }
-          await setTeam(partida!.id, ref, time);
-          await interaction.reply({ embeds: [buildPartidaEmbed(await getPartidaById(partida!.id), clan.name)] });
-          return;
-        }
-
-        if (sub === 'auto_equilibrar') {
-          const balanced = await autoBalanceTeams(partida!.id, interaction.user.id);
-          await interaction.reply({ embeds: [successEmbed('Times equilibrados!', 'Distribuí com base no XP de cada um nesse modo.'), buildPartidaEmbed(balanced, clan.name)] });
-          return;
-        }
-
-        if (sub === 'remover') {
-          const ref = playerRefFrom(interaction);
-          // Sem `jogador`/`apelido` informado: a pessoa está saindo da
-          // própria partida ("incluindo eu").
-          const alvo = (!ref.discordId && !ref.apelido) ? { discordId: interaction.user.id } : ref;
-          const souOAlvo = alvo.discordId === interaction.user.id;
-          const atualizada = await removePlayerFromPartida(partida!.id, interaction.user.id, alvo);
-          await interaction.reply({ embeds: [successEmbed(souOAlvo ? 'Você saiu da partida!' : 'Removido(a)!', souOAlvo ? 'Você não está mais participando dessa partida.' : 'Essa pessoa foi tirada da partida.'), buildPartidaEmbed(atualizada, clan.name)] });
-          return;
-        }
-
-        if (sub === 'iniciar') {
-          const started = await startPartida(partida!.id, interaction.user.id);
-          await interaction.reply({ embeds: [successEmbed('Partida iniciada!', 'Já dá pra registrar `gol`, `defesa`, `concedido` e `erro`.'), buildPartidaEmbed(started, clan.name)] });
-          return;
-        }
-
-        if (sub === 'gol' || sub === 'defesa' || sub === 'concedido' || sub === 'erro'
-          || sub === 'desarme' || sub === 'boa_jogada' || sub === 'bloqueio' || sub === 'falha_defensiva' || sub === 'falha_ofensiva') {
-          const ref = playerRefFrom(interaction);
-          if (!ref.discordId && !ref.apelido) { await interaction.reply({ embeds: [errorEmbed('Faltou o jogador', 'Informe `jogador` ou `apelido`.')], ephemeral: true }); return; }
-
-          let assistRef: { discordId?: string; apelido?: string } | undefined;
-          let videoUrl: string | undefined;
-          if (sub === 'gol') {
-            const assistUser = interaction.options.getUser('assistencia_de');
-            const assistApelido = interaction.options.getString('assistencia_apelido');
-            if (assistUser || assistApelido) assistRef = { discordId: assistUser?.id, apelido: assistApelido ?? undefined };
-            videoUrl = interaction.options.getString('video') ?? undefined;
-          }
-
-          const { player, assistPlayer } = await recordEvent(partida!.id, ref, sub as FutEventType, assistRef, videoUrl);
-          const labelMap: Record<string, string> = {
-            gol: '⚽ Gol', defesa: '🧤 Defesa', concedido: '🥅 Gol concedido', erro: '⚠️ Erro grave (CAGADA MASTER)',
-            desarme: '🛡️ Desarme importante', boa_jogada: '✨ Boa jogada', bloqueio: '🧱 Bloqueio',
-            falha_defensiva: '🔸 Falha defensiva', falha_ofensiva: '🔹 Falha ofensiva',
-          };
-          let desc = `${labelMap[sub]} de **${player.displayName}**`;
-          if (assistPlayer) desc += ` (assistência de **${assistPlayer.displayName}**)`;
-          if (videoUrl) desc += `\n🎬 [Ver vídeo](${videoUrl})`;
-          if (sub === 'gol') desc += `\n🎬 Monte a animação desse gol no site (pós-partida), em Histórico.`;
-          await interaction.reply({ embeds: [successEmbed('Evento registrado', desc), buildPartidaEmbed(await getPartidaById(partida!.id), clan.name)] });
-          return;
-        }
-
-        if (sub === 'desfazer') {
-          const desfeito = await undoLastEvent(partida!.id, interaction.user.id);
-          const labelMap: Record<string, string> = {
-            gol: 'gol', assistencia: 'assistência', defesa: 'defesa', concedido: 'gol concedido', erro: 'erro grave',
-            desarme: 'desarme importante', boa_jogada: 'boa jogada', bloqueio: 'bloqueio',
-            falha_defensiva: 'falha defensiva', falha_ofensiva: 'falha ofensiva',
-          };
-          await interaction.reply({ embeds: [successEmbed('Evento desfeito', `Removi o último evento (**${labelMap[desfeito.type] || desfeito.type}** de **${desfeito.player.displayName}**).`), buildPartidaEmbed(await getPartidaById(partida!.id), clan.name)] });
-          return;
-        }
-
-        if (sub === 'placar') {
-          await interaction.reply({ embeds: [buildPartidaEmbed(partida, clan.name)] });
-          return;
-        }
-
-        if (sub === 'finalizar') {
-          const resultado = interaction.options.getString('resultado') as 'vitoria_a' | 'vitoria_b' | 'empate' | null;
-          const finished = await finishPartida(partida!.id, interaction.user.id, resultado ?? undefined);
-          const resultLabel = finished.resultado === 'empate' ? 'Empate' : finished.resultado === 'vitoria_a' ? 'Vitória do Time A' : 'Vitória do Time B';
-          await interaction.reply({ embeds: [successEmbed('Partida finalizada!', `**${resultLabel}** — placar final **${finished.scoreA} x ${finished.scoreB}**.\nEstatísticas de quem tem conta vinculada foram salvas no clã (modo ${finished.mode}).`), buildPartidaEmbed(finished, clan.name)] });
-          return;
-        }
-      }
-
-      // ── /fut perfil / ranking (sem grupo) ────────────────────────────
       if (sub === 'perfil') {
         const clan = await resolveClan(interaction);
         const modo = interaction.options.getString('modo', true) as FutMode;
@@ -660,6 +102,80 @@ export default {
             { name: 'Falhas Ofensivas', value: `${profile.falhasOfensivas}`, inline: true },
           );
         await interaction.reply({ embeds: [embed] });
+        return;
+      }
+
+      if (sub === 'ranque') {
+        const clan = await resolveClan(interaction);
+        const modo = interaction.options.getString('modo', true) as FutMode;
+        const target = interaction.options.getUser('usuario') ?? interaction.user;
+        const profile = await getProfile(clan.id, target.id, modo);
+
+        if (!profile || !profile.totalPartidas) {
+          await interaction.reply({ embeds: [errorEmbed('Sem ranque ainda', `${target.username} ainda não finalizou nenhuma partida de ${modo} nesse clã — o ranque só aparece depois da primeira partida.`)], ephemeral: true });
+          return;
+        }
+
+        const oficial = getRankTier(profile.notaMedia);
+        const skills = getPlayerSkillRanks(profile);
+        const embed = new EmbedBuilder()
+          .setColor(oficial.color as `#${string}`)
+          .setTitle(`${oficial.icon} Ranque de ${target.username} — ${clan.name} (${modo})`)
+          .setDescription(`**Ranque Oficial:** ${oficial.icon} **${oficial.name}** — nota média ${notaTag(profile.notaMedia)}`)
+          .addFields((skills ?? []).map((s) => ({ name: `${s.tier.icon} ${s.label}`, value: `${s.tier.name} _(${s.rate.toFixed(2)}/partida)_`, inline: true })))
+          .setFooter({ text: `${profile.totalPartidas} partida(s) jogada(s) nesse clã/modo` });
+        await interaction.reply({ embeds: [embed] });
+        return;
+      }
+
+      if (sub === 'gols') {
+        const clan = await resolveClan(interaction);
+        const partidaAtual = await getOpenPartida(clan.id) ?? (await listPartidaHistory(clan.id, 1))[0];
+        if (!partidaAtual) { await interaction.reply({ embeds: [errorEmbed('Nenhuma partida ainda', 'Esse clã ainda não tem nenhuma partida.')], ephemeral: true }); return; }
+        const videos = await listGoalVideos(partidaAtual.id);
+        if (!videos.length) { await interaction.reply({ embeds: [errorEmbed('Sem vídeos ainda', 'Nenhum gol com vídeo salvo nessa partida ainda. Registre o vídeo pela Activity (Atividades → Rachão) ao marcar o gol.')], ephemeral: true }); return; }
+        const embed = new EmbedBuilder().setColor(COLORS.GOLD).setTitle(`🎬 Gols com vídeo — ${partidaAtual.name || 'Partida'}`)
+          .setDescription(videos.map((v, i) => `**${i + 1}.** ${v.player?.displayName || 'Desconhecido'} — [assistir](${v.videoUrl})`).join('\n'));
+        await interaction.reply({ embeds: [embed] });
+        return;
+      }
+
+      if (sub === 'chamadas') {
+        const clan = await resolveClan(interaction);
+        const chamadas = await listChamadas(clan.id, 5);
+        if (!chamadas.length) { await interaction.reply({ embeds: [errorEmbed('Nenhuma chamada ainda', 'Use `/fut chamar` pra marcar um fut.')], ephemeral: true }); return; }
+
+        const embed = new EmbedBuilder().setColor(COLORS.PRIMARY).setTitle(`📣 Últimas chamadas — ${clan.name}`);
+        for (const c of chamadas) {
+          const vou = c.respostas.filter((r) => r.status === 'vou').length;
+          const talvez = c.respostas.filter((r) => r.status === 'talvez').length;
+          const naoVou = c.respostas.filter((r) => r.status === 'nao_vou').length;
+          const valorPorPessoa = calcValorPorPessoa(c.valorTotal, vou);
+          embed.addFields({
+            name: `${c.local} — ${c.horario}`,
+            value: `✅ ${vou} vão · 🤔 ${talvez} talvez · ❌ ${naoVou} não vão${valorPorPessoa ? `\n💰 R$ ${valorPorPessoa.toFixed(2)} por pessoa (de R$ ${c.valorTotal!.toFixed(2)})` : ''}`,
+          });
+        }
+        await interaction.reply({ embeds: [embed] });
+        return;
+      }
+
+      if (sub === 'confirmar') {
+        const clan = await resolveClan(interaction);
+        const status = interaction.options.getString('status', true) as FutRsvpStatus;
+        const chamadas = await listChamadas(clan.id, 1);
+        if (!chamadas.length) { await interaction.reply({ embeds: [errorEmbed('Nenhuma chamada ainda', 'Ninguém chamou o fut nesse clã ainda.')], ephemeral: true }); return; }
+
+        await respondChamada(chamadas[0].id, interaction.user.id, interaction.user.username, status);
+        const labelMap: Record<FutRsvpStatus, string> = { vou: '✅ Você confirmou presença!', talvez: '🤔 Você marcou como talvez.', nao_vou: '❌ Você marcou que não vai.' };
+        let desc = labelMap[status];
+        if (status === 'vou' && chamadas[0].valorTotal) {
+          const atualizada = await listChamadas(clan.id, 1);
+          const vou = atualizada[0].respostas.filter((r) => r.status === 'vou').length;
+          const valorPorPessoa = calcValorPorPessoa(atualizada[0].valorTotal, vou);
+          if (valorPorPessoa) desc += `\n💰 Com você, dá R$ ${valorPorPessoa.toFixed(2)} por pessoa.`;
+        }
+        await interaction.reply({ embeds: [successEmbed('Resposta registrada', desc)], ephemeral: true });
         return;
       }
 
@@ -716,186 +232,6 @@ export default {
         if (alvos.length) {
           await interaction.followUp({ content: `📬 DM enviada pra ${enviados} pessoa(s) do elenco${falharam ? ` (${falharam} não recebeu — DM fechada)` : ''}.`, ephemeral: true });
         }
-        return;
-      }
-
-      if (sub === 'chamadas') {
-        const clan = await resolveClan(interaction);
-        const chamadas = await listChamadas(clan.id, 5);
-        if (!chamadas.length) { await interaction.reply({ embeds: [errorEmbed('Nenhuma chamada ainda', 'Use `/fut chamar` pra marcar um fut.')], ephemeral: true }); return; }
-
-        const embed = new EmbedBuilder().setColor(COLORS.PRIMARY).setTitle(`📣 Últimas chamadas — ${clan.name}`);
-        for (const c of chamadas) {
-          const vou = c.respostas.filter((r) => r.status === 'vou').length;
-          const talvez = c.respostas.filter((r) => r.status === 'talvez').length;
-          const naoVou = c.respostas.filter((r) => r.status === 'nao_vou').length;
-          const valorPorPessoa = calcValorPorPessoa(c.valorTotal, vou);
-          embed.addFields({
-            name: `${c.local} — ${c.horario}`,
-            value: `✅ ${vou} vão · 🤔 ${talvez} talvez · ❌ ${naoVou} não vão${valorPorPessoa ? `\n💰 R$ ${valorPorPessoa.toFixed(2)} por pessoa (de R$ ${c.valorTotal!.toFixed(2)})` : ''}`,
-          });
-        }
-        await interaction.reply({ embeds: [embed] });
-        return;
-      }
-
-      if (sub === 'confirmar') {
-        const clan = await resolveClan(interaction);
-        const status = interaction.options.getString('status', true) as FutRsvpStatus;
-        const chamadas = await listChamadas(clan.id, 1);
-        if (!chamadas.length) { await interaction.reply({ embeds: [errorEmbed('Nenhuma chamada ainda', 'Ninguém chamou o fut nesse clã ainda.')], ephemeral: true }); return; }
-
-        await respondChamada(chamadas[0].id, interaction.user.id, interaction.user.username, status);
-        const labelMap: Record<FutRsvpStatus, string> = { vou: '✅ Você confirmou presença!', talvez: '🤔 Você marcou como talvez.', nao_vou: '❌ Você marcou que não vai.' };
-        let desc = labelMap[status];
-        if (status === 'vou' && chamadas[0].valorTotal) {
-          const atualizada = await listChamadas(clan.id, 1);
-          const vou = atualizada[0].respostas.filter((r) => r.status === 'vou').length;
-          const valorPorPessoa = calcValorPorPessoa(atualizada[0].valorTotal, vou);
-          if (valorPorPessoa) desc += `\n💰 Com você, dá R$ ${valorPorPessoa.toFixed(2)} por pessoa.`;
-        }
-        await interaction.reply({ embeds: [successEmbed('Resposta registrada', desc)], ephemeral: true });
-        return;
-      }
-
-      if (sub === 'simular') {
-        const clan = await resolveClan(interaction);
-        const modo = interaction.options.getString('modo', true) as FutMode;
-        const sim = await simulateClanMatch(clan.id, modo);
-
-        const resultLabel = sim.resultado === 'empate' ? 'Empate!' : sim.resultado === 'vitoria_a' ? 'Vitória do Time A!' : 'Vitória do Time B!';
-        const timesTxt = `**Time A** (força ${sim.forcaA.toFixed(1)}): ${sim.jogadoresA.map((p) => p.displayName).join(', ')}\n**Time B** (força ${sim.forcaB.toFixed(1)}): ${sim.jogadoresB.map((p) => p.displayName).join(', ')}`;
-
-        const gols = sim.timeline.filter((e) => e.tipo === 'gol');
-        const linhas = gols.length
-          ? gols.map((e) => `**${e.minuto}'** ⚽ ${e.jogador} (Time ${e.team})${e.assistencia ? ` — assist. ${e.assistencia}` : ''}`).join('\n')
-          : '_Nenhum gol na simulação — jogo truncado!_';
-
-        const embed = new EmbedBuilder()
-          .setColor(COLORS.GOLD)
-          .setTitle(`🎮 Simulação (brincadeira) — ${clan.name}`)
-          .setDescription(`${timesTxt}\n\n${resultLabel}`)
-          .addFields({ name: `Placar: ${sim.scoreA} x ${sim.scoreB}`, value: linhas.slice(0, 1000) || '_sem lances_' })
-          .setFooter({ text: 'Isso é só pra rir com a galera — não conta pra estatística de ninguém. Veja o jogo completo minuto a minuto no site!' });
-
-        await interaction.reply({ embeds: [embed] });
-        return;
-      }
-
-      if (sub === 'posicao') {
-        const modo = interaction.options.getString('modo', true) as FutMode;
-        const posicao = interaction.options.getString('posicao', true);
-        await setUserPosition(interaction.user.id, modo, posicao);
-        await interaction.reply({ embeds: [successEmbed('Posição salva!', `Sua posição preferida de **${modo}** agora é **${posicao}**. Ela é usada como padrão sempre que você entra numa partida (mas dá pra sobrescrever na hora, se quiser).`)], ephemeral: true });
-        return;
-      }
-
-      if (sub === 'ranking') {
-        const clan = await resolveClan(interaction);
-        const modo = interaction.options.getString('modo', true) as FutMode;
-        const ranking = await getRanking(clan.id, modo, 10);
-        if (!ranking.length) { await interaction.reply({ embeds: [errorEmbed('Ranking vazio', `Ninguém finalizou uma partida de ${modo} nesse clã ainda.`)], ephemeral: true }); return; }
-        const lines = await Promise.all(ranking.map(async (p, i) => {
-          let nome: string = p.displayName || p.discordId;
-          if (!p.discordId.startsWith('offline:')) {
-            const user = await interaction.client.users.fetch(p.discordId).catch(() => null);
-            nome = user ? user.username : (p.displayName || p.discordId);
-          }
-          return `**${i + 1}.** ${nome} — ${p.xp} XP — ${notaTag(p.notaMedia)} (${p.vitorias}V/${p.derrotas}D/${p.empates}E, ⚽${p.goals})`;
-        }));
-        const embed = new EmbedBuilder().setColor(COLORS.GOLD).setTitle(`🏆 Ranking — ${clan.name} (${modo})`).setDescription(lines.join('\n'));
-        await interaction.reply({ embeds: [embed] });
-        return;
-      }
-
-      if (sub === 'ranque') {
-        const clan = await resolveClan(interaction);
-        const modo = interaction.options.getString('modo', true) as FutMode;
-        const target = interaction.options.getUser('usuario') ?? interaction.user;
-        const profile = await getProfile(clan.id, target.id, modo);
-
-        if (!profile || !profile.totalPartidas) {
-          await interaction.reply({ embeds: [errorEmbed('Sem ranque ainda', `${target.username} ainda não finalizou nenhuma partida de ${modo} nesse clã — o ranque só aparece depois da primeira partida.`)], ephemeral: true });
-          return;
-        }
-
-        const oficial = getRankTier(profile.notaMedia);
-        const skills = getPlayerSkillRanks(profile);
-        const embed = new EmbedBuilder()
-          .setColor(oficial.color as `#${string}`)
-          .setTitle(`${oficial.icon} Ranque de ${target.username} — ${clan.name} (${modo})`)
-          .setDescription(`**Ranque Oficial:** ${oficial.icon} **${oficial.name}** — nota média ${notaTag(profile.notaMedia)}`)
-          .addFields((skills ?? []).map((s) => ({ name: `${s.tier.icon} ${s.label}`, value: `${s.tier.name} _(${s.rate.toFixed(2)}/partida)_`, inline: true })))
-          .setFooter({ text: `${profile.totalPartidas} partida(s) jogada(s) nesse clã/modo` });
-        await interaction.reply({ embeds: [embed] });
-        return;
-      }
-
-      if (sub === 'leaderboard') {
-        const escopo = interaction.options.getString('escopo', true) as 'servidor' | 'global';
-        const tipo = interaction.options.getString('tipo', true) as 'jogadores' | 'clas';
-        const modo = interaction.options.getString('modo', true) as FutMode;
-
-        if (escopo === 'servidor') {
-          const cfg = await getLeaderboardConfig(guildId);
-          if (!cfg.featFutLeaderboard) {
-            await interaction.reply({ embeds: [errorEmbed('Leaderboard desativado', 'O dono deste servidor ainda não autorizou o leaderboard aqui. Peça pra ele usar `/fut leaderboard_config acao:servidor_ligar`.')], ephemeral: true });
-            return;
-          }
-        }
-
-        if (tipo === 'jogadores') {
-          const entries = escopo === 'servidor' ? await getServerLeaderboard(guildId, modo, 15) : await getGlobalLeaderboard(modo, 20);
-          if (!entries.length) {
-            const msg = escopo === 'servidor' ? `Ninguém tem estatísticas de ${modo} ainda neste servidor.` : `Nenhum servidor foi liberado pelo dono do bot pro leaderboard global ainda (ou ninguém jogou ${modo} lá).`;
-            await interaction.reply({ embeds: [errorEmbed('Leaderboard vazio', msg)], ephemeral: true });
-            return;
-          }
-          const lines = await Promise.all(entries.map(async (p, i) => {
-            const user = await interaction.client.users.fetch(p.discordId).catch(() => null);
-            const nome = user ? user.username : (p.displayName || p.discordId);
-            return `**${i + 1}.** ${p.tier.icon} ${nome} — ${notaTag(p.notaMedia)} _(${p.tier.name})_`;
-          }));
-          const embed = new EmbedBuilder().setColor(COLORS.GOLD).setTitle(`🏆 Leaderboard ${escopo === 'servidor' ? 'do servidor' : 'GLOBAL'} — jogadores (${modo})`).setDescription(lines.join('\n'));
-          await interaction.reply({ embeds: [embed] });
-          return;
-        }
-
-        const clanEntries = escopo === 'servidor' ? await getServerClanLeaderboard(guildId, modo, 15) : await getGlobalClanLeaderboard(modo, 20);
-        if (!clanEntries.length) {
-          const msg = escopo === 'servidor' ? `Nenhum clã tem estatísticas de ${modo} ainda neste servidor.` : `Nenhum servidor foi liberado pelo dono do bot pro leaderboard global ainda (ou nenhum clã de lá jogou ${modo}).`;
-          await interaction.reply({ embeds: [errorEmbed('Leaderboard vazio', msg)], ephemeral: true });
-          return;
-        }
-        const lines = clanEntries.map((c, i) => `**${i + 1}.** ${c.tier.icon} ${c.clanName} — ${notaTag(c.notaMedia)} _(${c.tier.name})_`);
-        const embed = new EmbedBuilder().setColor(COLORS.GOLD).setTitle(`🏆 Leaderboard ${escopo === 'servidor' ? 'do servidor' : 'GLOBAL'} — clãs (${modo})`).setDescription(lines.join('\n'));
-        await interaction.reply({ embeds: [embed] });
-        return;
-      }
-
-      if (sub === 'leaderboard_config') {
-        const acao = interaction.options.getString('acao', true) as 'servidor_ligar' | 'servidor_desligar' | 'global_ligar' | 'global_desligar';
-        const souDonoBot = isOwner(interaction.user.id);
-
-        if (acao === 'global_ligar' || acao === 'global_desligar') {
-          if (!souDonoBot) {
-            await interaction.reply({ embeds: [errorEmbed('Sem permissão', 'Só o dono do bot pode incluir/remover um servidor do leaderboard GLOBAL.')], ephemeral: true });
-            return;
-          }
-          await setGlobalLeaderboardEnabled(guildId, acao === 'global_ligar');
-          await interaction.reply({ embeds: [successEmbed('Leaderboard global', acao === 'global_ligar' ? '✅ Este servidor agora entra no leaderboard GLOBAL.' : '❌ Este servidor foi removido do leaderboard global.')], ephemeral: true });
-          return;
-        }
-
-        // servidor_ligar / servidor_desligar — autoservice do DONO DE VERDADE
-        // do servidor (guild.ownerId), não de qualquer admin/cargo de aliança.
-        const souDonoServidor = interaction.guild?.ownerId === interaction.user.id;
-        if (!souDonoServidor && !souDonoBot) {
-          await interaction.reply({ embeds: [errorEmbed('Sem permissão', 'Só o dono de verdade deste servidor (ou o dono do bot) pode ligar/desligar o leaderboard daqui.')], ephemeral: true });
-          return;
-        }
-        await setServerLeaderboardEnabled(guildId, acao === 'servidor_ligar');
-        await interaction.reply({ embeds: [successEmbed('Leaderboard do servidor', acao === 'servidor_ligar' ? '✅ Leaderboard deste servidor ativado! Use `/fut leaderboard escopo:servidor`.' : '❌ Leaderboard deste servidor desativado.')], ephemeral: true });
         return;
       }
     } catch (err) {

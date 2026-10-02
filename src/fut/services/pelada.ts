@@ -105,7 +105,7 @@ export async function createClan(guildId: string, creatorId: string, creatorName
 
   const totalClans = await prisma.futClan.count({ where: { guildId } });
   if (totalClans >= MAX_CLANS_PER_GUILD) {
-    throw new FutError(`Esse servidor já tem o máximo de ${MAX_CLANS_PER_GUILD} clãs. Delete um clã existente (\`/fut cla deletar\`) pra liberar um espaço.`);
+    throw new FutError(`Esse servidor já tem o máximo de ${MAX_CLANS_PER_GUILD} clãs. Delete um clã existente pela Activity (Atividades → Rachão) pra liberar um espaço.`);
   }
 
   const joinCode = visibility === 'privado' ? await uniqueJoinCode() : null;

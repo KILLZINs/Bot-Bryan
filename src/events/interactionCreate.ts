@@ -50,6 +50,19 @@ export default {
         return;
       }
 
+      // ── Autocomplete (ex: sugerir os clãs da pessoa no /fut) ───────────────────
+      if (interaction.isAutocomplete()) {
+        const command = client.commands.get(interaction.commandName);
+        if (!command?.autocomplete) return;
+        try {
+          await command.autocomplete(interaction);
+        } catch (err) {
+          console.error(`Erro no autocomplete de ${interaction.commandName}:`, err);
+          await interaction.respond([]).catch(() => null);
+        }
+        return;
+      }
+
       // ── Slash commands ───────────────────────────────────────────────────────
       if (interaction.isChatInputCommand()) {
         const command = client.commands.get(interaction.commandName);

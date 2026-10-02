@@ -1,4 +1,4 @@
-import { Client, Collection, ChatInputCommandInteraction, Message, SlashCommandBuilder, SlashCommandOptionsOnlyBuilder, SlashCommandSubcommandsOnlyBuilder } from 'discord.js';
+import { Client, Collection, ChatInputCommandInteraction, AutocompleteInteraction, Message, SlashCommandBuilder, SlashCommandOptionsOnlyBuilder, SlashCommandSubcommandsOnlyBuilder } from 'discord.js';
 
     // ─── Prefix command interface ─────────────────────────────────────────────────
     export interface PrefixCommand {
@@ -12,6 +12,9 @@ import { Client, Collection, ChatInputCommandInteraction, Message, SlashCommandB
     data: SlashCommandBuilder | SlashCommandOptionsOnlyBuilder | SlashCommandSubcommandsOnlyBuilder;
     category?: string;
     execute: (interaction: ChatInputCommandInteraction) => Promise<unknown>;
+    // Opcional — só os comandos que têm opção com .setAutocomplete(true) (ex:
+    // /fut, pra sugerir os clãs da pessoa) implementam isso.
+    autocomplete?: (interaction: AutocompleteInteraction) => Promise<unknown>;
     }
 
     export interface ExtendedClient extends Client {
@@ -39,4 +42,3 @@ import { Client, Collection, ChatInputCommandInteraction, Message, SlashCommandB
     ] as const;
 
     export type Rank = (typeof RANKS)[number];
-    

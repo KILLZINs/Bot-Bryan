@@ -2541,7 +2541,7 @@ ${activitySdkBootstrap(clientId!)}
 
   // Leaderboard em si — servidor ou global, jogadores ou clãs. Se o
   // leaderboard do servidor ainda não foi autorizado (escopo=servidor), a
-  // lista some (e não erro) pra combinar com o comando /fut leaderboard.
+  // lista some (e não erro) em vez de dar erro.
   app.get('/api/activities/fut/clans/:id/leaderboard', requirePlayerAuth, async (req, res) => {
     try {
       const mode: FutMode = req.query.mode === 'campo' ? 'campo' : 'futsal';

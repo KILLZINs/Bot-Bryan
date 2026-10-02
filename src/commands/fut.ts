@@ -8,11 +8,11 @@
 // vai ter fut, responder presença, ver os gols com vídeo e conferir
 // stats/ranque sem precisar abrir o navegador.
 
-import { SlashCommandBuilder, ChatInputCommandInteraction, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
+import { SlashCommandBuilder, ChatInputCommandInteraction, AutocompleteInteraction, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
 import { Command } from '../types';
 import { errorEmbed, successEmbed, COLORS } from '../utils/embeds';
 import {
-  FutError, getClanByName,
+  FutError, getClanByName, listClans,
   getOpenPartida, listPartidaHistory,
   getProfile, getUserProfile, listGoalVideos, notaBand,
   createChamada, listChamadas, respondChamada, calcValorPorPessoa,
@@ -39,7 +39,7 @@ export default {
     .setName('fut')
     .setDescription('⚽ Rachão — chame o fut, confirme presença e veja suas stats (o resto é na Activity do site)')
     .addSubcommand((sub) => sub.setName('chamar').setDescription('Chama o fut! Anuncia local, horário, PIX e link pro clã')
-      .addStringOption((o) => o.setName('cla').setDescription('Nome do clã').setRequired(true))
+      .addStringOption((o) => o.setName('cla').setDescription('Nome do clã').setRequired(true).setAutocomplete(true))
       .addStringOption((o) => o.setName('local').setDescription('Onde vai ser').setRequired(true))
       .addStringOption((o) => o.setName('horario').setDescription('Quando (ex: "Hoje 20h", "Sáb 09/08 16h")').setRequired(true))
       .addStringOption((o) => o.setName('pix').setDescription('Chave PIX pra dividir a quadra (opcional)'))
@@ -47,23 +47,23 @@ export default {
       .addStringOption((o) => o.setName('link').setDescription('Link do grupo/WhatsApp/outra plataforma (opcional)'))
       .addStringOption((o) => o.setName('mensagem').setDescription('Mensagem extra (opcional)')))
     .addSubcommand((sub) => sub.setName('chamadas').setDescription('Mostra as últimas chamadas do clã e quem confirmou')
-      .addStringOption((o) => o.setName('cla').setDescription('Nome do clã').setRequired(true)))
+      .addStringOption((o) => o.setName('cla').setDescription('Nome do clã').setRequired(true).setAutocomplete(true)))
     .addSubcommand((sub) => sub.setName('confirmar').setDescription('Confirma presença na última chamada do clã')
-      .addStringOption((o) => o.setName('cla').setDescription('Nome do clã').setRequired(true))
+      .addStringOption((o) => o.setName('cla').setDescription('Nome do clã').setRequired(true).setAutocomplete(true))
       .addStringOption((o) => o.setName('status').setDescription('Sua resposta').setRequired(true)
         .addChoices({ name: '✅ Vou', value: 'vou' }, { name: '🤔 Talvez', value: 'talvez' }, { name: '❌ Não vou', value: 'nao_vou' })))
     .addSubcommand((sub) => sub.setName('perfil').setDescription('Mostra suas estatísticas num clã')
-      .addStringOption((o) => o.setName('cla').setDescription('Nome do clã').setRequired(true))
+      .addStringOption((o) => o.setName('cla').setDescription('Nome do clã').setRequired(true).setAutocomplete(true))
       .addStringOption((o) => o.setName('modo').setDescription('Futsal ou campo').setRequired(true)
         .addChoices({ name: 'Futsal', value: 'futsal' }, { name: 'Campo', value: 'campo' }))
       .addUserOption((o) => o.setName('usuario').setDescription('Ver o perfil de outra pessoa (opcional)')))
     .addSubcommand((sub) => sub.setName('ranque').setDescription('Mostra o ranque (tier estilo FIFA) oficial e por habilidade de alguém')
-      .addStringOption((o) => o.setName('cla').setDescription('Nome do clã').setRequired(true))
+      .addStringOption((o) => o.setName('cla').setDescription('Nome do clã').setRequired(true).setAutocomplete(true))
       .addStringOption((o) => o.setName('modo').setDescription('Futsal ou campo').setRequired(true)
         .addChoices({ name: 'Futsal', value: 'futsal' }, { name: 'Campo', value: 'campo' }))
       .addUserOption((o) => o.setName('usuario').setDescription('Ver o ranque de outra pessoa (opcional)')))
     .addSubcommand((sub) => sub.setName('gols').setDescription('Lista/compartilha os gols com vídeo da partida mais recente do clã')
-      .addStringOption((o) => o.setName('cla').setDescription('Nome do clã').setRequired(true))),
+      .addStringOption((o) => o.setName('cla').setDescription('Nome do clã').setRequired(true).setAutocomplete(true))),
 
   async execute(interaction: ChatInputCommandInteraction) {
     const sub = interaction.options.getSubcommand();
@@ -241,6 +241,25 @@ export default {
       }
       console.error('[Rachão] Erro inesperado:', err);
       await interaction.reply({ embeds: [errorEmbed('Erro', 'Alguma coisa deu errado. Tenta de novo.')], ephemeral: true });
+    }
+  },
+
+  // Sugere os clãs que a pessoa já faz parte neste servidor, conforme ela
+  // digita no campo `cla` — assim não precisa decorar/digitar o nome certinho.
+  // Clã público aparece pra todo mundo do servidor; privado só pra quem já é
+  // membro (mesma regra de visibilidade de `listClans`).
+  async autocomplete(interaction: AutocompleteInteraction) {
+    const focused = interaction.options.getFocused(true);
+    if (focused.name !== 'cla' || !interaction.guildId) { await interaction.respond([]); return; }
+
+    try {
+      const clans = await listClans(interaction.guildId, interaction.user.id);
+      const meusClans = clans.filter((c) => c.members.some((m) => m.discordId === interaction.user.id));
+      const termo = String(focused.value).trim().toLowerCase();
+      const filtrados = (termo ? meusClans.filter((c) => c.name.toLowerCase().includes(termo)) : meusClans).slice(0, 25);
+      await interaction.respond(filtrados.map((c) => ({ name: `${c.name} (${c.members.length} membro${c.members.length === 1 ? '' : 's'})`, value: c.name })));
+    } catch {
+      await interaction.respond([]).catch(() => null);
     }
   },
 } as Command;

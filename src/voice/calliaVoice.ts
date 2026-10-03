@@ -98,7 +98,10 @@ async function transcribe(wav: Buffer): Promise<string> {
 }
 
 // 🤖 MOTOR DE VOZ TRIPLO (TikTok -> StreamElements -> Google)
-async function synthesize(text: string, persona: CalliaPersona, guildId: string): Promise<Buffer> {
+// Exportada (além de usada internamente pela sessão de voz em call) pra dar
+// pra tocar a MESMA voz da Callia fora de uma call — ex: o botão de áudio no
+// chat de texto do site (src/dashboard/server.ts, /api/activities/chat/tts).
+export async function synthesize(text: string, persona: CalliaPersona, guildId: string): Promise<Buffer> {
   let isMale = false;
   
   if (persona === 'bryan') {

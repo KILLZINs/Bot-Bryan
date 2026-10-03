@@ -6,6 +6,7 @@ import type { Client } from 'discord.js';
 import { useMainPlayer, useQueue, QueryType } from 'discord-player';
 import { prisma } from '../database/client';
 import { askBryan } from '../ai/bryan';
+import { synthesize as synthesizeCalliaVoice } from '../voice/calliaVoice';
 import { getCharacter, computeStats, distributeStatPoints, type FullCharacter } from '../rpg/services/character';
 import { getEnemiesForLocation, getEnemy, getBossesForLocation } from '../rpg/constants/enemies';
 import { getLocation, LOCATION_LIST } from '../rpg/constants/locations';
@@ -101,6 +102,8 @@ const ICONS: Record<string, string> = {
   bolt: '<polygon points="13,2 4,14 11,14 10,22 20,9 13,9"/>',
   lock: '<rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/>',
   disc: '<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="2.5" fill="currentColor" stroke="none"/>',
+  speaker: '<polygon points="4,9 8,9 13,4 13,20 8,15 4,15" fill="currentColor" stroke="none"/><path d="M16.5 8.5a5 5 0 0 1 0 7"/><path d="M19 6a8.5 8.5 0 0 1 0 12"/>',
+  spinner: '<path d="M12 3a9 9 0 1 0 9 9"/>',
 };
 function icon(name: keyof typeof ICONS, size = 18, style = ''): string {
   const body = ICONS[name] || '';
@@ -879,8 +882,15 @@ export function startDashboard(discordClient: Client) {
   #messages { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 14px; padding: 10px 4px 20px; }
   .msg { max-width: 78%; padding: 12px 16px; border-radius: 14px; line-height: 1.5; font-size: 0.95rem; white-space: pre-wrap; }
   .msg.user { align-self: flex-end; background: var(--bubble-user); color: white; border-bottom-right-radius: 4px; }
-  .msg.bot { align-self: flex-start; background: var(--bubble-bot); border: 1px solid var(--border); border-bottom-left-radius: 4px; }
+  .msg.bot { align-self: flex-start; background: var(--bubble-bot); border: 1px solid var(--border); border-bottom-left-radius: 4px; display: flex; gap: 10px; align-items: flex-start; }
   .msg.typing { color: var(--text-muted); font-style: italic; }
+  .msg-text { flex: 1; }
+  .tts-btn { flex-shrink: 0; background: transparent; border: 1px solid var(--border); color: var(--text-muted); width: 28px; height: 28px; border-radius: 50%; cursor: pointer; display: flex; align-items: center; justify-content: center; padding: 0; transition: .15s; }
+  .tts-btn:hover:not(:disabled) { border-color: var(--text-muted); color: white; }
+  .tts-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+  .tts-btn.playing { border-color: var(--primary); color: white; }
+  .tts-btn svg.spin { animation: tts-spin 0.8s linear infinite; }
+  @keyframes tts-spin { to { transform: rotate(360deg); } }
   #input-bar { display: flex; gap: 10px; padding-top: 10px; border-top: 1px solid var(--border); }
   #input-bar input { flex: 1; background: var(--card); border: 1px solid var(--border); color: white; padding: 14px 16px; border-radius: 10px; outline: none; font-size: 0.95rem; }
   #input-bar input:focus { border-color: var(--text-muted); }
@@ -895,28 +905,93 @@ export function startDashboard(discordClient: Client) {
     <a href="/atividades">← Atividades</a>
   </nav>
   <div id="chat-wrap">
-    <div id="messages">
-      <div class="msg bot">E aí! Eu sou o Bryan 👋 Pode perguntar qualquer coisa sobre o servidor, o RPG, ou só bater um papo.</div>
-    </div>
+    <div id="messages"></div>
     <div id="input-bar">
       <input id="userInput" type="text" placeholder="Digite sua mensagem..." autocomplete="off">
       <button id="sendBtn">Enviar</button>
     </div>
   </div>
   <script>
+    const ICON_SPEAKER = '${icon('speaker', 14)}';
+    const ICON_SPINNER = '${icon('spinner', 14)}'.replace('<svg ', '<svg class="spin" ');
+
     const messagesEl = document.getElementById('messages');
     const input = document.getElementById('userInput');
     const btn = document.getElementById('sendBtn');
     let history = [];
+    let currentAudio = null;
+    let currentPlayingBtn = null;
+
+    // Toca o áudio (voz da Callia) de uma resposta do Bryan sob demanda —
+    // um clique gera e toca, clicar de novo no mesmo botão pausa. Só existe
+    // um áudio tocando por vez: começar outro para o anterior.
+    async function playTts(text, btnEl) {
+      if (currentAudio && currentPlayingBtn === btnEl) {
+        currentAudio.pause();
+        currentAudio = null;
+        currentPlayingBtn = null;
+        btnEl.classList.remove('playing');
+        btnEl.innerHTML = ICON_SPEAKER;
+        return;
+      }
+      if (currentAudio) { currentAudio.pause(); currentPlayingBtn?.classList.remove('playing'); if (currentPlayingBtn) currentPlayingBtn.innerHTML = ICON_SPEAKER; }
+
+      btnEl.disabled = true;
+      btnEl.innerHTML = ICON_SPINNER;
+      try {
+        const res = await fetch('/api/activities/chat/tts', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text }),
+        });
+        if (!res.ok) throw new Error('tts falhou');
+        const blob = await res.blob();
+        const url = URL.createObjectURL(blob);
+        const audio = new Audio(url);
+        currentAudio = audio;
+        currentPlayingBtn = btnEl;
+        btnEl.disabled = false;
+        btnEl.classList.add('playing');
+        btnEl.innerHTML = ICON_SPEAKER;
+        audio.addEventListener('ended', () => {
+          btnEl.classList.remove('playing');
+          if (currentAudio === audio) { currentAudio = null; currentPlayingBtn = null; }
+          URL.revokeObjectURL(url);
+        });
+        await audio.play();
+      } catch (e) {
+        btnEl.disabled = false;
+        btnEl.innerHTML = ICON_SPEAKER;
+        btnEl.title = 'Não consegui gerar o áudio — tenta de novo';
+      }
+    }
 
     function addMsg(text, cls) {
       const div = document.createElement('div');
       div.className = 'msg ' + cls;
-      div.innerText = text;
+
+      if (cls.indexOf('bot') !== -1 && cls.indexOf('typing') === -1) {
+        const textEl = document.createElement('div');
+        textEl.className = 'msg-text';
+        textEl.innerText = text;
+        const speakBtn = document.createElement('button');
+        speakBtn.className = 'tts-btn';
+        speakBtn.type = 'button';
+        speakBtn.title = 'Ouvir com a voz da Callia';
+        speakBtn.innerHTML = ICON_SPEAKER;
+        speakBtn.addEventListener('click', () => playTts(text, speakBtn));
+        div.appendChild(textEl);
+        div.appendChild(speakBtn);
+      } else {
+        div.innerText = text;
+      }
+
       messagesEl.appendChild(div);
       messagesEl.scrollTop = messagesEl.scrollHeight;
       return div;
     }
+
+    addMsg('E aí! Eu sou o Bryan 👋 Pode perguntar qualquer coisa sobre o servidor, o RPG, ou só bater um papo.', 'bot');
 
     async function send() {
       const text = input.value.trim();
@@ -968,6 +1043,28 @@ export function startDashboard(discordClient: Client) {
     }
 
     res.json({ reply });
+  });
+
+  // 🔊 Áudio do chat de texto — usa o MESMO motor de voz da Callia
+  // (src/voice/calliaVoice.ts: TikTok TTS -> StreamElements -> Google,
+  // nessa ordem de tentativa) pra narrar a resposta do Bryan, sem precisar
+  // estar numa call de voz. O front chama isso sob demanda (botão 🔊 em
+  // cada balão do bot), não automático a cada mensagem, pra não gastar as
+  // APIs gratuitas à toa nem forçar áudio em quem só quer ler.
+  app.post('/api/activities/chat/tts', async (req, res) => {
+    const { text } = req.body || {};
+    if (!text || typeof text !== 'string' || !text.trim()) return res.status(400).json({ error: 'Texto inválido' });
+
+    try {
+      const audio = await synthesizeCalliaVoice(text.slice(0, 600), 'bryan', '');
+      if (!audio.length) return res.status(502).json({ error: 'Não consegui gerar o áudio agora. Tenta de novo.' });
+      res.set('Content-Type', 'audio/mpeg');
+      res.set('Cache-Control', 'no-store');
+      res.send(audio);
+    } catch (err) {
+      console.error('[Chat TTS] Falha ao sintetizar áudio:', err);
+      res.status(502).json({ error: 'Não consegui gerar o áudio agora. Tenta de novo.' });
+    }
   });
 
   // =====================================================================

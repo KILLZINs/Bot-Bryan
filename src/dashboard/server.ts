@@ -6,7 +6,7 @@ import type { Client } from 'discord.js';
 import { useMainPlayer, useQueue, QueryType } from 'discord-player';
 import { prisma } from '../database/client';
 import { askBryan } from '../ai/bryan';
-import { synthesize as synthesizeCalliaVoice } from '../voice/calliaVoice';
+import { synthesize as synthesizeCalliaVoice, transcribeAudio as transcribeCalliaVoice } from '../voice/calliaVoice';
 import { getCharacter, computeStats, distributeStatPoints, type FullCharacter } from '../rpg/services/character';
 import { getEnemiesForLocation, getEnemy, getBossesForLocation } from '../rpg/constants/enemies';
 import { getLocation, LOCATION_LIST } from '../rpg/constants/locations';
@@ -897,6 +897,10 @@ export function startDashboard(discordClient: Client) {
   #input-bar button { background: white; color: var(--bg); border: none; padding: 0 22px; border-radius: 10px; font-weight: 700; cursor: pointer; transition: .2s; }
   #input-bar button:hover { background: #D8D9DE; }
   #input-bar button:disabled { opacity: 0.5; cursor: not-allowed; }
+  #micBtn { background: var(--card); border: 1px solid var(--border); color: var(--text); width: 48px; padding: 0; flex-shrink: 0; display: flex; align-items: center; justify-content: center; }
+  #micBtn:hover:not(:disabled) { border-color: var(--text-muted); background: var(--card); }
+  #micBtn.recording { background: #E74C3C; border-color: #E74C3C; color: white; animation: mic-pulse 1.1s ease-in-out infinite; }
+  @keyframes mic-pulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(231,76,60,0.5); } 50% { box-shadow: 0 0 0 8px rgba(231,76,60,0); } }
 </style>
 </head>
 <body>
@@ -908,6 +912,7 @@ export function startDashboard(discordClient: Client) {
     <div id="messages"></div>
     <div id="input-bar">
       <input id="userInput" type="text" placeholder="Digite sua mensagem..." autocomplete="off">
+      <button id="micBtn" type="button" title="Falar com o Bryan por voz">${icon('mic', 18)}</button>
       <button id="sendBtn">Enviar</button>
     </div>
   </div>
@@ -993,7 +998,7 @@ export function startDashboard(discordClient: Client) {
 
     addMsg('E aí! Eu sou o Bryan 👋 Pode perguntar qualquer coisa sobre o servidor, o RPG, ou só bater um papo.', 'bot');
 
-    async function send() {
+    async function send(viaVoice) {
       const text = input.value.trim();
       if (!text) return;
       input.value = '';
@@ -1010,8 +1015,14 @@ export function startDashboard(discordClient: Client) {
         });
         const data = await res.json();
         typingEl.remove();
-        addMsg(data.reply, 'bot');
+        const botDiv = addMsg(data.reply, 'bot');
         history.push({ role: 'assistant', content: data.reply });
+        // Chamou por voz? Toca a resposta sozinho, sem precisar clicar no
+        // alto-falante — é o loop completo tipo Callia (fala -> ouve -> fala).
+        if (viaVoice) {
+          const speakBtn = botDiv.querySelector('.tts-btn');
+          if (speakBtn) playTts(data.reply, speakBtn);
+        }
       } catch (e) {
         typingEl.remove();
         addMsg('❌ Erro de conexão. Tenta de novo.', 'bot');
@@ -1020,8 +1031,75 @@ export function startDashboard(discordClient: Client) {
       input.focus();
     }
 
-    btn.addEventListener('click', send);
-    input.addEventListener('keydown', (e) => { if (e.key === 'Enter') send(); });
+    btn.addEventListener('click', () => send(false));
+    input.addEventListener('keydown', (e) => { if (e.key === 'Enter') send(false); });
+
+    // ── Microfone — grava no navegador (MediaRecorder), manda pro mesmo STT
+    // da Callia (ElevenLabs), e o texto transcrito dispara o envio sozinho.
+    const micBtn = document.getElementById('micBtn');
+    let mediaRecorder = null;
+    let audioChunks = [];
+    let recording = false;
+
+    async function startRecording() {
+      if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === 'undefined') {
+        addMsg('Seu navegador não suporta gravação de áudio.', 'bot');
+        return;
+      }
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        audioChunks = [];
+        mediaRecorder = new MediaRecorder(stream);
+        mediaRecorder.addEventListener('dataavailable', (e) => { if (e.data.size > 0) audioChunks.push(e.data); });
+        mediaRecorder.addEventListener('stop', () => {
+          stream.getTracks().forEach((t) => t.stop());
+          const blob = new Blob(audioChunks, { type: mediaRecorder.mimeType || 'audio/webm' });
+          void sendVoice(blob);
+        });
+        mediaRecorder.start();
+        recording = true;
+        micBtn.classList.add('recording');
+        micBtn.title = 'Clique pra parar de gravar';
+      } catch (e) {
+        addMsg('Não consegui acessar o microfone — verifica a permissão do navegador.', 'bot');
+      }
+    }
+
+    function stopRecording() {
+      if (!recording || !mediaRecorder) return;
+      recording = false;
+      micBtn.classList.remove('recording');
+      micBtn.title = 'Falar com o Bryan por voz';
+      mediaRecorder.stop();
+    }
+
+    async function sendVoice(blob) {
+      micBtn.disabled = true;
+      const typingEl = addMsg('Transcrevendo sua fala...', 'bot typing');
+      try {
+        const res = await fetch('/api/activities/chat/stt', {
+          method: 'POST',
+          headers: { 'Content-Type': blob.type || 'audio/webm' },
+          body: blob,
+        });
+        const data = await res.json();
+        typingEl.remove();
+        if (!res.ok) {
+          addMsg(data.error || 'Não consegui entender o áudio.', 'bot');
+          micBtn.disabled = false;
+          return;
+        }
+        input.value = data.text;
+        micBtn.disabled = false;
+        await send(true);
+      } catch (e) {
+        typingEl.remove();
+        addMsg('❌ Erro ao transcrever o áudio.', 'bot');
+        micBtn.disabled = false;
+      }
+    }
+
+    micBtn.addEventListener('click', () => { recording ? stopRecording() : startRecording(); });
   </script>
 </body>
 </html>`);
@@ -1064,6 +1142,30 @@ export function startDashboard(discordClient: Client) {
     } catch (err) {
       console.error('[Chat TTS] Falha ao sintetizar áudio:', err);
       res.status(502).json({ error: 'Não consegui gerar o áudio agora. Tenta de novo.' });
+    }
+  });
+
+  // 🎤 Transcreve um áudio gravado no navegador (MediaRecorder — normalmente
+  // webm/ogg com Opus) usando a MESMA transcrição por voz da Callia
+  // (ElevenLabs). Corpo da requisição é o áudio cru (não JSON), por isso o
+  // express.raw() só nessa rota — o parser de JSON global não mexe nisso
+  // (ele só processa quando o Content-Type é application/json).
+  app.post('/api/activities/chat/stt', express.raw({ type: '*/*', limit: '8mb' }), async (req, res) => {
+    const audio = req.body as Buffer;
+    if (!audio || !Buffer.isBuffer(audio) || audio.length < 500) {
+      return res.status(400).json({ error: 'Áudio inválido ou vazio.' });
+    }
+
+    const mimeType = (req.headers['content-type'] || 'audio/webm').split(';')[0].trim();
+    const ext = mimeType.split('/')[1] || 'webm';
+
+    try {
+      const text = await transcribeCalliaVoice(audio, mimeType, `speech.${ext}`);
+      if (!text) return res.status(422).json({ error: 'Não consegui entender o áudio. Tenta falar de novo, mais de perto do microfone.' });
+      res.json({ text });
+    } catch (err) {
+      console.error('[Chat STT] Falha ao transcrever áudio:', err);
+      res.status(502).json({ error: 'Não consegui transcrever o áudio agora. Tenta de novo.' });
     }
   });
 

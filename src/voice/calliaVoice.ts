@@ -74,11 +74,16 @@ function pcmToWav(pcm: Buffer, sampleRate = 48_000, channels = 2): Buffer {
 }
 
 // 🎤 O BOT OUVE PELA ELEVENLABS
-async function transcribe(wav: Buffer): Promise<string> {
+// Generalizada (além de usada pela escuta em call, que sempre manda WAV) pra
+// também transcrever áudio gravado direto no navegador — o site grava com a
+// MediaRecorder API, que normalmente produz webm/ogg, não WAV. A API da
+// ElevenLabs aceita o formato de áudio real pelo conteúdo do arquivo, então
+// só precisa bater o mimeType/nome certos no multipart, sem reconverter nada.
+export async function transcribeAudio(audio: Buffer, mimeType = 'audio/wav', filename = 'speech.wav'): Promise<string> {
   const apiKey = requireElevenLabs();
   const form = new FormData();
 
-  form.append('file', new Blob([wav], { type: 'audio/wav' }), 'discord-speech.wav');
+  form.append('file', new Blob([audio], { type: mimeType }), filename);
   form.append('model_id', 'scribe_v1');
   form.append('language_code', 'por');
 
@@ -95,6 +100,9 @@ async function transcribe(wav: Buffer): Promise<string> {
 
   const data = JSON.parse(body) as { text?: string };
   return data.text?.trim() ?? '';
+}
+async function transcribe(wav: Buffer): Promise<string> {
+  return transcribeAudio(wav, 'audio/wav', 'discord-speech.wav');
 }
 
 // 🤖 MOTOR DE VOZ TRIPLO (TikTok -> StreamElements -> Google)

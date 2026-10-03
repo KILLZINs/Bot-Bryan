@@ -1009,6 +1009,12 @@ export function startDashboard(discordClient: Client) {
     }
   }
 
+  // Precisa vir ANTES das rotas de /api/activities/music abaixo — o Express
+  // casa middleware/rota na ordem de REGISTRO, não na ordem do arquivo onde a
+  // função foi declarada (essa função é hoisted, mas a chamada `app.use`
+  // precisa rodar antes das chamadas `app.get`/`app.post` que ela protege).
+  app.use('/api/activities/music', requireFeatureEnabled('featMusic', 'Música'));
+
   app.get('/api/activities/music/search', requirePlayerAuth, async (req, res) => {
     const q = String(req.query.q || '').trim();
     if (!q) return res.json({ tracks: [] });
@@ -1195,7 +1201,10 @@ export function startDashboard(discordClient: Client) {
     res.json({ ok: true, volume: vol });
   });
 
-  app.get('/atividades/musica', (req, res) => {
+  app.get('/atividades/musica', async (req, res) => {
+    const disabledReason = await getFeatureDisabledReason(req, 'featMusic', 'Música');
+    if (disabledReason) return renderFeatureDisabledPage(res, 'Música', disabledReason);
+
     if (req.cookies?.player_auth !== 'permitido' || !req.cookies?.player_userid) {
       return res.send(`<!DOCTYPE html>
 <html lang="pt-BR">
@@ -2016,11 +2025,16 @@ ${activitySdkBootstrap(clientId!)}
   // protege o comando /fut no Discord (src/events/interactionCreate.ts).
   // Nas rotas aninhadas em /clans/:id/..., ":id" É o id do clã, então dá
   // pra descobrir o servidor dono sem precisar guildId explícito.
-  async function requireFutEnabled(req: express.Request, res: express.Response, next: express.NextFunction) {
+  // Devolve uma mensagem se o Fut estiver desativado (global ou nesse
+  // servidor), ou `null` se estiver tudo liberado — usado tanto pelas rotas
+  // de API (resposta JSON) quanto pela própria página /atividades/fut
+  // (resposta em HTML), que antes não checava isso e continuava acessível
+  // mesmo com o módulo desligado.
+  async function getFutDisabledReason(req: express.Request): Promise<string | null> {
     try {
       const botConfig = await prisma.botConfig.findUnique({ where: { id: 'global' } });
       if (botConfig && (botConfig as { featFut?: boolean }).featFut === false) {
-        return res.status(403).json({ error: '🚧 O sistema Fut foi desativado globalmente pela administração. Volte mais tarde!' });
+        return '🚧 O sistema Fut foi desativado globalmente pela administração. Volte mais tarde!';
       }
 
       let guildId = (typeof req.query.guildId === 'string' ? req.query.guildId : undefined) || (req.cookies?.selected_guild as string | undefined);
@@ -2031,15 +2045,86 @@ ${activitySdkBootstrap(clientId!)}
       if (guildId) {
         const guildConfig = await prisma.guildConfig.findUnique({ where: { guildId } });
         if (guildConfig && (guildConfig as { featFut?: boolean }).featFut === false) {
-          return res.status(403).json({ error: '🚧 O sistema Fut foi desativado pelos administradores deste servidor.' });
+          return '🚧 O sistema Fut foi desativado pelos administradores deste servidor.';
         }
       }
-      next();
+      return null;
     } catch {
-      next(); // em caso de erro na checagem, não bloqueia (mesmo padrão de isFeatureEnabled)
+      return null; // em caso de erro na checagem, não bloqueia
     }
   }
+  async function requireFutEnabled(req: express.Request, res: express.Response, next: express.NextFunction) {
+    const reason = await getFutDisabledReason(req);
+    if (reason) return res.status(403).json({ error: reason });
+    next();
+  }
   app.use('/api/activities/fut', requireFutEnabled);
+
+  // Página simples de "módulo desligado" — mesma identidade visual do resto
+  // do site, pra quem cair em /atividades/fut com o sistema desativado.
+  function renderFeatureDisabledPage(res: express.Response, title: string, message: string) {
+    res.status(403).send(`<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>${title} — Indisponível</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root { --bg: #121214; --card: #1C1D22; --border: #2E2F36; --text: #F2F3F5; --text-muted: #9CA3AF; }
+  * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Inter', sans-serif; }
+  body { background: var(--bg); color: var(--text); min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 20px; }
+  .icon { font-size: 3rem; margin-bottom: 18px; }
+  h1 { font-size: 1.6rem; font-weight: 800; margin-bottom: 12px; }
+  p { color: var(--text-muted); max-width: 440px; line-height: 1.5; margin-bottom: 26px; }
+  a { color: var(--text); text-decoration: none; font-weight: 700; border: 1px solid var(--border); padding: 12px 24px; border-radius: 10px; }
+  a:hover { border-color: var(--text-muted); }
+</style>
+</head>
+<body>
+  <div class="icon">🚧</div>
+  <h1>${title} está indisponível</h1>
+  <p>${message}</p>
+  <a href="/atividades">← Voltar pras Atividades</a>
+</body>
+</html>`);
+  }
+
+  // Versão genérica do mesmo esquema de liga/desliga do Fut, pras outras
+  // Activities (RPG, Música) que ainda não tinham NENHUMA checagem no site —
+  // os interruptores do /painel já existiam e já funcionavam pro lado
+  // Discord (FEATURE_MAP em interactionCreate.ts), só não eram respeitados
+  // aqui. Resolve o servidor pelo cookie `selected_guild` (mesma estratégia
+  // best-effort do Fut); sem isso, só a trava global é aplicada.
+  async function getFeatureDisabledReason(req: express.Request, featureKey: string, label: string): Promise<string | null> {
+    try {
+      const botConfig = await prisma.botConfig.findUnique({ where: { id: 'global' } });
+      if (botConfig && (botConfig as Record<string, unknown>)[featureKey] === false) {
+        return `🚧 O sistema ${label} foi desativado globalmente pela administração. Volte mais tarde!`;
+      }
+
+      const guildId = (typeof req.query.guildId === 'string' ? req.query.guildId : undefined) || (req.cookies?.selected_guild as string | undefined);
+      if (guildId) {
+        const guildConfig = await prisma.guildConfig.findUnique({ where: { guildId } });
+        if (guildConfig && (guildConfig as Record<string, unknown>)[featureKey] === false) {
+          return `🚧 O sistema ${label} foi desativado pelos administradores deste servidor.`;
+        }
+      }
+      return null;
+    } catch {
+      return null; // em caso de erro na checagem, não bloqueia
+    }
+  }
+  function requireFeatureEnabled(featureKey: string, label: string) {
+    return async (req: express.Request, res: express.Response, next: express.NextFunction) => {
+      const reason = await getFeatureDisabledReason(req, featureKey, label);
+      if (reason) return res.status(403).json({ error: reason });
+      next();
+    };
+  }
+  // (a de /api/activities/music já foi registrada mais acima, antes das
+  // rotas dela — ver comentário lá em cima.)
+  app.use('/api/activities/rpg', requireFeatureEnabled('featRpg', 'RPG'));
 
   app.get('/api/activities/fut/clans', requirePlayerAuth, async (req, res) => {
     const guildId = await resolveGuildId(typeof req.query.guildId === 'string' ? req.query.guildId : undefined, req.cookies?.selected_guild as string | undefined);
@@ -2644,6 +2729,9 @@ ${activitySdkBootstrap(clientId!)}
     const chamada = await getFutChamada(req.params.id);
     if (!chamada) return res.status(404).send('Chamada não encontrada — talvez ela já tenha sido apagada.');
 
+    const disabledReason = await getFutDisabledReason({ query: {}, cookies: { selected_guild: chamada.clan.guildId } } as unknown as express.Request);
+    if (disabledReason) return renderFeatureDisabledPage(res, 'Rachão', disabledReason);
+
     const vou = chamada.respostas.filter((r) => r.status === 'vou').length;
     const talvez = chamada.respostas.filter((r) => r.status === 'talvez').length;
     const valorPorPessoa = calcValorPorPessoa(chamada.valorTotal, vou);
@@ -2690,7 +2778,10 @@ ${activitySdkBootstrap(clientId!)}
 </html>`);
   });
 
-  app.get('/atividades/fut', (req, res) => {
+  app.get('/atividades/fut', async (req, res) => {
+    const disabledReason = await getFutDisabledReason(req);
+    if (disabledReason) return renderFeatureDisabledPage(res, 'Rachão', disabledReason);
+
     const isLogged = req.cookies?.player_auth === 'permitido' && req.cookies?.player_userid;
 
     if (!isLogged) {
@@ -4453,7 +4544,10 @@ ${activitySdkBootstrap(clientId!)}
 
   // ----- RPG: Ficha + Batalha (engine real do jogo) -----
   // ----- RPG: Ficha + Batalha (engine real do jogo, atrás de login do Discord) -----
-  app.get('/atividades/rpg', (req, res) => {
+  app.get('/atividades/rpg', async (req, res) => {
+    const disabledReason = await getFeatureDisabledReason(req, 'featRpg', 'RPG');
+    if (disabledReason) return renderFeatureDisabledPage(res, 'RPG', disabledReason);
+
     const isLogged = req.cookies?.player_auth === 'permitido' && req.cookies?.player_userid;
 
     if (!isLogged) {
